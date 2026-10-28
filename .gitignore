@@ -1,0 +1,25 @@
+# Local environments and generated caches
+.venv/
+.DS_Store
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage*
+coverage/
+build/
+*.egg-info/
+audio/_native_dsp*.so
+audio/_native_dsp*.dylib
+audio/_native_dsp*.pyd
+
+# Local participant/pilot records and generated experiment audio
+/experiment_data/
+/artifacts/
+superpowers/
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

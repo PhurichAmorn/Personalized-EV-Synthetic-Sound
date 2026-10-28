@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "EV Sound Lab window permissions",
+  "windows": ["main", "telemetry", "sound-signal"],
+  "permissions": ["core:default"]
+}

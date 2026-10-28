@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EV Sound Lab",
+  "version": "0.1.0",
+  "identifier": "lab.evsound.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "label": "main", "title": "EV Sound Lab", "width": 1280, "height": 960, "minWidth": 980, "minHeight": 600 }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false }
+}

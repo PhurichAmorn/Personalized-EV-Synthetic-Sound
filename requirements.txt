@@ -1,0 +1,7 @@
+PySide6
+numpy
+scipy
+sounddevice
+pygame>=2.6,<3
+pybind11>=2.13,<4
+setuptools>=68
