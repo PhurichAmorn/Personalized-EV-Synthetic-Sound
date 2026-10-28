@@ -43,7 +43,7 @@ Python 3.12, Node.js/npm, Rust, and a C++17 compiler. On macOS, install Xcode Co
 ### Setup
 
 ```sh
-git clone <repository-url> ev-sound-lab
+git clone https://github.com/PhurichAmorn/Personalized-EV-Synthetic-Sound.git ev-sound-lab
 cd ev-sound-lab
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
