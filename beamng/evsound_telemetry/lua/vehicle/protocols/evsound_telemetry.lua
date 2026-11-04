@@ -1,54 +1,48 @@
--- EV Sound Lab telemetry protocol. Installs as a BeamNG vehicle protocol.
--- The JSON payload intentionally reports raw observed electrics, not inferred EV torque.
+-- BeamNG custom protocol interface, following lua/vehicle/protocols/outgauge.lua.
 local M = {}
-
-local socket = require('socket')
-local udp
-local timer = 0
-local interval = 1 / 30
-local host = '127.0.0.1'
-local port = 4445
-
-local function finite(value)
-  return type(value) == 'number' and value == value and value ~= math.huge and value ~= -math.huge
+local function getAddress() return "127.0.0.1" end
+local function getPort() return 4445 end
+local function getMaxUpdateRate() return 30 end
+local function isPhysicsStepUsed() return false end
+local function getStructDefinition()
+  return [[
+    char marker[4];
+    float speed;
+    float throttle;
+    float brake;
+    float rpm;
+    float motorRPM;
+    float motorTorque;
+    float motorPower;
+    float regen;
+    float regenTorque;
+    float regenPower;
+    float motorLoad;
+    float watts;
+  ]]
 end
-
-local function number(value)
-  return finite(value) and string.format('%.6g', value) or 'null'
+local function fillStruct(o, dtSim)
+  local e = electrics.values
+  o.marker = "EVS1"
+  o.speed = e.wheelspeed or e.airspeed or 0
+  o.throttle = e.throttle or 0
+  o.brake = e.brake or 0
+  o.rpm = e.rpm or 0
+  o.motorRPM = e.motorRPM or e.motorRpm or -1
+  o.motorTorque = e.motorTorque or e.torqueMotor or -1
+  o.motorPower = e.motorPower or e.powerMotor or -1
+  o.regen = e.regen or e.regenActive or -1
+  o.regenTorque = e.regenTorque or e.torqueRegen or -1
+  o.regenPower = e.regenPower or e.powerRegen or -1
+  o.motorLoad = e.motorLoad or -1
+  o.watts = e.watts or -1
 end
-
-local function sendTelemetry()
-  if not udp then
-    udp = socket.udp()
-    udp:settimeout(0)
-    udp:setpeername(host, port)
-  end
-  local e = electrics.values or {}
-  local velocity = obj:getVelocity()
-  local speed = velocity and velocity:length() or nil
-  local fields = {'speed_m_s=' .. number(speed)}
-  for _, key in ipairs({'throttle', 'brake', 'rpm', 'motorRPM', 'motorTorque', 'motorPower', 'regen', 'regenTorque', 'regenPower', 'motorLoad', 'watts'}) do
-    if finite(e[key]) then fields[#fields + 1] = key .. '=' .. number(e[key]) end
-  end
-  local payload = 'EVSL1 ' .. table.concat(fields, ' ')
-  udp:send(payload)
-end
-
-function M.init() end
-function M.update(dt)
-  timer = timer + dt
-  if timer >= interval then
-    timer = timer % interval
-    pcall(sendTelemetry)
-  end
-end
-function M.reset() timer = 0 end
-function M.shutdown()
-  if udp then udp:close(); udp = nil end
-end
-function M.setParameters(data)
-  if data and data.host then host = data.host end
-  if data and data.port then port = tonumber(data.port) or port end
-end
-
+M.init = function() end
+M.reset = function() end
+M.getAddress = getAddress
+M.getPort = getPort
+M.getMaxUpdateRate = getMaxUpdateRate
+M.getStructDefinition = getStructDefinition
+M.fillStruct = fillStruct
+M.isPhysicsStepUsed = isPhysicsStepUsed
 return M
