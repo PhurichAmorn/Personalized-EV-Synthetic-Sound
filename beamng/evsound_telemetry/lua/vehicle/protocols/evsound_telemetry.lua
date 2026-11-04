@@ -34,14 +34,14 @@ local function fillStruct(o, dtSim)
   o.throttle = e.throttle or 0
   o.brake = e.brake or 0
   o.rpm = e.rpm or 0
-  o.motorRPM = rearMotor and (rearMotor.outputRPM or 0) or -1
-  o.motorTorque = rearMotor and (rearMotor.outputTorque1 or 0) or -1
-  o.motorPower = rearMotor and (rearMotor.outputTorque1 or 0) * (rearMotor.outputAV1 or 0) or -1
-  o.regen = rearMotor and (rearMotor.regenThrottle or 0) or -1
-  o.regenTorque = rearMotor and (rearMotor.instantMaxRegenTorque or 0) or -1
-  o.regenPower = rearMotor and (rearMotor.maxRegenPower or 0) or -1
-  o.motorLoad = rearMotor and (rearMotor.instantEngineLoad or 0) or -1
-  o.watts = rearMotor and (rearMotor.spentEnergy or 0) / math.max(dtSim or 0, 1e-6) or -1
+  o.motorRPM = rearMotor and (rearMotor.outputRPM or 0) or -999999
+  o.motorTorque = rearMotor and (rearMotor.outputTorque1 or 0) or -999999
+  o.motorPower = rearMotor and (rearMotor.outputTorque1 or 0) * (rearMotor.outputAV1 or 0) or -999999
+  o.regen = rearMotor and (rearMotor.regenThrottle or 0) or -999999
+  o.regenTorque = rearMotor and (rearMotor.outputTorque1 < 0 and rearMotor.outputTorque1 or 0) or -999999
+  o.regenPower = rearMotor and (rearMotor.outputTorque1 < 0 and (rearMotor.outputTorque1 * rearMotor.outputAV1) or 0) or -999999
+  o.motorLoad = rearMotor and (rearMotor.instantEngineLoad or 0) or -999999
+  o.watts = -999999
 end
 M.init = init
 M.reset = function() end

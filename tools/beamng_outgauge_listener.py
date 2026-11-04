@@ -22,7 +22,7 @@ def decode(packet: bytes) -> dict:
                   "motor_load": motor_load, "watts": watts}
         if not all(math.isfinite(value) for value in fields.values()):
             raise ValueError("non-finite EV telemetry value")
-        return {key: (None if value < 0 else value) for key, value in fields.items() if key not in ("throttle", "brake") or value >= 0}
+        return {key: (None if value == -999999 else value) for key, value in fields.items()}
     if packet.startswith(b"EVSL1 "):
         return dict(field.split("=", 1) for field in packet.decode("ascii").split()[1:])
     if len(packet) != OUTGAUGE.size:
