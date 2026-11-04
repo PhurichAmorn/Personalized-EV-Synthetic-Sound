@@ -35,7 +35,10 @@ def main() -> None:
                 state = decode(packet)
                 print(f"{datetime.now().astimezone().isoformat(timespec='milliseconds')} {source} {state}")
             except ValueError as error:
-                print(f"{datetime.now().astimezone().isoformat(timespec='milliseconds')} {source} ignored: {error}")
+                print(
+                    f"{datetime.now().astimezone().isoformat(timespec='milliseconds')} "
+                    f"{source} ignored: {error}; bytes={len(packet)} hex={packet.hex()}"
+                )
 
 
 if __name__ == "__main__":
