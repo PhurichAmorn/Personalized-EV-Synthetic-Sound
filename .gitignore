@@ -21,5 +21,8 @@ audio/_native_dsp*.pyd
 superpowers/
 desktop/node_modules/
 desktop/dist/
+desktop/public/audio/organ_preview.wav
+desktop/public/audio/*.wav
+**/.impeccable/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
