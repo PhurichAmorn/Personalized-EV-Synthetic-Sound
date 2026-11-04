@@ -7,13 +7,13 @@ import struct
 from datetime import datetime
 
 
-OUTGAUGE = struct.Struct("<I4sHBB8f2I2f3f16s16si")
+OUTGAUGE = struct.Struct("<I4sHBB7f2I3f16s16si")
 
 
 def decode(packet: bytes) -> dict:
-    if len(packet) not in (OUTGAUGE.size, OUTGAUGE.size - 4):
+    if len(packet) != OUTGAUGE.size:
         raise ValueError(f"unexpected packet size: {len(packet)} bytes")
-    values = OUTGAUGE.unpack(packet.ljust(OUTGAUGE.size, b"\0"))
+    values = OUTGAUGE.unpack(packet)
     speed, rpm = values[5:7]
     throttle, brake, clutch = values[14:17]
     if not all(math.isfinite(value) for value in (speed, rpm, throttle, brake, clutch)):
