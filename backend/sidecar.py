@@ -4,6 +4,7 @@ import os
 import socket
 import sys
 import threading
+import time
 
 from PySide6.QtCore import QCoreApplication, QObject, QSocketNotifier, Qt, QTimer, Signal
 
@@ -48,6 +49,7 @@ class Sidecar:
         self.gamepad.navigation.connect(lambda action: self.send({'event': 'navigate', 'data': action}))
         self.audio_monitor = AudioOutputMonitor(self.controller, app)
         self.buffer = bytearray()
+        self.last_publish = 0.0
         if sys.platform == 'win32':
             self.input = StdinPump(self.handle_input, app)
         else:
@@ -81,7 +83,14 @@ class Sidecar:
         sys.stdout.flush()
 
     def publish_state(self):
+        # Stall log (stderr, shown in the dev terminal): a gap here means the backend, not the page, froze.
+        start = time.monotonic()
+        if self.last_publish and start - self.last_publish > 0.15:
+            sys.stderr.write(f'[stall] no state sent for {(start - self.last_publish) * 1000:.0f} ms\n')
         self.send({'event': 'state', 'data': self.bridge.snapshot()})
+        self.last_publish = time.monotonic()
+        if self.last_publish - start > 0.03:
+            sys.stderr.write(f'[slow] building+sending state took {(self.last_publish - start) * 1000:.0f} ms\n')
 
     def read_telemetry(self, _fd=None):
         while self.telemetry_socket is not None:
