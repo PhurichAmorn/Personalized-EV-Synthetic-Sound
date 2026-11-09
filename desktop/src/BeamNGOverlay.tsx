@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { InputGraph, WaveGraph } from './OverlayGraphs'
+import { InputGraph, PedalBars, WaveGraph } from './OverlayGraphs'
 import type { State } from './App'
 
 type Props = {
@@ -28,14 +28,19 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
   const cycleLabel = granular ? granularMode : state.soundRecipeSelection[state.soundTheme]
   const [dragError, setDragError] = useState('')
+  // Move the window by dragging the header (the JS call is used because the data-tauri-drag-region attribute did not work).
+  const startDrag = (event: React.MouseEvent) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('button, select, input, a')) return
+    window.__TAURI__?.window?.getCurrentWindow().startDragging().catch(reason => setDragError(`Cannot move window: ${reason}`))
+  }
   const startResize = (event: React.MouseEvent) => {
     event.stopPropagation()
     window.__TAURI__?.window?.getCurrentWindow().startResizeDragging('SouthEast').catch(reason => setDragError(`Cannot resize window: ${reason}`))
   }
   return <main className="beamng-overlay-card">
     <div className="beamng-overlay-grip" aria-hidden="true" />
-    <header className="beamng-overlay-header" data-tauri-drag-region>
-      <div data-tauri-drag-region><span className="beamng-overlay-kicker" data-tauri-drag-region>EV SOUND LAB</span><h1 data-tauri-drag-region>Drive audio</h1></div>
+    <header className="beamng-overlay-header" onMouseDown={startDrag}>
+      <div><span className="beamng-overlay-kicker">EV SOUND LAB</span><h1>Drive audio</h1></div>
       <span className={'beamng-overlay-status' + (connected ? ' connected' : '')} role="status">
         <i />{state.sourceMode === 'Simulator' ? 'SIMULATOR' : connected ? 'BEAMNG LINK' : 'DISCONNECTED'}
       </span>
@@ -48,6 +53,7 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
         onClick={() => granular ? onGranularCycle() : onCommand('recipeCycle', { name: state.soundTheme })}>&#9197; <small>{cycleLabel}</small></button>
     </div>
     <InputGraph throttle={throttle} brake={brake} />
+    <PedalBars throttle={state.controllerThrottle} brake={state.controllerBrake} />
     <WaveGraph granular={granular} analyser={analyser} onCommand={onCommand} />
     <section className="beamng-overlay-metrics" aria-label="Live vehicle telemetry">
       <Metric label="SPEED · KM/H" value={connected ? Math.round(state.speed).toString() : '—'} />

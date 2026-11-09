@@ -30,7 +30,7 @@ class DesktopBridge:
             'soundRecipes': {mode: list(recipes) for mode, recipes in SOUND_RECIPES.items()},
             'soundRecipeSelection': c.sound_recipe.copy(),
             'parameters': c.parameters, 'soundSweepActive': c.soundSweepActive,
-            'audioError': c.error, 'throttleInput': c.throttleInput,
+            'audioError': c.error, 'throttleInput': c.throttleInput, 'controllerThrottle': c.controller_pedals()[0], 'controllerBrake': c.controller_pedals()[1],
             'brakeInput': c.brakeInput, 'controllerName': c.controllerName,
             'controllerBattery': c.controllerBattery, 'controllerError': c.controllerError,
             'availableControllers': c.availableControllers,

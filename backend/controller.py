@@ -105,6 +105,11 @@ class SimulatorController(QObject):
                 return value
         return fallback
 
+    def controller_pedals(self):
+        """What the player is pressing right now (controller triggers, W/S): never BeamNG's own pedal values."""
+        return (max(self.gamepad_throttle, self.external_throttle, float(Qt.Key.Key_W in self.keys_down)),
+                max(self.gamepad_brake, self.external_brake, float(Qt.Key.Key_S in self.keys_down)))
+
     def _telemetry_load(self, fallback):
         """Signed motor load -1..+1: scaled real torque if the car reports it, else BeamNG's load field."""
         if self.source_mode == 'BeamNG' and self.beamng_state is not None:

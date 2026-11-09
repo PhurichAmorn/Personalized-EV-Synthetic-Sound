@@ -105,3 +105,16 @@ export function WaveGraph({ granular, analyser, onCommand }: {
   }, [granular])
   return <canvas ref={canvas} className="overlay-graph overlay-wave" aria-label="Sound waveform" role="img" />
 }
+
+/** What the player is pressing on the controller (not the game's own pedal values). */
+export function PedalBars({ throttle, brake }: { throttle: number; brake: number }) {
+  const bar = (label: string, value: number, color: string) => <div className="overlay-pedal">
+    <span>{label}</span>
+    <div className="overlay-pedal-track"><b style={{ width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, background: color }} /></div>
+    <output>{Math.round(Math.max(0, Math.min(1, value)) * 100)}%</output>
+  </div>
+  return <div className="overlay-pedals" role="group" aria-label="Controller input">
+    {bar('THROTTLE', throttle, GREEN)}
+    {bar('BRAKE', brake, RED)}
+  </div>
+}

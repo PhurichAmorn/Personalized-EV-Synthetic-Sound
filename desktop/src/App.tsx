@@ -21,7 +21,7 @@ export type State = {
   regenActive: boolean; vehicle: string; vehicleNames: string[]; specs: string
   soundTheme: string; soundThemes: string[]; soundRecipes: Record<string, string[]>;
   soundRecipeSelection: Record<string, string>; parameters: string
-  soundSweepActive: boolean; audioError: string; throttleInput: number; brakeInput: number
+  soundSweepActive: boolean; audioError: string; throttleInput: number; brakeInput: number; controllerThrottle: number; controllerBrake: number
   controllerName: string; controllerBattery: string; controllerError: string
   availableControllers: { id: number; name: string }[]; controllerEnabled: boolean
   sourceDiscovery?: SourceDiscoveryState

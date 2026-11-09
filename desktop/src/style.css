@@ -471,3 +471,10 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .chooser-option:hover, .chooser-option:focus-visible { border-color: #dadada; background: #242424; outline: none; }
 .chooser-option strong { font-size: 16px; font-weight: 500; }
 .chooser-option span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.overlay-pedals { display: grid; gap: 6px; }
+.overlay-pedal { display: grid; grid-template-columns: 62px 1fr 34px; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; letter-spacing: .08em; }
+.overlay-pedal-track { height: 8px; overflow: hidden; border-radius: 4px; background: rgb(0 0 0 / 35%); }
+.overlay-pedal-track b { display: block; height: 100%; border-radius: 4px; }
+.overlay-pedal output { color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
+.beamng-overlay-header { cursor: grab; }
+.beamng-overlay-header button { cursor: pointer; }
