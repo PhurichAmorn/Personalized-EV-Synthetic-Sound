@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "EV Sound Lab window permissions",
   "windows": ["main", "telemetry", "sound-signal", "beamng-overlay"],
-  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-close"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "core:window:allow-start-resize-dragging", "core:window:allow-close"]
 }

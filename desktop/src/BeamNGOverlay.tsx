@@ -23,6 +23,10 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }
     if (event.button !== 0 || (event.target as HTMLElement).closest('button, select, input, a')) return
     window.__TAURI__?.window?.getCurrentWindow().startDragging().catch(reason => setDragError(`Cannot move window: ${reason}`))
   }
+  const startResize = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    window.__TAURI__?.window?.getCurrentWindow().startResizeDragging('SouthEast').catch(reason => setDragError(`Cannot resize window: ${reason}`))
+  }
   return <main className="beamng-overlay-card" onMouseDown={startDrag}>
     <div className="beamng-overlay-grip" aria-hidden="true" />
     <header className="beamng-overlay-header" data-tauri-drag-region>
@@ -50,6 +54,7 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }
       </button>
       <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button>
     </footer>
+    <div className="beamng-overlay-resize" role="separator" aria-label="Resize overlay" onMouseDown={startResize} />
     <p className="beamng-overlay-hint">Drag any empty area of this overlay to move it; × closes it. BeamNG remains in control of the car.</p>
   </main>
 }

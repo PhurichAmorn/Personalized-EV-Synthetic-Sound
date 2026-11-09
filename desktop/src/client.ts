@@ -49,7 +49,7 @@ export function createClient(send: Send, subscribe: Subscribe, idStart = 0) {
 declare global {
   interface Window {
     __TAURI__?: {
-      window?: { getCurrentWindow: () => { close: () => Promise<void>; startDragging: () => Promise<void> } }
+      window?: { getCurrentWindow: () => { close: () => Promise<void>; startDragging: () => Promise<void>; startResizeDragging: (direction: 'SouthEast') => Promise<void> } }
       core: { invoke: (name: string, args: Record<string, unknown>) => Promise<void> }
       event: { listen: (name: string, handler: (event: { payload: string }) => void) => Promise<() => void> }
     }

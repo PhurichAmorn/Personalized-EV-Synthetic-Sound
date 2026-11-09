@@ -340,6 +340,8 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .beamng-overlay-card { cursor: grab; }
 .beamng-overlay-card button, .beamng-overlay-card select { cursor: pointer; }
 .beamng-overlay-grip { align-self: center; width: 36px; height: 4px; margin: -6px 0 -4px; border-radius: 2px; background: rgb(255 255 255 / 28%); }
+.beamng-overlay-card { position: relative; }
+.beamng-overlay-resize { position: absolute; right: 4px; bottom: 4px; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, rgb(255 255 255 / 35%) 50%, rgb(255 255 255 / 35%) 58%, transparent 58%, transparent 72%, rgb(255 255 255 / 35%) 72%, rgb(255 255 255 / 35%) 80%, transparent 80%); }
 .beamng-overlay-close { align-self: flex-start; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .beamng-overlay-close:hover { background: rgb(255 255 255 / 12%); color: var(--fg); }
 .beamng-overlay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
