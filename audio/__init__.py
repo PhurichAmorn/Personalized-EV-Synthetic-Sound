@@ -3,6 +3,7 @@ from dataclasses import asdict, field, make_dataclass
 from importlib.util import find_spec
 import os
 import struct
+import sys
 from pathlib import Path
 
 try:
@@ -17,10 +18,10 @@ if not hasattr(_native_dsp, 'Engine'):
 _package = find_spec('_sounddevice_data')
 if _package and _package.submodule_search_locations:
     _library_dir = Path(next(iter(_package.submodule_search_locations))) / 'portaudio-binaries'
-    _libraries = list(_library_dir.glob('libportaudio*.dylib')) + [
-        path for path in [_library_dir / f'libportaudio{struct.calcsize("P") * 8}bit.dll']
-        if path.exists()
-    ]
+    # sounddevice ships PortAudio for every platform; pick the one for this OS.
+    _library_name = (f'libportaudio{struct.calcsize("P") * 8}bit.dll' if sys.platform == 'win32'
+                     else 'libportaudio.dylib' if sys.platform == 'darwin' else '')
+    _libraries = [path for path in [_library_dir / _library_name] if _library_name and path.exists()]
     if _libraries and not os.environ.get('EV_SOUND_PORTAUDIO_LIBRARY'):
         _native_dsp.set_output_library(str(_libraries[0]))
 
