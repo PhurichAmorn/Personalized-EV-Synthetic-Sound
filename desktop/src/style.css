@@ -334,8 +334,11 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .source-link-status { color: #d4d4d4; font-size: 9px; letter-spacing: .08em; white-space: nowrap; }
 .source-link-status.connected { color: #d6d6d6; }
 .overlay-launch-button { min-height: 32px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
-.beamng-overlay-root { box-sizing: border-box; min-height: 100vh; padding: 12px; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
-.beamng-overlay-card { display: flex; flex-direction: column; gap: 14px; min-height: calc(100vh - 24px); padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: radial-gradient(ellipse at 50% 0, #2c2c2c 0, var(--panel) 58%); }
+.overlay-window, .overlay-window body, .overlay-window #root { background: transparent; }
+.beamng-overlay-root { box-sizing: border-box; min-height: 100vh; padding: 12px; background: transparent; color: var(--fg); font-family: var(--font-body); }
+.beamng-overlay-card { display: flex; flex-direction: column; gap: 14px; min-height: calc(100vh - 24px); padding: 16px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 12px; background: rgb(14 14 14 / 58%); }
+.beamng-overlay-close { align-self: flex-start; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.beamng-overlay-close:hover { background: rgb(255 255 255 / 12%); color: var(--fg); }
 .beamng-overlay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .beamng-overlay-kicker { color: var(--muted); font-size: 9px; letter-spacing: .16em; }
 .beamng-overlay-header h1 { margin: 4px 0 0; font-size: 19px; font-weight: 500; }
@@ -345,7 +348,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .beamng-overlay-source { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
 .beamng-overlay-source select { min-height: 32px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 6px; background: #282828; color: var(--fg); }
 .beamng-overlay-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.beamng-overlay-metric { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #141413aa; }
+.beamng-overlay-metric { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 12px; border: 1px solid rgb(255 255 255 / 8%); border-radius: 8px; background: rgb(0 0 0 / 28%); }
 .beamng-overlay-metric span { color: var(--muted); font-size: 9px; letter-spacing: .08em; }
 .beamng-overlay-metric strong { font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 500; }
 .beamng-overlay-error { margin: 0; color: #ff9b91; font-size: 11px; overflow-wrap: anywhere; }

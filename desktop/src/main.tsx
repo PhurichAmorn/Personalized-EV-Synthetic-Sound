@@ -9,6 +9,7 @@ if (import.meta.env.DEV) {
 }
 
 const requestedWindow = new URLSearchParams(window.location.search).get('window')
+if (requestedWindow === 'overlay') document.documentElement.classList.add('overlay-window')
 const toolView = requestedWindow === 'telemetry' || requestedWindow === 'sound-signal' ? requestedWindow : null
 
 createRoot(document.getElementById('root')!).render(

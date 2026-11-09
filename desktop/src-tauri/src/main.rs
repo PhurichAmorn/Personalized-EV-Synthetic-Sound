@@ -88,7 +88,8 @@ fn open_tool_window(app: tauri::AppHandle, label: &str, title: &str, route: &str
     .title(title)
     .inner_size(size.0, size.1)
     .min_inner_size(if always_on_top { 360.0 } else { size.0.min(680.0) }, if always_on_top { 260.0 } else { size.1.min(500.0) });
-    if always_on_top { builder = builder.always_on_top(true); }
+    // Only the BeamNG overlay is always-on-top: make it a frameless, transparent HUD that blends into the game.
+    if always_on_top { builder = builder.always_on_top(true).decorations(false).transparent(true).shadow(false); }
     if let Err(error) = builder.build() {
         eprintln!("Could not open {title} window: {error}");
     }

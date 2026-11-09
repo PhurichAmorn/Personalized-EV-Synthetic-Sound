@@ -17,11 +17,12 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }
   const brake = state.sourceMode === 'BeamNG' ? state.beamngBrake : state.brakeInput
   const regen = state.sourceMode === 'BeamNG' ? state.beamngRegen : state.charge
   return <main className="beamng-overlay-card">
-    <header className="beamng-overlay-header">
-      <div><span className="beamng-overlay-kicker">EV SOUND LAB</span><h1>Drive audio</h1></div>
+    <header className="beamng-overlay-header" data-tauri-drag-region>
+      <div data-tauri-drag-region><span className="beamng-overlay-kicker" data-tauri-drag-region>EV SOUND LAB</span><h1 data-tauri-drag-region>Drive audio</h1></div>
       <span className={'beamng-overlay-status' + (connected ? ' connected' : '')} role="status">
         <i />{state.sourceMode === 'Simulator' ? 'SIMULATOR' : connected ? 'BEAMNG LINK' : 'DISCONNECTED'}
       </span>
+      <button className="beamng-overlay-close" type="button" aria-label="Close overlay" onClick={() => void window.__TAURI__?.window?.getCurrentWindow().close()}>×</button>
     </header>
     <label className="beamng-overlay-source">Input source
       <select value={state.sourceMode} onChange={event => onCommand('sourceMode', { value: event.target.value })}>
@@ -41,6 +42,6 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }
       </button>
       <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button>
     </footer>
-    <p className="beamng-overlay-hint">Drag this window by its title area. BeamNG remains in control of the car.</p>
+    <p className="beamng-overlay-hint">Drag the title area to move this overlay; × closes it. BeamNG remains in control of the car.</p>
   </main>
 }
