@@ -51,6 +51,8 @@ class Sidecar:
         self.audio_monitor = AudioOutputMonitor(self.controller, app)
         self.buffer = bytearray()
         self.last_publish = 0.0
+        self.beamng_seen = False
+        self.beamng_last_error = ''
         if os.environ.get('EV_SOUND_STALL_TRACE'):
             threading.Thread(target=self.watch_stalls, args=(threading.get_ident(),), daemon=True).start()
         if sys.platform == 'win32':
@@ -69,6 +71,7 @@ class Sidecar:
             self.telemetry_socket.close()
             self.telemetry_socket = None
             self.controller.set_beamng_error(f'BeamNG telemetry unavailable: {exc}')
+            sys.stderr.write(f'[beamng] cannot listen on 127.0.0.1:4445: {exc}\n')
         self.display = QTimer(app)
         self.display.setInterval(33)
         self.display.timeout.connect(self.publish_state)
@@ -121,11 +124,18 @@ class Sidecar:
                 self.controller.set_beamng_error(f'BeamNG telemetry receive failed: {exc}')
                 return
             if address[0] not in ('127.0.0.1', '::1'):
+                sys.stderr.write(f'[beamng] ignored packet from non-local address {address[0]}\n')
                 continue
             try:
                 self.controller.receive_beamng_telemetry(decode_ev_sound_packet(packet))
+                if not self.beamng_seen:
+                    self.beamng_seen = True
+                    sys.stderr.write(f'[beamng] first valid packet from {address[0]}:{address[1]} ({len(packet)} bytes)\n')
             except ValueError as exc:
                 self.controller.set_beamng_error(f'Invalid BeamNG telemetry: {exc}')
+                if str(exc) != self.beamng_last_error:
+                    self.beamng_last_error = str(exc)
+                    sys.stderr.write(f'[beamng] rejected packet ({len(packet)} bytes): {exc}\n')
 
     def read_input(self, _fd=None):
         self.handle_input(os.read(0, 65536))

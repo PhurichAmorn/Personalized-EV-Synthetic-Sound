@@ -96,7 +96,8 @@ fn open_tool_window(app: tauri::AppHandle, label: &str, title: &str, route: &str
 
 #[tauri::command]
 fn open_beamng_overlay(app: tauri::AppHandle) {
-    open_tool_window(app, "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (420.0, 340.0), true);
+    // Windows deadlocks if a window is built inside a synchronous command, so build it on its own thread.
+    std::thread::spawn(move || open_tool_window(app, "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (420.0, 340.0), true));
 }
 
 fn main() {

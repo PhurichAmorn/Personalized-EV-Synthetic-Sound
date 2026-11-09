@@ -158,6 +158,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <div className="dashboard-brand"><strong>EV SOUND LAB</strong><small>DRIVE SIMULATOR</small></div>
         <select className="vehicle-selector source-selector" aria-label="Telemetry source" value={state.sourceMode} onChange={event => onCommand('sourceMode', { value: event.target.value })}><option>Simulator</option><option>BeamNG</option></select>
         {state.sourceMode === 'BeamNG' && <span className={'source-link-status' + (state.beamngConnected ? ' connected' : '')}>{state.beamngConnected ? 'BEAMNG LINK' : 'DISCONNECTED'}</span>}
+        {state.sourceMode === 'BeamNG' && state.beamngError && <span className="source-link-status" role="alert" title={state.beamngError}>{state.beamngError}</span>}
         <div className="header-spacer" />
         <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : 'SOUND'}</span>
         <div className="theme-buttons" role="group" aria-label="Sound theme">
