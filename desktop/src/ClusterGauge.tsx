@@ -1,3 +1,4 @@
+import { memo } from 'react'
 type Props = {
   kind: 'power' | 'speed'
   design?: 'circle'
@@ -46,7 +47,7 @@ function bandPath(kind: Props['kind'], start: number, end: number) {
   return `M ${outer.join(' L ')} L ${inner.reverse().join(' L ')} Z`
 }
 
-export default function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, startupProgress = 0, startupBlend = 0, design }: Props) {
+function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, startupProgress = 0, startupBlend = 0, design }: Props) {
   const shownSpeed = speed + (maximum * startupProgress - speed) * startupBlend
   const shownPower = power + (startupProgress - power) * startupBlend
   const shownCharge = charge * (1 - startupBlend)
@@ -139,3 +140,5 @@ export default function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, m
     <line x1={position(kind, marker) - 20} x2={position(kind, marker) + 20} y1={marker} y2={marker} stroke="#f4e8d0" strokeWidth="2" />
   </svg>
 }
+
+export default memo(ClusterGauge)
