@@ -3,7 +3,6 @@ from pathlib import Path
 import hashlib,json,os,shutil,subprocess,sys,threading,time
 import numpy as np
 from scipy.io.wavfile import read,write
-from tools.finalize_family_evaluation import finalize
 
 PROJECT=Path(__file__).resolve().parents[1]
 CACHE=PROJECT/'desktop/public/audio/source-search-cache'
@@ -11,7 +10,10 @@ VERSION_FILES=['experiment/source_render_queue.py','desktop/src/sourceDesigner.t
 
 class SourceRenderer:
     """Thread-safe: source discovery renders both sounds of a pair at once (one child process per call)."""
-    def __init__(self):self.processes=set();self.lock=threading.Lock();self.closed=False;self.cancelled=threading.Event()
+    def __init__(self):
+        self.processes=set();self.lock=threading.Lock();self.closed=False;self.cancelled=threading.Event()
+        # scipy.signal costs ~0.5 s (seconds on Windows with antivirus) to import: load it off the startup path.
+        threading.Thread(target=lambda:__import__('tools.finalize_family_evaluation'),daemon=True).start()
     def cancel(self):
         self.cancelled.set()
         with self.lock:
@@ -54,6 +56,7 @@ class SourceRenderer:
                 stage=time.monotonic()
                 # In-process: numpy/scipy are already loaded, saving ~1 s of interpreter start per sound.
                 # ponytail: cancel takes effect only after this step (~1.5 s); use a worker process if that matters.
+                from tools.finalize_family_evaluation import finalize
                 try:finalize(target)
                 except Exception as exc:raise RuntimeError('Source effects/checks failed: '+str(exc)[-600:]) from exc
                 if self.closed or self.cancelled.is_set():raise RuntimeError('Render cancelled')
