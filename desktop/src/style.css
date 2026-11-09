@@ -337,6 +337,9 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-window, .overlay-window body, .overlay-window #root { background: transparent; }
 .beamng-overlay-root { box-sizing: border-box; min-height: 100vh; padding: 12px; background: transparent; color: var(--fg); font-family: var(--font-body); }
 .beamng-overlay-card { display: flex; flex-direction: column; gap: 14px; min-height: calc(100vh - 24px); padding: 16px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 12px; background: rgb(14 14 14 / 58%); }
+.beamng-overlay-card { cursor: grab; }
+.beamng-overlay-card button, .beamng-overlay-card select { cursor: pointer; }
+.beamng-overlay-grip { align-self: center; width: 36px; height: 4px; margin: -6px 0 -4px; border-radius: 2px; background: rgb(255 255 255 / 28%); }
 .beamng-overlay-close { align-self: flex-start; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .beamng-overlay-close:hover { background: rgb(255 255 255 / 12%); color: var(--fg); }
 .beamng-overlay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
