@@ -27,14 +27,14 @@ export default function SoundWaveform({ analyser, active }: { analyser: RefObjec
       if (held.current) { frame = requestAnimationFrame(draw); return }
       drawing.clearRect(0, 0, width, height)
       const left = 38, right = Math.max(left + 1, width - 12), top = 14, bottom = height - 25
-      drawing.strokeStyle = '#263842'; drawing.lineWidth = 1
+      drawing.strokeStyle = '#323232'; drawing.lineWidth = 1
       drawing.beginPath(); drawing.moveTo(left, top); drawing.lineTo(left, bottom); drawing.lineTo(right, bottom); drawing.stroke()
-      drawing.font = '10px Arial'; drawing.fillStyle = '#91a5ad'
+      drawing.font = '10px Arial'; drawing.fillStyle = '#cfcfcf'
       if (analyser.current && live.current) {
         analyser.current.getFloatTimeDomainData(samples)
         analyser.current.getFloatFrequencyData(frequencies)
       } else { samples.fill(0); frequencies.fill(-100) }
-      const color = getComputedStyle(element).getPropertyValue('--accent').trim() || '#75c9e8'
+      const color = getComputedStyle(element).getPropertyValue('--accent').trim() || '#d6d6d6'
       drawing.strokeStyle = color; drawing.lineWidth = 1.5; drawing.beginPath()
       if (mode === 'waveform') {
         // Trigger on a rising zero crossing so successive cycles do not drift sideways.

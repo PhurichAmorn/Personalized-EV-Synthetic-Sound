@@ -27,10 +27,10 @@ export default function SoundCurve({ label, points, position, yLabel, shape = 1,
       onChange([...points.slice(0, gap), { x, y: curveValue(x, points, shape) }, ...points.slice(gap)])
     }}>Add point</button>
     <svg ref={svg} viewBox="0 0 320 320" aria-label={label} role="group" onPointerMove={event => { if (active.current !== null) move(active.current, pointer(event)) }} onPointerUp={() => { active.current = null }} onPointerCancel={() => { active.current = null }} onLostPointerCapture={() => { active.current = null }}>
-      <rect x="40" y="24" width="256" height="256" fill="#0b131b" stroke="#3a4b56" />
-      {[.25, .5, .75].map(n => <g key={n} stroke="#263640" strokeWidth=".7"><line x1={40 + n * 256} x2={40 + n * 256} y1="24" y2="280" /><line x1="40" x2="296" y1={24 + n * 256} y2={24 + n * 256} /></g>)}
+      <rect x="40" y="24" width="256" height="256" fill="#1e1e1e" stroke="#484848" />
+      {[.25, .5, .75].map(n => <g key={n} stroke="#323232" strokeWidth=".7"><line x1={40 + n * 256} x2={40 + n * 256} y1="24" y2="280" /><line x1="40" x2="296" y1={24 + n * 256} y2={24 + n * 256} /></g>)}
       <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2" pointerEvents="none" />
-      <line x1={40 + clamp(position) * 256} x2={40 + clamp(position) * 256} y1="24" y2="280" stroke="#f0f6fa" opacity=".4" pointerEvents="none" />
+      <line x1={40 + clamp(position) * 256} x2={40 + clamp(position) * 256} y1="24" y2="280" stroke="#fafafa" opacity=".4" pointerEvents="none" />
       {[0, .25, .5, .75, 1].map(n => <text key={n} x="35" y={284 - n * 256} textAnchor="end">{Math.round(axisMin + n * (axisMax - axisMin))}</text>)}
       <text x="40" y="301">{duration ? '0 s' : '0%'}</text><text x="270" y="301">{duration ? `${duration} s` : '100%'}</text><text x="150" y="316" textAnchor="middle">{duration ? 'Preview time' : 'Preview progress'}</text>
       <text x="11" y="151" textAnchor="middle" transform="rotate(-90 11 151)">{yLabel}</text>

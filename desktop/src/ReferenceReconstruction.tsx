@@ -30,9 +30,9 @@ export default function ReferenceReconstruction({ studioPlaying, onPlay }: { stu
     <label>Clean BMW-derived steady tone<audio ref={steady} aria-label="BMW-derived steady spectral reconstruction" controls preload="none" src="/audio/bmw_derived_steady_preview.wav?v=2" onPlay={() => { reconstructed.current?.pause(); mapped.current?.pause(); onPlay() }} /></label>
     <p>Clean harmonic interpretation of the recording’s tonal balance. Captured noise and closely spaced sidebands removed. No acceleration curve in the steady version; not BMW’s original source.</p>
     {motion.length > 0 && <svg className="reference-motion-plot" viewBox="0 0 750 175" role="img" aria-label="Pitch contour estimated from the BMW recording">
-      <path d="M45 20V145H705" fill="none" stroke="#34434d" />
+      <path d="M45 20V145H705" fill="none" stroke="#3c3c3c" />
       <path d={path} fill="none" stroke="var(--accent)" strokeWidth="2.5" />
-      <line x1={45 + Math.min(1, position / duration) * 660} x2={45 + Math.min(1, position / duration) * 660} y1="20" y2="145" stroke="#dce5e8" opacity=".5" />
+      <line x1={45 + Math.min(1, position / duration) * 660} x2={45 + Math.min(1, position / duration) * 660} y1="20" y2="145" stroke="#f0f0f0" opacity=".5" />
       <text x="1" y="24">+18 st</text><text x="3" y="145">−12 st</text><text x="45" y="165">0 s</text><text x="655" y="165">{duration.toFixed(1)} s</text>
     </svg>}
     <p>Recorded spectral movement estimates the pitch contour; brightness and level follow separate smoothed envelopes. Timed approximation only: no vehicle telemetry or OEM input mapping is available.</p>

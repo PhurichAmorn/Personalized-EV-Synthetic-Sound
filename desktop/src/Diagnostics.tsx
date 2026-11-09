@@ -34,12 +34,12 @@ export default function Diagnostics({ view, powertrain, soundDebug, rpm, maxRpm,
   useEffect(() => {
     const context = canvas.current?.getContext('2d')
     if (!context) return
-    context.fillStyle = '#101a22'
+    context.fillStyle = '#202020'
     context.fillRect(0, 0, 600, 130)
     const width = 600 / Math.max(1, history.length)
     history.forEach((bins, column) => bins.forEach((level, row) => {
       const fraction = level / 90
-      context.fillStyle = `hsl(${190 - fraction * 140} 75% ${14 + fraction * 55}%)`
+      context.fillStyle = `hsl(0 0% ${6 + fraction * 90}%)`
       context.fillRect(column * width, 130 - (row + 1) * 130 / 96, Math.ceil(width), 2)
     }))
   }, [history])
@@ -70,21 +70,21 @@ export default function Diagnostics({ view, powertrain, soundDebug, rpm, maxRpm,
   return <div className="space-y-5">
     {view === 'telemetry' && <section className="panel space-y-4 p-6">
       <div className="flex items-center justify-between"><h2 className="text-xl">Powertrain telemetry</h2><button className="control text-xs" onClick={() => setTrail([])}>Clear traces</button></div>
-      <p className="text-xs text-slate-400">{powertrain?.mapDescription} · limits before traction and battery constraints</p>
+      <p className="text-xs text-neutral-400">{powertrain?.mapDescription} · limits before traction and battery constraints</p>
       {powertrain && <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3"><div>Torque {number(powertrain.torque, 1)} Nm</div><div>Shaft {number(powertrain.shaftPower, 1)} kW</div><div>Wheels {number(powertrain.wheelPower, 1)} kW</div><div>Battery {number(powertrain.batteryPower, 1)} kW</div><div>Acceleration {number(powertrain.acceleration, 2)} m/s²</div><div>SOC {number(powertrain.soc, 1)}%</div></div>}
-      <svg className="h-64 w-full rounded-lg bg-[#101a22]" viewBox="0 0 600 300" role="img" aria-label="Motor torque versus RPM">
-        <line x1="0" x2="600" y1={300 - (0 - bottom) / (top - bottom) * 300} y2={300 - (0 - bottom) / (top - bottom) * 300} stroke="#3c5661" />
-        <polyline points={drive} fill="none" stroke="#cbb78f" strokeWidth="2" strokeDasharray="6 5" />
-        <polyline points={regen} fill="none" stroke="#68c9da" strokeWidth="2" strokeDasharray="6 5" />
-        <polyline points={recent} fill="none" stroke="#ece8dc" strokeWidth="2" />
-        {powertrain && <circle cx={rpm / Math.max(1, maxRpm) * 600} cy={300 - (powertrain.torque - bottom) / (top - bottom) * 300} r="5" fill={powertrain.torque < 0 ? '#68c9da' : '#f1deba'} />}
+      <svg className="h-64 w-full rounded-lg bg-[#202020]" viewBox="0 0 600 300" role="img" aria-label="Motor torque versus RPM">
+        <line x1="0" x2="600" y1={300 - (0 - bottom) / (top - bottom) * 300} y2={300 - (0 - bottom) / (top - bottom) * 300} stroke="#4e4e4e" />
+        <polyline points={drive} fill="none" stroke="#d6d6d6" strokeWidth="2" strokeDasharray="6 5" />
+        <polyline points={regen} fill="none" stroke="#848484" strokeWidth="2" strokeDasharray="6 5" />
+        <polyline points={recent} fill="none" stroke="#f2f2f2" strokeWidth="2" />
+        {powertrain && <circle cx={rpm / Math.max(1, maxRpm) * 600} cy={300 - (powertrain.torque - bottom) / (top - bottom) * 300} r="5" fill={powertrain.torque < 0 ? '#848484' : '#eaeaea'} />}
       </svg>
-      <div className="flex flex-wrap gap-5 text-xs text-slate-400"><span>Motor RPM: {number(rpm)}</span><span>Drive limit</span><span>Regen limit</span><span>Last 30 s</span></div>
+      <div className="flex flex-wrap gap-5 text-xs text-neutral-400"><span>Motor RPM: {number(rpm)}</span><span>Drive limit</span><span>Regen limit</span><span>Last 30 s</span></div>
       <button className="control" disabled={running} onClick={onSweep}>{sweepActive ? 'Stop sound sweep' : 'Run sound sweep'}</button>
     </section>}
-    {view === 'sound-signal' && <section className="panel space-y-4 p-6"><h2 className="text-xl">Sound signal</h2><p className="text-xs text-slate-400">Output estimates, refreshed at 10 Hz while visible</p>
-      <div><div className="label mb-2">Waveform · ms</div><svg className="h-32 w-full rounded-lg bg-[#101a22]" viewBox="0 0 600 130" role="img" aria-label="Recent audio waveform"><line x1="0" x2="600" y1="65" y2="65" stroke="#38505a" /><polyline points={line(samples, -range, range)} fill="none" stroke="#72e0bd" strokeWidth="1.5" /></svg></div>
-      <div><div className="label mb-2">Spectrum · Hz</div><svg className="h-32 w-full rounded-lg bg-[#101a22]" viewBox="0 0 600 130" role="img" aria-label="Audio frequency spectrum"><polyline points={line(spectrum.map(level => Math.max(-90, Math.min(0, level))), -90, 0)} fill="none" stroke="#e7c884" strokeWidth="1.5" /></svg></div>
+    {view === 'sound-signal' && <section className="panel space-y-4 p-6"><h2 className="text-xl">Sound signal</h2><p className="text-xs text-neutral-400">Output estimates, refreshed at 10 Hz while visible</p>
+      <div><div className="label mb-2">Waveform · ms</div><svg className="h-32 w-full rounded-lg bg-[#202020]" viewBox="0 0 600 130" role="img" aria-label="Recent audio waveform"><line x1="0" x2="600" y1="65" y2="65" stroke="#494949" /><polyline points={line(samples, -range, range)} fill="none" stroke="#d4d4d4" strokeWidth="1.5" /></svg></div>
+      <div><div className="label mb-2">Spectrum · Hz</div><svg className="h-32 w-full rounded-lg bg-[#202020]" viewBox="0 0 600 130" role="img" aria-label="Audio frequency spectrum"><polyline points={line(spectrum.map(level => Math.max(-90, Math.min(0, level))), -90, 0)} fill="none" stroke="#dadada" strokeWidth="1.5" /></svg></div>
       <div><div className="label mb-2">Spectrogram · last 10 s</div><canvas ref={canvas} width={600} height={130} className="h-32 w-full rounded-lg" role="img" aria-label="Recent audio spectrogram" /></div>
     </section>}
   </div>

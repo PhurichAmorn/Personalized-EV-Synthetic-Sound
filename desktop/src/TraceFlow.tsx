@@ -92,7 +92,7 @@ export default function TraceFlow({ comparisons, method, selectedId, onSelect }:
   selectedId?: string
   onSelect: (candidate: Candidate, audition: Record<string, number>) => void
 }) {
-  if (!comparisons.length) return <p className="text-slate-400">No comparisons recorded yet.</p>
+  if (!comparisons.length) return <p className="text-neutral-400">No comparisons recorded yet.</p>
   return <>
     <p className="trace-legend">{method === 'evolutionary' ? 'Evolutionary: score each sound from 1 to 7.' : method === 'recipe_preference' ? 'Recipe window pilot: choose a preferred sound, equal, or neither.' : 'GP: Prefer A, Like both equally, or Prefer B. Neither skips both sounds.'} Green marks the retained sound. Green + and red − show higher or lower saved control values, not sound quality.</p>
     <ol className="trace-flow" aria-label="Comparison flow">

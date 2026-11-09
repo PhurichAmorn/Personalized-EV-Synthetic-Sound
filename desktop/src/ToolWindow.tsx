@@ -71,7 +71,7 @@ export default function ToolWindow({ view }: { view: 'telemetry' | 'sound-signal
 
   return <main className="tool-window">
     {error && <p role="alert" className="mb-4 text-red-300">{error}</p>}
-    {!state ? <p className="text-slate-400">Connecting to simulator…</p> : <Diagnostics
+    {!state ? <p className="text-neutral-400">Connecting to simulator…</p> : <Diagnostics
       view={view}
       powertrain={powertrain}
       soundDebug={soundDebug}
