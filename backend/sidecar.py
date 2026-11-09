@@ -5,6 +5,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 
 from PySide6.QtCore import QCoreApplication, QObject, QSocketNotifier, Qt, QTimer, Signal
 
@@ -50,6 +51,8 @@ class Sidecar:
         self.audio_monitor = AudioOutputMonitor(self.controller, app)
         self.buffer = bytearray()
         self.last_publish = 0.0
+        if os.environ.get('EV_SOUND_STALL_TRACE'):
+            threading.Thread(target=self.watch_stalls, args=(threading.get_ident(),), daemon=True).start()
         if sys.platform == 'win32':
             self.input = StdinPump(self.handle_input, app)
         else:
@@ -81,6 +84,22 @@ class Sidecar:
     def send(message):
         sys.stdout.write(encode_message(message))
         sys.stdout.flush()
+
+    def watch_stalls(self, main_id):
+        """Debug (EV_SOUND_STALL_TRACE=1): when no state was sent for 120 ms, print what each thread is doing."""
+        reported = 0.0
+        while True:
+            time.sleep(0.02)
+            last = self.last_publish
+            if last and time.monotonic() - last > 0.12 and last != reported:
+                reported = last
+                lines = [f'[trace] state stalled {(time.monotonic() - last) * 1000:.0f} ms; thread stacks:']
+                for ident, frame in sys._current_frames().items():
+                    name = 'MAIN' if ident == main_id else next((t.name for t in threading.enumerate() if t.ident == ident), str(ident))
+                    if ident != threading.get_ident():
+                        lines.append(f'--- {name}')
+                        lines.extend(line.rstrip() for line in traceback.format_stack(frame)[-6:])
+                sys.stderr.write('\n'.join(lines) + '\n')
 
     def publish_state(self):
         # Stall log (stderr, shown in the dev terminal): a gap here means the backend, not the page, froze.
