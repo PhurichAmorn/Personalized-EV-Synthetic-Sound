@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer, QEvent, Qt
 from audio import DEBUG_THEMES, SOUND_RECIPES, SOUND_THEMES
 from audio import SoundEngine
 from simulation.vehicle_model import VehicleModel, SIMULATOR_PRESETS
+from backend.beamng_telemetry import TorqueScaler
 
 
 class SimulatorController(QObject):
@@ -29,6 +30,8 @@ class SimulatorController(QObject):
         self.beamng_acceleration = 0.0
         self.beamng_previous_sample = None
         self.beamng_error = ''
+        self.beamng_torque = TorqueScaler()
+        self.beamng_signed_load = None  # torque-based -1..+1 (None when the car has no motor device)
         self.beamng_stale_after = 0.5
         self.audio = SoundEngine()
         self.sound_theme = 'Deep'
@@ -67,15 +70,15 @@ class SimulatorController(QObject):
     hasGears = Property(bool, lambda self: len(self.car.gear_ratios) > 1, notify=vehicleChanged)
     gear = Property(int, lambda self: self.car.current_gear, notify=changed)
     maxRpm = Property(float, lambda self: self.car.max_rpm, notify=vehicleChanged)
-    power = Property(float, lambda self: max(0.0, self._telemetry_value('motor_load', self.display_power)), notify=changed)
-    charge = Property(float, lambda self: max(0.0, -self._telemetry_value('motor_load', -self.display_charge)), notify=changed)
-    regenActive = Property(bool, lambda self: self._telemetry_value('regen', self.car.regen) > 0, notify=changed)
+    power = Property(float, lambda self: max(0.0, self._telemetry_load(self.display_power)), notify=changed)
+    charge = Property(float, lambda self: max(0.0, -self._telemetry_load(-self.display_charge)), notify=changed)
+    regenActive = Property(bool, lambda self: self._regen_level() > (.02 if self.source_mode == 'BeamNG' else 0), notify=changed)
     sourceMode = Property(str, lambda self: self.source_mode, notify=changed)
     beamngConnected = Property(bool, lambda self: self.source_mode == 'BeamNG' and self._beamng_fresh(), notify=changed)
     beamngError = Property(str, lambda self: self.beamng_error, notify=changed)
     telemetryThrottle = Property(float, lambda self: self._telemetry_value('throttle', self.throttle), notify=changed)
     telemetryBrake = Property(float, lambda self: self._telemetry_value('brake', self.brake), notify=changed)
-    telemetryRegen = Property(float, lambda self: self._telemetry_value('regen', self.car.regen), notify=changed)
+    telemetryRegen = Property(float, lambda self: self._regen_level(), notify=changed)
     running = Property(bool, lambda self: self.timer.isActive(), notify=sessionChanged)
     vehicleNames = Property('QStringList', lambda self: list(SIMULATOR_PRESETS), constant=True)
     speedGaugeMaximum = Property(float, lambda self: 300.0 if self.car.max_speed > 220 else 220.0, notify=vehicleChanged)
@@ -102,6 +105,22 @@ class SimulatorController(QObject):
                 return value
         return fallback
 
+    def _telemetry_load(self, fallback):
+        """Signed motor load -1..+1: scaled real torque if the car reports it, else BeamNG's load field."""
+        if self.source_mode == 'BeamNG' and self.beamng_state is not None:
+            if self.beamng_signed_load is not None:
+                return self.beamng_signed_load
+            load = self.beamng_state.get('motor_load')
+            if load is not None:
+                return load
+        return fallback
+
+    def _regen_level(self):
+        # The packet's "regen" is the regen-mode setting (stays at 100% while coasting), not actual braking torque.
+        if self.source_mode == 'BeamNG' and self.beamng_signed_load is not None:
+            return max(0.0, -self.beamng_signed_load)
+        return self._telemetry_value('regen', self.car.regen)
+
     def _beamng_fresh(self):
         return self.beamng_state is not None and time.monotonic() - self.beamng_received_at <= self.beamng_stale_after
 
@@ -117,6 +136,9 @@ class SimulatorController(QObject):
         self.beamng_acceleration = ((speed - previous[0]) / max(now - previous[1], 1e-3)
                                     if previous and 0 < now - previous[1] <= self.beamng_stale_after else 0.0)
         self.beamng_previous_sample = (speed, now)
+        torque = state.get('motor_torque')
+        self.beamng_signed_load = (None if torque is None else
+                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0))
         self.beamng_state = state
         self.beamng_received_at = now
         self.set_beamng_error('')
@@ -305,8 +327,7 @@ class SimulatorController(QObject):
 
     def _signed_motor_load(self):
         if self.source_mode == 'BeamNG':
-            load = self._telemetry_value('motor_load', 0.0)
-            return max(-1.0, min(1.0, load))
+            return max(-1.0, min(1.0, self._telemetry_load(0.0)))
         torque = self.car.motor_torque_nm
         limit = self.car.max_torque_nm if torque >= 0 else self.car.max_regen_torque_nm
         return max(-1.0, min(1.0, torque / max(limit, 1e-9)))

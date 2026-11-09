@@ -31,3 +31,23 @@ def decode_ev_sound_packet(packet: bytes) -> dict:
     if fields["speed_m_s"] is None or fields["speed_m_s"] < 0:
         raise ValueError("invalid vehicle speed")
     return fields
+
+
+class TorqueScaler:
+    """Signed motor torque (Nm) -> -1..+1, scaled by the largest drive and regen torque seen so far.
+
+    BeamNG gives no torque limits, and its load field never goes negative, so regen would never sound.
+    The remembered peaks decay slowly toward a floor, so a car or regen-setting change re-scales within minutes.
+    """
+
+    def __init__(self, drive_floor=100.0, regen_floor=40.0, forget_s=90.0):
+        self.floors = (drive_floor, regen_floor)
+        self.peaks = [drive_floor, regen_floor]
+        self.forget_s = forget_s
+
+    def update(self, torque, dt):
+        keep = math.exp(-max(0.0, min(dt, 1.0)) / self.forget_s)
+        self.peaks = [floor + (peak - floor) * keep for floor, peak in zip(self.floors, self.peaks)]
+        side = 0 if torque >= 0 else 1
+        self.peaks[side] = max(self.peaks[side], abs(torque))
+        return max(-1.0, min(1.0, torque / self.peaks[side]))

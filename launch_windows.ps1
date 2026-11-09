@@ -9,7 +9,17 @@ $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $repo
 
-function Step($text) { Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan }
+# Each step prints how long the previous one took, so a slow start shows where the time goes.
+$script:clock = [System.Diagnostics.Stopwatch]::StartNew()
+$script:mark = 0.0
+$script:label = ''
+function Step($text) {
+    $now = $script:clock.Elapsed.TotalSeconds
+    if ($script:label) { Write-Host ("   ({0:N1}s)" -f ($now - $script:mark)) -ForegroundColor DarkGray }
+    $script:mark = $now
+    $script:label = $text
+    Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan
+}
 function Warn($text) { Write-Host $text -ForegroundColor Yellow }
 function Fail($text) { Write-Host ""; Write-Host "ERROR: $text" -ForegroundColor Red; exit 1 }
 
@@ -38,18 +48,22 @@ Write-Host ("node " + (node -v) + "  |  " + (cargo --version) + "  |  " + (py -3
 # ---------------------------------------------------------------- leftovers (the usual cause of EBUSY)
 Step 'Stopping leftover EV Sound Lab processes'
 $stopped = 0
-Get-CimInstance Win32_Process | Where-Object {
-    $_.ProcessId -ne $PID -and (
-        ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) -or
-        ($_.CommandLine -and $_.CommandLine.IndexOf('backend.sidecar', [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
-        (($_.Name -eq 'node.exe') -and $_.CommandLine -and $_.CommandLine.IndexOf($repo, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
-    )
-} | ForEach-Object {
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    $stopped++
+# Cheap check first: the full process scan (WMI) is slow, so skip it when nothing relevant is running.
+$candidates = Get-Process -Name 'ev-sound-lab', 'esbuild', 'node', 'python' -ErrorAction SilentlyContinue
+if ($candidates) {
+    Get-CimInstance Win32_Process -Filter "Name='ev-sound-lab.exe' OR Name='esbuild.exe' OR Name='node.exe' OR Name='python.exe'" | Where-Object {
+        $_.ProcessId -ne $PID -and (
+            ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) -or
+            ($_.CommandLine -and $_.CommandLine.IndexOf('backend.sidecar', [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
+            (($_.Name -eq 'node.exe') -and $_.CommandLine -and $_.CommandLine.IndexOf($repo, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+        )
+    } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        $stopped++
+    }
 }
 Write-Host "stopped $stopped process(es)"
-Start-Sleep -Milliseconds 800
+if ($stopped -gt 0) { Start-Sleep -Milliseconds 800 }
 
 # ---------------------------------------------------------------- update
 if ($Pull) {
@@ -137,4 +151,5 @@ if ((-not $viteOk) -or ($lockHash -ne $lockSaved)) {
 
 # ---------------------------------------------------------------- run
 Step 'Starting EV Sound Lab (the first Rust build takes several minutes; later starts are fast)'
+Write-Host ("   (setup took {0:N1}s in total; cargo and Vite start now)" -f $script:clock.Elapsed.TotalSeconds) -ForegroundColor DarkGray
 npm.cmd run tauri -- dev
