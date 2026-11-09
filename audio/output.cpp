@@ -82,7 +82,13 @@ struct Runtime {
 #endif
             if (!selected.empty()) library = attempt(selected.c_str());
             else for (const char* name : names) if ((library = attempt(name))) break;
-            if (!library) throw std::runtime_error("Cannot load PortAudio runtime: " + selected);
+            if (!library) {
+                std::string why;
+#ifdef _WIN32
+                why = " (Windows error " + std::to_string(GetLastError()) + ")";
+#endif
+                throw std::runtime_error("Cannot load PortAudio runtime: " + (selected.empty() ? std::string("no bundled DLL found, tried portaudio.dll") : selected) + why);
+            }
         }
         // Resolve again after a missing-symbol error; never use a partially loaded API.
         symbol(initialize, "Pa_Initialize"); symbol(terminate, "Pa_Terminate");
