@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <utility>
 #ifdef _WIN32
+#define NOMINMAX  // windows.h otherwise defines min/max macros that break std::numeric_limits<>::max()
 #include <windows.h>
 #else
 #include <dlfcn.h>
