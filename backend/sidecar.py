@@ -3,8 +3,9 @@
 import os
 import socket
 import sys
+import threading
 
-from PySide6.QtCore import QCoreApplication, QSocketNotifier, QTimer
+from PySide6.QtCore import QCoreApplication, QObject, QSocketNotifier, Qt, QTimer, Signal
 
 from backend.bridge import DesktopBridge
 from backend.protocol import decode_command, encode_message
@@ -12,6 +13,26 @@ from backend.audio_output_monitor import AudioOutputMonitor
 from backend.controller import SimulatorController
 from backend.gamepad_input import GamepadInput
 from backend.beamng_telemetry import decode_ev_sound_packet
+
+
+class StdinPump(QObject):
+    """Windows: QSocketNotifier cannot watch a pipe, so a thread reads stdin and queues chunks to the Qt thread."""
+    received = Signal(bytes)
+
+    def __init__(self, handler, parent):
+        super().__init__(parent)
+        self.received.connect(handler, Qt.ConnectionType.QueuedConnection)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        while True:
+            try:
+                chunk = os.read(0, 65536)
+            except OSError:
+                chunk = b''
+            self.received.emit(chunk)
+            if not chunk:
+                return
 
 
 class Sidecar:
@@ -27,8 +48,11 @@ class Sidecar:
         self.gamepad.navigation.connect(lambda action: self.send({'event': 'navigate', 'data': action}))
         self.audio_monitor = AudioOutputMonitor(self.controller, app)
         self.buffer = bytearray()
-        self.input = QSocketNotifier(0, QSocketNotifier.Type.Read, app)
-        self.input.activated.connect(self.read_input)
+        if sys.platform == 'win32':
+            self.input = StdinPump(self.handle_input, app)
+        else:
+            self.input = QSocketNotifier(0, QSocketNotifier.Type.Read, app)
+            self.input.activated.connect(self.read_input)
         self.telemetry_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.telemetry_notifier = None
         try:
@@ -76,7 +100,9 @@ class Sidecar:
                 self.controller.set_beamng_error(f'Invalid BeamNG telemetry: {exc}')
 
     def read_input(self, _fd=None):
-        chunk = os.read(0, 65536)
+        self.handle_input(os.read(0, 65536))
+
+    def handle_input(self, chunk):
         if not chunk:
             self.app.quit()
             return
@@ -115,7 +141,8 @@ class Sidecar:
 
     def close(self):
         self.bridge.source_discovery.close()
-        self.input.setEnabled(False)
+        if isinstance(self.input, QSocketNotifier):
+            self.input.setEnabled(False)
         self.display.stop()
         if self.telemetry_notifier is not None:
             self.telemetry_notifier.setEnabled(False)
