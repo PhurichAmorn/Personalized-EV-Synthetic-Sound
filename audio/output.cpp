@@ -72,7 +72,11 @@ struct Runtime {
             const std::string selected = !path.empty() ? path : (env ? env : "");
 #ifdef _WIN32
             const char* names[] = {"portaudio.dll", "libportaudio64bit.dll", "libportaudio32bit.dll"};
-            auto attempt = [&](const char* name) { return reinterpret_cast<void*>(LoadLibraryA(name)); };
+            // Same search rules as Python's ctypes (default dirs + the DLL's own folder); plain LoadLibrary is the fallback.
+            auto attempt = [&](const char* name) {
+                HMODULE module = LoadLibraryExA(name, nullptr, 0x1000 | 0x100);  // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | _DLL_LOAD_DIR
+                return reinterpret_cast<void*>(module ? module : LoadLibraryA(name));
+            };
 #elif defined(__APPLE__)
             const char* names[] = {"libportaudio.2.dylib", "libportaudio.dylib", "/opt/homebrew/lib/libportaudio.dylib", "/usr/local/lib/libportaudio.dylib"};
             auto attempt = [&](const char* name) { return dlopen(name, RTLD_NOW | RTLD_LOCAL); };
