@@ -142,12 +142,19 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
   useEffect(() => {
     let disposed = false
     let disconnect = () => {}
+    // State arrives ~30x/s. Render only the newest one per animation frame so slow renders cannot build a backlog of stale states.
+    let pending: State | null = null
+    let frame = 0
+    const queueState = (next: State) => {
+      pending = next
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; if (!disposed && pending) setState(pending); pending = null })
+    }
     try {
       const instance = tauriClient()
       client.current = instance
       void instance.connect((message: BackendMessage) => {
         if (disposed) return
-        if (message.event === 'state') setState(message.data as State)
+        if (message.event === 'state') queueState(message.data as State)
         if (message.event === 'error') setError(String(message.data))
         if (message.event === 'close-request' && !overlay) setCloseRequested(true)
         if (message.event === 'navigate') {
@@ -164,7 +171,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
           .catch(reason => { if (!disposed) setError(readError(reason)) })
       }).catch(reason => setError(readError(reason)))
     } catch (reason) { setError(readError(reason)) }
-    return () => { disposed = true; disconnect(); client.current = null }
+    return () => { disposed = true; cancelAnimationFrame(frame); disconnect(); client.current = null }
   }, [overlay])
 
   const sourceTrialPresent = !!(state?.sourceDiscovery?.active || state?.sourceDiscovery?.completed || state?.sourceDiscovery?.pair.length || state?.sourceDiscovery?.favourites.length)
