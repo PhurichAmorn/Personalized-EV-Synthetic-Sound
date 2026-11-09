@@ -49,3 +49,20 @@ class AudioOutputMonitorTests(unittest.TestCase):
         AudioOutputMonitor.check(monitor)
         monitor.schedule.assert_called_once()
         self.assertEqual(monitor.signature, (b'new', 48000, 2))
+
+    def scheduled(self, signature, active):
+        monitor = self.monitor()
+        monitor.output_signature = lambda: signature
+        monitor.signature = (b'dev', 48000, 2)
+        monitor.controller.audio.stream.active = active
+        AudioOutputMonitor.schedule(monitor)
+        return monitor
+
+    def test_repeated_device_announcement_does_not_restart_audio(self):
+        self.scheduled((b'dev', 48000, 2), True).reopen.start.assert_not_called()
+
+    def test_real_output_change_or_dead_stream_restarts_audio(self):
+        monitor = self.scheduled((b'other', 44100, 2), True)
+        monitor.reopen.start.assert_called_once()
+        self.assertEqual(monitor.signature, (b'other', 44100, 2))
+        self.scheduled((b'dev', 48000, 2), False).reopen.start.assert_called_once()

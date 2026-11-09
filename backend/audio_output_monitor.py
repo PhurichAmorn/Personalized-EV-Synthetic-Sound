@@ -29,6 +29,17 @@ class AudioOutputMonitor(QObject):
         return bytes(device.id()), fmt.sampleRate(), fmt.channelCount()
 
     def schedule(self):
+        # Refreshing PortAudio makes Windows re-announce the same devices, which would re-trigger recovery in a loop
+        # (each pass blocks the backend ~200-500 ms). Recover only if the output really changed or the stream is down.
+        signature = self.output_signature()
+        c = self.controller
+        try:
+            down = (c.running or c.soundSweepActive) and (c.audio.stream is None or not c.audio.stream.active)
+        except Exception:
+            down = True
+        if signature == self.signature and not down:
+            return
+        self.signature = signature
         self.attempts = 0
         self.reopen.start()
 
