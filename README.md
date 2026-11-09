@@ -66,4 +66,4 @@ See the [documentation guide](docs/README.md) for repository architecture, vehic
 
 ## Windows quick start
 
-Run `launch_windows.cmd` from the repo folder (needs Node LTS, Rust via rustup, Python 3.12 and Visual Studio Build Tools; no admin rights for the first three). It stops leftover processes (the usual cause of `EBUSY`), pulls the latest code, installs only what changed, builds the native audio module when its sources changed, and starts the app. Use `launch_windows.cmd -Clean` for a full reset of `node_modules` and the native build, and `-NoPull` to skip `git pull`.
+Run `launch_windows.cmd` from the repo folder (needs Node LTS, Rust via rustup, Python 3.12 and Visual Studio Build Tools; no admin rights for the first three). It stops leftover processes (the usual cause of `EBUSY`), installs only what changed, builds the native audio module when its sources changed, and starts the app. Use `launch_windows.cmd -Clean` for a full reset of `node_modules` and the native build, and `-Pull` to run `git pull` first.

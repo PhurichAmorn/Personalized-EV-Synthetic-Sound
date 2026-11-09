@@ -1,8 +1,8 @@
 # One-command setup + launch for EV Sound Lab on Windows. No admin rights needed.
-#   launch_windows.cmd           update code, install whatever changed, start the app
+#   launch_windows.cmd           install whatever changed, start the app
 #   launch_windows.cmd -Clean    also delete node_modules, the native build and caches first
-#   launch_windows.cmd -NoPull   skip "git pull"
-param([switch]$Clean, [switch]$NoPull)
+#   launch_windows.cmd -Pull     run "git pull" first
+param([switch]$Clean, [switch]$Pull)
 
 # Native tools write to stderr normally; check $LASTEXITCODE ourselves instead of stopping on stderr text.
 $ErrorActionPreference = 'Continue'
@@ -52,7 +52,7 @@ Write-Host "stopped $stopped process(es)"
 Start-Sleep -Milliseconds 800
 
 # ---------------------------------------------------------------- update
-if (-not $NoPull) {
+if ($Pull) {
     Step 'Updating code (git pull)'
     git pull --ff-only
     if ($LASTEXITCODE -ne 0) { Warn 'git pull did not finish (local changes or no network). Continuing with the code you have.' }

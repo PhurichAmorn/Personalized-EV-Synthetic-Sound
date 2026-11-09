@@ -72,6 +72,24 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
   const [sourceAudioError, setSourceAudioError] = useState('')
   const [granularMode, setGranularMode] = useState<GranularMode>('evolving')
   const [granularSelected, setGranularSelected] = useState(true)
+  // The BeamNG overlay window has no sound player, so it asks this window to change the sound mode.
+  const publishMode = useRef(() => {})
+  publishMode.current = () => { void window.__TAURI__?.event.emit('sound-mode-status', { granularSelected, granularMode }) }
+  useEffect(() => { publishMode.current() }, [granularSelected, granularMode])
+  const overlayAction = useRef<(message: { action: string; name?: string }) => void>(() => {})
+  overlayAction.current = message => {
+    if (message.action === 'gs') { setGranularSelected(true); sound.current?.start(true) }
+    else if (message.action === 'gs-cycle') { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }
+    else if (message.action === 'theme' && message.name) { setGranularSelected(false); sound.current?.stop(); onCommand('theme', { name: message.name }) }
+    else if (message.action === 'sync') publishMode.current()
+  }
+  useEffect(() => {
+    let stopListening = () => {}
+    let gone = false
+    void window.__TAURI__?.event.listen('overlay-mode', event => overlayAction.current(event.payload as unknown as { action: string; name?: string }))
+      .then(stop => { if (gone) stop(); else stopListening = stop })
+    return () => { gone = true; stopListening() }
+  }, [])
   useEffect(() => {
     if (state.running && !state.starting && granularSelected && !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active) sound.current?.start(true)
   }, [state.running, state.starting])

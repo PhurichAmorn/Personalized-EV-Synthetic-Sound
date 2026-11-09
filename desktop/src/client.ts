@@ -51,7 +51,7 @@ declare global {
     __TAURI__?: {
       window?: { getCurrentWindow: () => { close: () => Promise<void>; startDragging: () => Promise<void>; startResizeDragging: (direction: 'SouthEast') => Promise<void> } }
       core: { invoke: (name: string, args: Record<string, unknown>) => Promise<void> }
-      event: { listen: (name: string, handler: (event: { payload: string }) => void) => Promise<() => void> }
+      event: { listen: (name: string, handler: (event: { payload: string }) => void) => Promise<() => void>; emit: (name: string, payload?: unknown) => Promise<void> }
     }
   }
 }
