@@ -63,3 +63,7 @@ MIT. See [LICENSE](LICENSE).
 ## Documentation
 
 See the [documentation guide](docs/README.md) for repository architecture, vehicle physics, interactive search, both sound-generation approaches, research findings, and integration proposals.
+
+## Windows quick start
+
+Run `launch_windows.cmd` from the repo folder (needs Node LTS, Rust via rustup, Python 3.12 and Visual Studio Build Tools; no admin rights for the first three). It stops leftover processes (the usual cause of `EBUSY`), pulls the latest code, installs only what changed, builds the native audio module when its sources changed, and starts the app. Use `launch_windows.cmd -Clean` for a full reset of `node_modules` and the native build, and `-NoPull` to skip `git pull`.
