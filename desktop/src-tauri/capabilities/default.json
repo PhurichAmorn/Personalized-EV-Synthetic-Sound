@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "EV Sound Lab window permissions",
-  "windows": ["main", "telemetry", "sound-signal"],
+  "windows": ["main", "telemetry", "sound-signal", "beamng-overlay"],
   "permissions": ["core:default"]
 }

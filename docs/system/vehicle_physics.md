@@ -1,4 +1,10 @@
-# Pedal and regeneration behavior
+# Vehicle physics and pedal behavior
+
+## Purpose
+
+This is the single project guide for the simplified vehicle model, powertrain limits, accelerator/coast behavior, service braking, and regeneration. It states the behavior the simulator intends to provide and notes where values are provisional rather than measured OEM calibrations. Exact implementation belongs in `simulation/vehicle_model.py`.
+
+Keep this document stable. Update it when vehicle behavior or a research assumption changes, not for unrelated UI or sound edits.
 
 The dashboard exposes **Compact EV** and **Performance EV** only. Their propulsion specifications derive from the internal Honda e and Model 3 Performance reference configurations. All four manufacturer configurations remain available to Python callers through `VehicleModel.from_name`; `SIMULATOR_PRESETS` is the dashboard allowlist. Neutral names do not imply legal clearance or OEM calibration.
 

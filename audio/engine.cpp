@@ -6,6 +6,11 @@
 namespace evsound {
 static double clamp(double value){return std::clamp(value,0.,1.);}
 static double value(const Profile& p,const char* key,double fallback){auto found=p.find(key);return found==p.end()?fallback:found->second;}
+static double virtual_order_rpm(double progress,double throttle,const Profile& p){
+    const double motion=clamp(progress);
+    return (1000.+5000.*motion)*value(p,"order_rpm_scale",1.)
+        +value(p,"order_throttle_rpm_boost",0.)*clamp(throttle)*(1.-motion);
+}
 static void finite(std::initializer_list<double> values){for(double v:values)if(!std::isfinite(v))throw std::invalid_argument("Sound inputs must be finite.");}
 static double ramp(double start,double target,std::size_t index,double seconds,int sr){return target+(start-target)*std::exp(-(index+1.)/(seconds*sr));}
 Engine::Engine(int rate,OrderConfig config):sample_rate(rate),order_synth(rate,std::move(config)),output(std::make_unique<Output>()) {make_source();prepare(512);reset();}
@@ -37,8 +42,10 @@ void Engine::set_parameters(double rpm,double ceiling,double power,double regen_
     const double base=p.at("base_hz"),gain=p.at("gain"),rich=p.at("richness");
     const double electric=value(p,"electric_mix",0.),scale=value(p,"electric_pitch_scale",5.),offset=value(p,"electric_pitch_offset",120.);
     const double exponent=value(p,"electric_load_exponent",1.);
-    finite({rpm,ceiling,power,regen_power,throttle,acceleration,base,gain,rich,electric,scale,offset,value(p,"electric_start_hz",0.),exponent});
-    if(ceiling<=0||scale<=0||offset<0||value(p,"electric_start_hz",0.)<0||exponent<.7||exponent>1.3)throw std::invalid_argument("Invalid sound pitch or load response.");
+    const double order_scale=value(p,"order_rpm_scale",1.);
+    const double order_boost=value(p,"order_throttle_rpm_boost",0.);
+    finite({rpm,ceiling,power,regen_power,throttle,acceleration,base,gain,rich,electric,scale,offset,value(p,"electric_start_hz",0.),exponent,order_scale,order_boost});
+    if(ceiling<=0||scale<=0||offset<0||value(p,"electric_start_hz",0.)<0||exponent<.7||exponent>1.3||order_scale<.75||order_scale>1.5||order_boost<0||order_boost>4000)throw std::invalid_argument("Invalid sound pitch or load response.");
     if(motor_load)finite({*motor_load});if(regen_load)finite({*regen_load});
     const double seconds=value(p,"traction_cycle_s",0.),cycle_mix=value(p,"traction_cycle_mix",seconds>0?1.:0.);
     const double crossfade=value(p,"traction_crossfade_s",.60),sweep=value(p,"traction_sweep_hz",140.);
@@ -56,7 +63,7 @@ void Engine::set_parameters(double rpm,double ceiling,double power,double regen_
     response_target=next_response;response_timings=timings;electric_colour_target=colours;
     if(seconds)cycle_target={seconds,crossfade,sweep,morph,stage};
     driving_controls.reset();order_active=value(p,"order_synthesis",0.)!=0.;
-    if(order_active)order_synth.set_parameters(1000+5000*clamp(rpm/ceiling),throttle*100,rpm>0||(motor_load?*motor_load:throttle)>0);
+    if(order_active)order_synth.set_parameters(virtual_order_rpm(rpm/ceiling,throttle,p),throttle*100,rpm>0||(motor_load?*motor_load:throttle)>0);
     double drive=motor_load?.72*clamp(*motor_load)+.28*clamp(power):std::max(power,.18*throttle);
     drive=std::pow(clamp(drive),exponent);
     const double regen=regen_load?.80*clamp(*regen_load)+.20*clamp(regen_power):regen_power;
@@ -74,7 +81,7 @@ void Engine::set_driving_parameters(double speed,double pedal_percent,double loa
     const bool active=sound_enabled&&state=="ready";
     set_parameters(motion*6000,6000,active?drive:0.,active?regen:0.,profile,active?pedal:0.,active?drive:0.,active?regen:0.,0.);
     driving_controls=std::array<double,2>{active?pedal:0.,active?urgency:0.};sound_speed_target=speed;
-    if(order_active)order_synth.set_driving_controls(1000+5000*motion,pedal,active?drive:0.,active?regen:0.,active?urgency:0.,active&&(speed>.1||drive>0));
+    if(order_active)order_synth.set_driving_controls(virtual_order_rpm(motion,pedal,profile),pedal,active?drive:0.,active?regen:0.,active?urgency:0.,active&&(speed>.1||drive>0));
     if(state=="starting"&&operating_state!="starting")startup_sample=0;
     if(state=="off")startup_sample=-1;
     operating_state=state;playback_target=sound_enabled&&state!="off"?clamp(volume):0.;
@@ -151,7 +158,7 @@ void Engine::render(float* out,std::size_t frames,int channels){
     if(sound_speed<.1&&drive_level<1e-5&&regen_level<1e-5){cycle_state.position=0.;std::fill_n(work[11].data(),frames,0.);}
     for(int k:{30,31,32,33,37})std::fill_n(work[k].data(),frames,0.);
     if(work[6][0]<1.){
-        if(work[4][0]<1.||params[5]<1.){legacy(work[0].data(),work[1].data(),work[3].data(),frames,work[30].data(),work[31].data());++render_counts[0];}
+        if(work[4][0]<1.||params[5]<1.){legacy(work[7].data(),work[1].data(),work[3].data(),frames,work[30].data(),work[31].data());++render_counts[0];}
         if(work[4][0]>0.||params[5]>0.){
             Colours colours;for(int i=0;i<11;++i){smooth(19+i,electric_colour[i],electric_colour_target[i],.20);colours[i]=work[19+i].data();}
             electric(work[7].data(),work[1].data(),work[3].data(),colours,electric_state,sample_rate,frames,work[32].data(),work[33].data());++render_counts[1];

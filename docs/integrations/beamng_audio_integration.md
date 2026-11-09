@@ -1,4 +1,22 @@
-# BeamNG EV sound integration
+# BeamNG sound integration
+
+## Status
+
+The desktop app now receives EVS1 UDP telemetry from the BeamNG protocol mod and can drive its existing sound engine from that data. The always-on-top Tauri overlay exposes source selection, live telemetry, Start/Stop, and the existing sound personalization flow.
+
+The app does **not** yet mute BeamNG's stock drivetrain audio. The sound plays through the desktop app's audio output, so stock drivetrain sound may overlap. A safe, target-vehicle-only BeamNG sound blend hook is still unverified; this prototype does not change vehicle audio or physics. The FMOD design below remains a future in-game integration option.
+
+## Run the current prototype
+
+1. Install `beamng/evsound_telemetry` in BeamNG's `mods/unpacked/` folder and enable **EV Sound Lab telemetry** under **Options → Other → Protocols**.
+2. Start EV Sound Lab, select **BeamNG** as telemetry source, and open **Open BeamNG overlay**. The app listens on `127.0.0.1:4445`.
+3. Start sound in the overlay. Use **Personalize sound** to enter the existing session setup and comparison flow; **Back to driving** returns to telemetry.
+4. BeamNG sends at most 30 packets per second. Display/audio timing also includes app, operating-system, and output-device buffering; no zero-latency guarantee.
+5. Stop or pause the game to confirm the overlay reports disconnect and the app sound fades. Switch source back to **Simulator** to resume local simulation.
+
+Throttle, brake, regen, speed, and signed motor load come from the mod packet. Missing powertrain values are treated as unavailable. BeamNG's stock drivetrain sound remains enabled until a validated vehicle-specific mute control is added.
+
+The remaining sections describe the longer-term FMOD option, not the current playback path.
 
 ## Goal
 
@@ -16,7 +34,7 @@ Let a participant drive a BeamNG vehicle using BeamNG physics and hear this proj
 
 These details are from the repository README and layout. The exact packet schema and plugin callbacks must be confirmed in source before reusing them. The repository describes a combustion-engine simulator, so reuse its connection pattern, not its engine model or torque feedback, for the EV sound study.
 
-## Proposed architecture
+## Future FMOD architecture
 
 ```text
 BeamNG vehicle Lua mod
@@ -30,14 +48,14 @@ BeamNG FMOD audio mix (vehicle engine sound source)
 
 BeamNG’s own EV powertrain controls physics. Sound renderer receives state and generates audio. Keep the current Python application for experiment control and UI. Port or reuse the existing native C++ DSP in an FMOD-compatible component; do not put Python in the audio callback.
 
-## Current implementation readiness (2026-10-26)
+## Reusing the current audio engine
 
 The audio engine is now standalone C++17 in `audio/`; its waveform kernels,
 input mapping, presets, seeded random sources, filter setup and device output do
 not depend on Python. Desktop integration is isolated in `bindings.cpp` and
 `audio/__init__.py`. CMake builds a native library and offline WAV renderer without
 Python. Native tests and Python-reference waveform comparisons cover current
-behavior. BeamNG work remains deferred while testing the existing desktop app.
+behavior. No in-game FMOD adapter is present in the repository.
 
 Before creating the FMOD adapter:
 
@@ -53,22 +71,7 @@ Before creating the FMOD adapter:
 5. Build/test the Windows adapter and verify the chosen BeamNG/FMOD version. The
    macOS desktop extension and native WAV tests do not establish game compatibility.
 
-Input semantics need one explicit correction before wiring telemetry: the current
-`SoundEngine.set_driving_parameters` derives virtual sound RPM from vehicle speed;
-its accelerator argument is percent (0–100), and signed motor load is normalized
-(−1–1). It does not accept measured motor RPM. Preserve this speed-based behavior
-for the initial experiment. Using actual motor RPM, as suggested in the signal
-mapping below, would be a separate sound-behavior change and must be agreed and
-validated explicitly. OutGauge documents speed in m/s and throttle/brake in 0–1;
-convert speed to km/h and throttle to percent. Its timestamp is documented as
-unimplemented (zero), so measure local receive times for the initial cadence and
-staleness checks rather than treating it as a valid sender timestamp.
-
-Reference review confirmed the BeamEngineSim README's FMOD replacement, Lua mod,
-and UDP architecture. Individual plugin callbacks and packet definitions could
-not be fetched during this review; treat them as unverified. Local Git history
-also could not be reviewed because this workspace has no `.git` metadata.
-
+The current call is `SoundEngine.set_driving_parameters(speed_kmh, accelerator_percent, signed_load, acceleration_m_s2, state, profile, volume)`: speed is km/h, accelerator is 0–100, signed load is −1…+1, and acceleration is m/s². The engine derives virtual sound pitch/RPM from speed and has no measured-motor-RPM input. BeamNG OutGauge values use different units (speed in m/s; throttle/brake in 0–1), so convert before calling the engine. OutGauge may not provide motor torque or regeneration; inspect vehicle electrics and add a Lua bridge for those signals if needed. Its timestamp is documented as unimplemented (zero), so use local packet receive time. Keep networking outside the audio callback and pass it only the latest validated state snapshot.
 ## Build order
 
 ### 1. Prove BeamNG can send state to the app
@@ -116,12 +119,10 @@ If the study later needs a custom EV motor model to change vehicle acceleration,
 |---|---|---|
 | Vehicle speed | Current speed/pitch progression | Convert to km/h if adapter expects current project units. |
 | Accelerator | Pedal intent | BeamNG electrics commonly expose normalized throttle input. |
-| Motor RPM | Order oscillator pitch | Prefer actual EV motor RPM when available; wheel speed can estimate it only when gearing/traction assumptions hold. |
+| Motor RPM | Not accepted by the current sound API | The engine derives virtual order RPM from speed. Adding measured motor RPM would be a separate sound-interface change. |
 | Motor torque/load or power | Sound intensity/body | Use signed direction if available so drive and regen can be distinguished. |
 | Brake/regen | Regenerative sound blend | Brake input is not necessarily equal to regenerative torque; inspect actual powertrain signals. |
 | Acceleration | Transient emphasis | Derive from speed if direct acceleration is unavailable; smooth and validate. |
-
-Current project entry point is `SoundEngine.set_driving_parameters(...)`; verify its exact argument semantics before wiring the adapter. Keep BeamNG networking outside the audio callback. Audio callback should consume the latest validated state snapshot and continue smoothing/limiting as it does now.
 
 ## First proof-of-concept acceptance criteria
 

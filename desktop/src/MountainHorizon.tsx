@@ -7,7 +7,7 @@ const glows = {
 
 export default function MountainHorizon({ running, mode }: { running: boolean; mode: string }) {
   const activeGlow = !running ? 'standby' : mode in glows ? mode : 'Deep'
-  return <svg viewBox="0 0 760 430" preserveAspectRatio="none" className="mountain-horizon" aria-hidden="true">
+  return <svg viewBox="0 0 760 430" preserveAspectRatio="xMidYMax meet" className="mountain-horizon" aria-hidden="true">
     <defs>
       {Object.entries(glows).map(([name, color]) => <radialGradient id={`horizonGlow-${name}`} key={name}><stop stopColor={color} stopOpacity=".16" /><stop offset=".5" stopColor={color} stopOpacity=".06" /><stop offset="1" stopColor={color} stopOpacity="0" /></radialGradient>)}
       <linearGradient id="horizonFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#080d13" stopOpacity="0" /><stop offset="1" stopColor="#080d13" /></linearGradient>

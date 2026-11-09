@@ -55,7 +55,7 @@ declare global {
   }
 }
 
-export function tauriClient(idStart = 0) {
+export function tauriClient(idStart = Math.floor(Math.random() * 2_000_000_000)) {
   const api = window.__TAURI__
   if (!api) throw new Error('Open this interface through the Tauri desktop app.')
   return createClient(

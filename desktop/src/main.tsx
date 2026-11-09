@@ -12,5 +12,5 @@ const requestedWindow = new URLSearchParams(window.location.search).get('window'
 const toolView = requestedWindow === 'telemetry' || requestedWindow === 'sound-signal' ? requestedWindow : null
 
 createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>{toolView ? <ToolWindow view={toolView} /> : <App />}</React.StrictMode>,
+  <React.StrictMode>{toolView ? <ToolWindow view={toolView} /> : <App overlay={requestedWindow === 'overlay'} />}</React.StrictMode>,
 )

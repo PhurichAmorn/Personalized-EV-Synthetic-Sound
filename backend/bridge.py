@@ -1,23 +1,34 @@
 """Typed desktop commands over the existing Qt-backed application state."""
 
 import math
+from audio import SOUND_RECIPES
+from experiment.source_search import SourceDiscovery
 
 
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
+        self.source_discovery = SourceDiscovery()
 
     def snapshot(self):
         c = self.controller
         s = c.search
         return {
+            'sourceDiscovery': self.source_discovery.snapshot(),
+            'sourceMode': c.sourceMode, 'beamngConnected': c.beamngConnected,
+            'beamngError': c.beamngError, 'beamngThrottle': c.telemetryThrottle,
+            'beamngBrake': c.telemetryBrake, 'beamngRegen': c.telemetryRegen,
             'running': c.running, 'starting': c.sound_starting,
             'speed': c.speed, 'rpm': c.rpm, 'gear': c.gear, 'hasGears': c.hasGears,
             'maxRpm': c.maxRpm, 'speedGaugeMaximum': c.speedGaugeMaximum,
             'power': c.power, 'charge': c.charge, 'regenActive': c.regenActive,
+            'acceleration': c.beamng_acceleration if c.sourceMode == 'BeamNG' else c.car.acceleration_m_s2,
+            'motorLoad': c._signed_motor_load(), 'sourceAudition': c.source_audition,
             'vehicle': c.selectedVehicle, 'vehicleNames': c.vehicleNames,
             'specs': c.specs,
             'soundTheme': c.selectedSoundTheme, 'soundThemes': c.soundThemes,
+            'soundRecipes': {mode: list(recipes) for mode, recipes in SOUND_RECIPES.items()},
+            'soundRecipeSelection': c.sound_recipe.copy(),
             'parameters': c.parameters, 'soundSweepActive': c.soundSweepActive,
             'audioError': c.error, 'throttleInput': c.throttleInput,
             'brakeInput': c.brakeInput, 'controllerName': c.controllerName,
@@ -33,6 +44,16 @@ class DesktopBridge:
                 'ratingA': s.ratingA, 'ratingB': s.ratingB,
                 'ratingSources': s.ratingSources, 'feedbackReady': s.feedbackReady,
                 'checkpoint': s.checkpoint, 'error': s.error,
+                'stage': ('Explore recipes' if s.pairNumber <= 4 else 'Tune linked traits' if s.pairNumber <= 14
+                          else 'Combine preferred traits' if s.pairNumber <= 18 else 'Refine')
+                         if s.data and s.data.get('algorithm') == 'recipe-pairwise-v1' else
+                         # v2 phases follow LiveSearch._prepare_probe_pair: probes, tune, combine, branch challenge, refine.
+                         ('Explore recipes' if s.pairNumber <= 4 else 'Tune linked traits' if s.pairNumber <= 14
+                          else 'Combine preferred traits' if s.pairNumber <= 17 else 'Challenge current best'
+                          if s.pairNumber == 18 else 'Refine')
+                         if s.data and s.data.get('algorithm') == 'recipe-pairwise-v2' else '',
+                'pairRecipes': {slot: s.data['candidates'][ident].get('recipe_name', '')
+                                for slot, ident in s.data.get('pair', {}).items()} if s.data else {},
             },
             'experiment': {'state': c.experiment.state, 'error': c.experiment.error},
         }
@@ -62,8 +83,37 @@ class DesktopBridge:
         if not isinstance(payload, dict):
             raise ValueError('Invalid payload')
         c, s = self.controller, self.controller.search
-        if name == 'toggle':
+        if name.startswith('sourceDiscovery'):
+            discovery = self.source_discovery
+            if name == 'sourceDiscoveryStart':
+                if s.active or c.soundSweepActive:raise ValueError('Stop the native experiment or debug sweep first')
+                if discovery.active:raise ValueError('Finish the current source trial before starting another')
+                discovery.start()
+            elif name == 'sourceDiscoveryHeard':discovery.heard(self._text(payload,'id'),payload.get('context',{}))
+            elif name == 'sourceDiscoveryFeedback':discovery.feedback(payload.get('ratings'),payload.get('context',{}))
+            elif name == 'sourceDiscoveryPlayoff':discovery.playoff_feedback(payload.get('choice'),payload.get('context',{}))
+            elif name == 'sourceDiscoveryBookmark':discovery.bookmark(self._text(payload,'id'),self._bool(payload,'enabled'),payload.get('note'))
+            elif name == 'sourceDiscoveryFinish':discovery.finish(payload.get('id'))
+            elif name == 'sourceDiscoveryExport':return discovery.export()
+            elif name == 'sourceDiscoveryRetry':
+                if discovery.busy or not discovery.active:raise ValueError('No failed active trial to retry')
+                with discovery.lock:discovery._prepare()
+            else:raise ValueError('Unknown source discovery command')
+            return self.snapshot()
+        if self.source_discovery.active and name in ('searchStart','searchRestore','tracePreview','sweep'):
+            raise ValueError('Finish the source-discovery trial before native search or audio debugging')
+        if name == 'vehicleStart':
+            if not c.running:c.toggle()
+        elif name == 'sourceMode':
+            c.selectSource(self._text(payload, 'value'))
+        elif name == 'toggle':
             c.toggle()
+        elif name == 'sourceAudition':
+            enabled = self._bool(payload, 'value')
+            if enabled and (s.active or c.soundSweepActive):
+                raise ValueError('Stop the active experiment or audio debug sweep before source audition')
+            c.source_audition = enabled
+            c._update_audio()
         elif name == 'vehicle':
             value = self._text(payload, 'name')
             if value not in c.vehicleNames:
@@ -74,6 +124,11 @@ class DesktopBridge:
             if value not in c.soundThemes:
                 raise ValueError('Unknown sound theme')
             c.selectSoundTheme(value)
+        elif name == 'recipeCycle':
+            value = self._text(payload, 'name')
+            if value not in SOUND_RECIPES:
+                raise ValueError('Unknown sound theme')
+            c.cycleSoundRecipe(value)
         elif name == 'starting':
             c.setSoundStarting(self._bool(payload, 'value'))
             c._pedals_changed()
@@ -104,6 +159,7 @@ class DesktopBridge:
         elif name == 'soundDebug':
             return c.soundDebug()
         elif name == 'searchStart':
+            if self.source_discovery.active:raise ValueError('Finish the source-discovery trial first')
             s.start(self._text(payload, 'participant'), self._text(payload, 'mode'),
                     self._text(payload, 'method'))
         elif name == 'searchSessions':

@@ -18,6 +18,9 @@ import uuid
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer
 from audio import AUDIO_SOURCE_FILES, SOUND_THEMES
 from audio import OrderSoundConfig
+from experiment.recipes import (PROBE_GROUP_FIELDS, PROBE_GROUPS, PROBE_VERSION, RECIPE_LISTENING_GAIN,
+                                RECIPE_NAMES, mode_bounds, recipe_bounds, recipe_controls,
+                                recipe_ids, recipe_probe_groups, probe_profile, recipe_profile)
 from experiment.preference_gp import select_query
 
 DATA_ROOT = Path(__file__).resolve().parents[1] / 'experiment_data' / 'interactive'
@@ -30,14 +33,9 @@ COMFORT_OPENING = (
     (.5, .5, 0., .5), (.25, .65, 1., .65),
     (.85, .2, .85, .15), (.15, .85, .2, .9),
 )
-# Shared physical mapping for new sessions. Mode only selects the opening seed.
+# Normalized controls for preset-centered sound search.
 CHARACTER_CONTROLS = ('register', 'motion', 'tone', 'whirl', 'pulse', 'shimmer',
                       'ensemble', 'phrase', 'response', 'regen')
-CHARACTER_SEEDS = {
-    'Comfort': (.50, .06, .05, 0., 0., 0., 0., 0., .12, .12),
-    'Sport': (.18, .93, .85, .35, .50, .10, 0., .12, .88, .42),
-    'Deep': (0., .25, .30, .05, .05, 0., .25, .05, .35, .25),
-}
 CHARACTER_OPENING = (
     (.18, .20, .25, .95, .05, .05, .05, .15, .45, .30),  # moving whirr
     (.55, .75, .82, .05, .95, .15, .05, .10, .85, .40),  # rhythmic motor
@@ -46,10 +44,21 @@ CHARACTER_OPENING = (
     (.35, .60, .50, .25, .10, .10, .18, .95, .60, .45),  # changing phrase
 )
 DEEP_MOTOR_OPENING = (.45, .58, .55, .15, .20, .08, 0., 0., .62, .35)
-FEATURE_GROUPS = (('register',), ('motion',), ('tone', 'whirl'),
-                  ('pulse', 'shimmer'), ('ensemble', 'phrase'), ('response', 'regen'))
+LEGACY_FEATURE_GROUPS = (('register',), ('motion',), ('tone', 'whirl'),
+                         ('pulse', 'shimmer'), ('ensemble', 'phrase'), ('response', 'regen'))
+FEATURE_GROUPS = (('register',), ('motion',), ('tone',), ('shimmer',),
+                  ('ensemble', 'phrase'), ('response', 'regen'))
 FEATURE_MIXES = ((0, 1), (2, 3, 4), tuple(range(6)))
+RECIPE_ALGORITHM = 'recipe-pairwise-v1'
+PROBE_ALGORITHMS = {'evolutionary': 'three-lineage-probe-v1',
+                    'gp_preference': 'gp-preference-probe-v1',
+                    'recipe_preference': 'recipe-pairwise-v2'}
+PROBE_ALGORITHM_IDS = tuple(PROBE_ALGORITHMS.values())
+RECIPE_CONTROLS = ('register', 'tone', 'response', 'regen', 'layer')
 VERSION = 3
+PRESET_ALGORITHMS = ('three-lineage-character-v2', 'gp-feature-v3', 'gp-feature-v4')
+GP_FEATURE_ALGORITHMS = ('gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4')
+SEARCH_RADIUS = .18
 
 
 def now():
@@ -134,6 +143,88 @@ def profile_for(base, controls):
     return p
 
 
+def preset_controls_for(base):
+    """Map a selected sound preset to the normalized search center."""
+    hz = base.get('base_hz', 70.)
+    scale = base.get('electric_pitch_scale', 5.)
+    start = base.get('electric_start_hz', base.get('electric_pitch_offset', 120.) + scale * hz)
+    return dict(zip(CHARACTER_CONTROLS, (
+        min(1., max(0., (start - 70.) / 110.)),
+        min(1., max(0., (scale - .08) / 1.15)),
+        min(1., max(0., (base.get('richness', .22) - .02) / .54)),
+        min(1., max(0., (base.get('electric_detune', .002) - .002) / .012)),
+        base.get('electric_pulse', 0.), base.get('electric_shimmer', 0.),
+        min(1., max(0., base.get('orchestral_mix', 0.) / .65)),
+        min(1., max(0., base.get('traction_mix', 0.) / .70)),
+        min(1., max(0., (base.get('drive_cruise_gain', .12) - .12) / .70)),
+        min(1., max(0., (base.get('electric_regen_gain', .15) - .15) / .50)),
+    )))
+
+
+def preset_profile_for(base, controls, center):
+    """Apply small control changes around the selected mode's sound preset."""
+    if set(controls) != set(CHARACTER_CONTROLS) or any(
+            not math.isfinite(value) or not 0 <= value <= 1 for value in controls.values()):
+        raise ValueError('Invalid sound controls.')
+    p = dict(base)
+    delta = {key: controls[key] - center[key] for key in CHARACTER_CONTROLS}
+    hz = base.get('base_hz', 70.)
+    scale = max(.05, base.get('electric_pitch_scale', .55) + .35 * delta['motion'])
+    start = base.get('electric_start_hz', base.get('electric_pitch_offset', 120.)
+                     + base.get('electric_pitch_scale', 5.) * hz) + 40. * delta['register']
+    clamp = lambda value, low, high: min(high, max(low, value))
+    has_preset_phrase = 'traction_cycle_s' in base
+    p.update(electric_start_hz=start, electric_pitch_scale=scale,
+             electric_pitch_offset=max(0., start - scale * hz),
+             richness=clamp(base.get('richness', .22) + .18 * delta['tone'], .005, .9),
+             electric_depth=clamp(base.get('electric_depth', .14) + .10 * delta['tone'], 0., .30),
+             electric_cutoff=clamp(base.get('electric_cutoff', 900.) + 300. * delta['tone'] + 250. * delta['shimmer'], 200., 2000.),
+             electric_detune=max(0., base.get('electric_detune', .002) + .004 * delta['whirl']),
+             electric_growl=clamp(base.get('electric_growl', 0.) + .35 * delta['tone'], 0., 1.),
+             electric_effort=clamp(base.get('electric_effort', 1.) + .5 * delta['response'], .1, 2.),
+             electric_whirl=clamp(base.get('electric_whirl', center['whirl']) + delta['whirl'], 0., 1.),
+             electric_pulse=clamp(base.get('electric_pulse', center['pulse']) + delta['pulse'], 0., 1.),
+             electric_shimmer=clamp(base.get('electric_shimmer', center['shimmer']) + delta['shimmer'], 0., 1.),
+             orchestral_mix=clamp(base.get('orchestral_mix', 0.) + .30 * delta['ensemble'], 0., 1.),
+             traction_mix=clamp(base.get('traction_mix', 0.) + .25 * delta['phrase'], 0., 1.) if has_preset_phrase else base.get('traction_mix', 0.),
+             traction_cycle_s=(base.get('traction_cycle_s') or 2.5) if has_preset_phrase else 0.,
+             traction_cycle_mix=clamp(max(0., delta['phrase']) * .5, 0., .10) if has_preset_phrase else 0.,
+             traction_crossfade_s=base.get('traction_crossfade_s', 1.2),
+             traction_sweep_hz=base.get('traction_sweep_hz', 55.),
+             traction_morph_mix=base.get('traction_morph_mix', 0.),
+             traction_stage_colour=base.get('traction_stage_colour', .4),
+             drive_cruise_gain=clamp(base.get('drive_cruise_gain', .12) + .35 * delta['response'], 0., 1.5),
+             acceleration_richness=clamp(base.get('acceleration_richness', .05) + .10 * delta['response'], 0., .5),
+             electric_pitch_smoothing_s=clamp(base.get('electric_pitch_smoothing_s', .16) - .04 * delta['response'], .05, .5),
+             electric_regen_gain=clamp(base.get('electric_regen_gain', .3) + .30 * delta['regen'], 0., 1.),
+             electric_regen_richness=clamp(base.get('electric_regen_richness', 0.) + .25 * delta['regen'], 0., 1.))
+    return p
+
+
+def _profile_for(data, controls, recipe_id=None):
+    if data.get('algorithm') in PROBE_ALGORITHM_IDS:
+        groups = recipe_probe_groups(recipe_id)
+        return probe_profile(data['mode'], recipe_id, {key: controls[key] for key in groups})
+    if data.get('algorithm') == RECIPE_ALGORITHM:
+        return recipe_profile(recipe_id, {key: controls[key] for key in recipe_controls(recipe_id)})
+    if data.get('algorithm') in PRESET_ALGORITHMS:
+        return preset_profile_for(data['base'], controls, data['baseline_controls'])
+    return profile_for(data['base'], controls)
+
+
+def _local_bounds(center):
+    return {key: [max(0., value - SEARCH_RADIUS), min(1., value + SEARCH_RADIUS)]
+            for key, value in center.items()}
+
+
+def _bounds(data, key):
+    return data.get('bounds', {}).get(key, [0., 1.])
+
+
+def _feature_groups(data):
+    return LEGACY_FEATURE_GROUPS if data.get('algorithm') in ('gp-feature-v2', 'gp-feature-v3') else FEATURE_GROUPS
+
+
 class LiveSearch(QObject):
     changed = Signal()
 
@@ -185,6 +276,14 @@ class LiveSearch(QObject):
         ident = self.data.get('playing')
         return self.data['candidates'][ident]['profile'] if ident else None
 
+    @property
+    def volume(self):
+        if self.trace_preview:
+            return self.trace_preview.get('listening_gain', 1.)
+        if self.data and self.data.get('playing'):
+            return self.data['candidates'][self.data['playing']].get('listening_gain', 1.)
+        return 1.
+
     def _commit(self, data, path=None):
         path = path or self.path
         temporary = path.with_suffix('.tmp')
@@ -204,10 +303,24 @@ class LiveSearch(QObject):
         self.changed.emit()
         return True
 
-    def _candidate(self, d, controls, parents=(), kind='initial'):
+    def _candidate(self, d, controls, parents=(), kind='initial', recipe_id=None, reason='', probe_id=''):
         ident = f"c{len(d['candidates']) + 1:04}"
-        d['candidates'][ident] = dict(id=ident, controls=controls, profile=profile_for(d['base'], controls),
-                                     parents=list(parents), kind=kind, created=now())
+        candidate = dict(id=ident, controls=controls, profile=_profile_for(d, controls, recipe_id),
+                         parents=list(parents), kind=kind, created=now())
+        if d.get('algorithm') in PROBE_ALGORITHM_IDS:
+            candidate.update(mode=d['mode'], recipe_id=recipe_id, recipe_version=PROBE_VERSION,
+                             recipe_name=RECIPE_NAMES[d['mode']][recipe_id],
+                             group_values=dict(controls), physical_bounds=mode_bounds(d['mode']),
+                             probe_id=probe_id, query_reason=reason,
+                             listening_gain=RECIPE_LISTENING_GAIN[recipe_id])
+        if recipe_id:
+            candidate.update(recipe_id=recipe_id,
+                             recipe_version=PROBE_VERSION if d.get('algorithm') in PROBE_ALGORITHM_IDS else 1,
+                             recipe_name=RECIPE_NAMES[d['mode']][recipe_id],
+                             physical_bounds=(mode_bounds(d['mode']) if d.get('algorithm') in PROBE_ALGORITHM_IDS
+                                              else recipe_bounds(recipe_id)), query_reason=reason,
+                             listening_gain=RECIPE_LISTENING_GAIN[recipe_id])
+        d['candidates'][ident] = candidate
         return ident
 
     def _pair(self, d, ids, rng):
@@ -236,16 +349,16 @@ class LiveSearch(QObject):
     def start(self, participant, mode, learning_method='evolutionary'):
         participant = participant.strip()
         if (not participant or len(participant) > 80 or mode not in SOUND_THEMES
-                or learning_method not in ('evolutionary', 'gp_preference') or self.active):
+                or learning_method not in ('evolutionary', 'gp_preference', 'recipe_preference') or self.active):
             self.message = 'Enter a name or alias (up to 80 characters).'
             self.changed.emit()
             return
         seed = secrets.randbits(53)
         rng = random.Random(seed)
         base = dict(SOUND_THEMES[mode])
-        control_keys = CHARACTER_CONTROLS
+        control_keys = PROBE_GROUP_FIELDS.keys()
         d = dict(schema=VERSION,
-                 algorithm='gp-feature-v2' if learning_method == 'gp_preference' else 'three-lineage-character-v1',
+                 algorithm=PROBE_ALGORITHMS[learning_method],
                  learning_method=learning_method, id=uuid.uuid4().hex,
                  participant=participant, participant_id=uuid.uuid5(uuid.NAMESPACE_URL, participant.casefold()).hex,
                  mode=mode, vehicle=self.controller.selectedVehicle, vehicle_snapshot=asdict(self.controller.car),
@@ -253,35 +366,51 @@ class LiveSearch(QObject):
                  sound_config=asdict(self.controller.audio.order_synth.config),
                  dsp_hashes={name: hashlib.sha256((Path(__file__).resolve().parents[1] / name).read_bytes()).hexdigest()
                              for name in AUDIO_SOURCE_FILES},
-                 base=base, control_keys=control_keys,
-                 bounds={k: [0., 1.] for k in control_keys}, completed=0, block_end=20,
+                 base=base, control_keys=list(control_keys),
+                 bounds={key: [0., 1.] for key in control_keys}, completed=0, block_end=20,
                  status='active', checkpoint='', candidates={}, history=[], auditions=[], survivors=[],
                  playing=None, favorite=None)
-        controls = dict(zip(control_keys, CHARACTER_SEEDS[mode]))
+        d['dsp_hashes']['experiment/recipes.py'] = hashlib.sha256(
+            (Path(__file__).resolve().parents[1] / 'experiment/recipes.py').read_bytes()).hexdigest()
+        controls = {key: .5 for key in control_keys}
         d['baseline_controls'] = deepcopy(controls)
-        if learning_method == 'gp_preference':
-            initial = []
-            d['feature_winners'] = {}
-            for group in FEATURE_GROUPS:
-                for high in (False, True):
-                    variant = dict(controls)
-                    for key in group:
-                        variant[key] = (.55 if key in ('whirl', 'pulse', 'shimmer', 'ensemble', 'phrase')
-                                        else .8) if high else .05
-                    initial.append(self._candidate(d, variant, kind='feature-contrast'))
-        else:
-            initial = [self._candidate(d, controls, kind='mode-seed')]
-            opening = (DEEP_MOTOR_OPENING, *CHARACTER_OPENING[1:]) if mode == 'Deep' else CHARACTER_OPENING
-            initial.extend(self._candidate(d, dict(zip(control_keys, values))) for values in opening)
+        d['probe_version'] = PROBE_VERSION
+        d['probe_controls'] = dict(controls)
+        d['probe_reference_recipe'] = recipe_ids(mode)[0]
+        d['recipe_catalog'] = {rid: dict(version=PROBE_VERSION, bounds=mode_bounds(mode))
+                               for rid in recipe_ids(mode)}
+        d['probe_winners'] = {}
+        d['incumbent'] = None
+        initial = []
+        recipes = recipe_ids(mode)
+        for recipe_id in recipes:
+            initial.append(self._candidate(d, dict(controls), kind='probe-opening', recipe_id=recipe_id,
+                                           reason='Compare overall mode sound families', probe_id='mode_character'))
+        for group, label in (('register', 'Compare light and full register'),
+                             ('tone', 'Compare clean and rich harmonic tone'),
+                             ('response', 'Compare gentle and pronounced state response')):
+            for value in (0., 1.):
+                variant = dict(controls, **{group: value})
+                initial.append(self._candidate(d, variant, kind='probe-opening',
+                                               recipe_id=d['probe_reference_recipe'], reason=label,
+                                               probe_id=group))
         d['initial'] = initial
+        d['probe_pairs'] = [[initial[0], initial[1]], [initial[2], initial[3]],
+                             [initial[4], initial[5]], [initial[6], initial[7]]]
+        d['active_probe'] = dict(id='mode_character', reason='Compare overall mode sound families')
         self._pair(d, initial[:2], rng)
         if self._commit(d, self.root / d['id'] / 'session.json'):
+            if self.controller.sound_theme != mode:
+                self.controller.sound_theme = mode
+                self.controller.soundThemeChanged.emit()
             self.trace_preview = None
             self._stats = self._empty_stats()
             self._sample_time = time.monotonic()
             self.monitor.start()
             self.controller._update_audio()
-            label = 'GP preference + expected improvement' if learning_method == 'gp_preference' else 'evolutionary mutation'
+            label = {'gp_preference': 'GP preference + expected improvement',
+                     'evolutionary': 'evolutionary mutation',
+                     'recipe_preference': 'recipe-aware pairwise preference'}[learning_method]
             logging.getLogger('Search').info('Session started: %s · %s.', mode, label)
 
     @Slot(str, result='QVariantList')
@@ -291,7 +420,8 @@ class LiveSearch(QObject):
             try:
                 d = json.loads(path.read_text())
                 if d['participant'].casefold() == participant.strip().casefold() and d['schema'] == VERSION:
-                    method = 'GP' if d.get('learning_method') == 'gp_preference' else 'Evolutionary'
+                    method = ('Recipe preference' if d.get('learning_method') == 'recipe_preference' else
+                              'GP' if d.get('learning_method') == 'gp_preference' else 'Evolutionary')
                     rows.append(dict(id=d['id'], text=f"{d['created'][:16]} · {d['mode']} · {method} · {d['completed']} pairs · {d['status']}",
                                      favorite=bool(d.get('favorite'))))
             except (OSError, ValueError, KeyError, TypeError):
@@ -332,6 +462,7 @@ class LiveSearch(QObject):
                              if a.get('pair') == index}
                 comparisons.append(dict(number=index, time=row.get('time', ''), pair=pair,
                                         preference=row.get('preference', ''), winner=row.get('winner'),
+                                        probe_id=row.get('probe_id', ''), query_reason=row.get('query_reason', ''),
                                         ratings=row.get('ratings', {}), rating_sources=row.get('rating_sources', {}),
                                         auditions=auditions))
             if d.get('pair') and not d.get('checkpoint') and d.get('completed', 0) < d.get('block_end', 20):
@@ -339,6 +470,8 @@ class LiveSearch(QObject):
                                         pair={slot: candidates[candidate_id] for slot, candidate_id in d['pair'].items()},
                                         preference=d.get('preference', ''), ratings=d.get('ratings', {}),
                                         rating_sources=d.get('rating_sources', {}), winner=None, auditions={}, current=True,
+                                        probe_id=d.get('active_probe', {}).get('id', ''),
+                                        query_reason=d.get('active_probe', {}).get('reason', ''),
                                         final_choice=favorite_slot if d.get('status') == 'satisfied' else ''))
             return dict(id=d['id'], participant=d['participant'], mode=d['mode'],
                         learning_method=d.get('learning_method', 'evolutionary'), created=d['created'],
@@ -361,11 +494,12 @@ class LiveSearch(QObject):
             d = json.loads((self.root / session_id / 'session.json').read_text(encoding='utf-8'))
             candidate = d['candidates'][candidate_id]
             profile = candidate['profile']
-            profile_for(d['base'], candidate['controls'])
+            _profile_for(d, candidate['controls'], candidate.get('recipe_id'))
             if not isinstance(profile, dict):
                 return False
             self.controller._search.clearPlayback()
-            self.trace_preview = dict(profile=profile, mode=d['mode'], candidate=candidate_id, session=session_id)
+            self.trace_preview = dict(profile=profile, mode=d['mode'], candidate=candidate_id, session=session_id,
+                                      listening_gain=candidate.get('listening_gain', 1.))
             self.controller.sound_theme = d['mode']
             self.controller.soundThemeChanged.emit()
             self.controller._update_audio()
@@ -381,7 +515,7 @@ class LiveSearch(QObject):
     def deleteSession(self, ident):
         if len(ident) != 32 or any(c not in '0123456789abcdef' for c in ident):
             return False
-        if self.active and self.data and self.data.get('id') == ident:
+        if self.active and self.data and self.data.get('id') == ident and self.data.get('completed', 0) > 0:
             self.message = 'Pause or finish the active session before deleting it.'
             self.changed.emit()
             return False
@@ -423,10 +557,12 @@ class LiveSearch(QObject):
             if d['schema'] != VERSION or d.get('algorithm') not in (
                     'three-lineage-mutation-v1', 'gp-preference-active-v1', 'gp-preference-ei-v2',
                     'three-lineage-comfort-v1', 'gp-preference-comfort-v1',
-                    'three-lineage-character-v1', 'gp-character-v1', 'gp-feature-v2'):
+                    'three-lineage-character-v1', 'gp-character-v1', 'gp-feature-v2',
+                    'three-lineage-character-v2', 'gp-feature-v3', 'gp-feature-v4', RECIPE_ALGORITHM,
+                    *PROBE_ALGORITHM_IDS):
                 raise ValueError('Unsupported session version.')
             for candidate in d['candidates'].values():
-                profile_for(d['base'], candidate['controls'])
+                _profile_for(d, candidate['controls'], candidate.get('recipe_id'))
             if favorite_only:
                 if not d['favorite']:
                     raise ValueError('This session has no saved sound.')
@@ -531,7 +667,8 @@ class LiveSearch(QObject):
         for _ in range(100):
             controls = dict(d['candidates'][anchor]['controls'])
             for key in rng.sample(varied, min(len(varied), 3)):
-                controls[key] = min(1., max(0., controls[key] + rng.choice((-1, 1)) * rng.uniform(.2, .45)))
+                low, high = _bounds(d, key)
+                controls[key] = min(high, max(low, controls[key] + rng.choice((-1, 1)) * rng.uniform(.08, .20)))
             if (sum((controls[key] - d['candidates'][anchor]['controls'][key]) ** 2 for key in keys) >= .22 ** 2
                     and all(sum((controls[key] - old[key]) ** 2 for key in keys) >= .08 ** 2
                             for old in existing)):
@@ -540,7 +677,12 @@ class LiveSearch(QObject):
             self.message = 'Could not find a distinct replacement sound.'
             self.changed.emit()
             return
-        child = self._candidate(d, controls, [anchor], 'similarity-retry')
+        if d.get('algorithm') in PROBE_ALGORITHM_IDS:
+            anchor_recipe = d['candidates'][anchor].get('recipe_id')
+            child = self._candidate(d, controls, [anchor], 'similarity-retry', anchor_recipe,
+                                    'Replace a similar sound', 'similarity_retry')
+        else:
+            child = self._candidate(d, controls, [anchor], 'similarity-retry')
         d.setdefault('skipped_pairs', []).append(dict(number=d['completed'] + 1, pair=pair,
                                                        reason='too_similar', replacement=child, time=now()))
         previous_slot = next(slot for slot, ident in pair.items() if ident == anchor)
@@ -563,19 +705,46 @@ class LiveSearch(QObject):
 
     @Slot()
     def rejectBoth(self):
-        if (not self.active or self.checkpoint or self.learningMethod != 'gp_preference'
+        if (not self.active or self.checkpoint or self.learningMethod not in ('gp_preference', 'recipe_preference')
                 or not all(self.data['tried'].values())):
+            return
+        if self.learningMethod == 'recipe_preference' and self.data.get('algorithm') == RECIPE_ALGORITHM:
+            self._reject_recipe_pair()
             return
         d = deepcopy(self.data)
         self._flush_audition(d)
         pair = dict(d['pair'])
+        if d.get('algorithm') in PROBE_ALGORITHM_IDS:
+            rng = random.Random(d['seed'] + d['completed'] + 17431 * (len(d.get('skipped_pairs', [])) + 1))
+            replacements = []
+            for slot in ('A', 'B'):
+                old = d['candidates'][pair[slot]]
+                recipe_id = old['recipe_id']
+                controls = {key: rng.uniform(0., 1.) for key in PROBE_GROUPS}
+                replacement = self._candidate(d, controls, kind='neither-replacement', recipe_id=recipe_id,
+                                              reason='Both previous sounds rejected', probe_id='neither_replacement')
+                replacements.append(replacement)
+            d.setdefault('rejected', []).extend(pair.values())
+            d.setdefault('skipped_pairs', []).append(dict(number=d['completed'] + 1, pair=pair,
+                                                           reason='neither', replacements=replacements, time=now()))
+            if d.get('incumbent') in pair.values():
+                d['incumbent'] = None
+            self._pair(d, replacements, rng)
+            d['active_probe'] = dict(id='neither_replacement', reason='Both previous sounds rejected')
+            d['selected'] = 'A'
+            d['tried']['A'] = True
+            d['playing'] = d['pair']['A']
+            if self._commit(d):
+                self._stats = self._empty_stats()
+                self.controller._update_audio()
+            return
         keys = tuple(d.get('control_keys', CHARACTER_CONTROLS))
         rng = random.Random(d['seed'] + d['completed'] + 17431 * (len(d.get('skipped_pairs', [])) + 1))
         existing = [candidate['controls'] for candidate in d['candidates'].values()]
         replacements = []
         for _ in range(2):
             for _ in range(100):
-                controls = {key: rng.random() for key in keys}
+                controls = {key: rng.uniform(*_bounds(d, key)) for key in keys}
                 if all(sum((controls[key] - old[key]) ** 2 for key in keys) >= .25 ** 2 for old in existing):
                     break
             else:
@@ -590,7 +759,7 @@ class LiveSearch(QObject):
                                                        reason='neither', replacements=ids, time=now()))
         if d.get('favorite') in pair.values():
             d['favorite'] = None
-        if d.get('algorithm') in ('gp-preference-ei-v2', 'gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2'):
+        if d.get('algorithm') in ('gp-preference-ei-v2', 'gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4'):
             d['incumbent'] = ids[0]
         self._pair(d, ids, rng)
         d['selected'] = 'A'
@@ -620,9 +789,31 @@ class LiveSearch(QObject):
             winner = d.get('parent') if ra == rb and d['completed'] >= 3 else (
                 rng.choice([a, b]) if ra == rb else (a if ra > rb else b))
             d['preference'] = ''
+            if (d.get('algorithm') in PROBE_ALGORITHM_IDS
+                    and d.get('learning_method') == 'evolutionary' and ra == rb):
+                parent = d.get('parent')
+                winner = parent if parent in (a, b) else None
         d['history'].append(dict(pair=dict(d['pair']), ratings=dict(d['ratings']),
                                  rating_sources=dict(d.get('rating_sources', {})),
-                                 preference=d.get('preference', ''), winner=winner, time=now()))
+                                 preference=d.get('preference', ''), winner=winner,
+                                 probe_id=d.get('active_probe', {}).get('id', ''),
+                                 query_reason=d.get('active_probe', {}).get('reason', ''), time=now()))
+        if d.get('algorithm') in PROBE_ALGORITHM_IDS:
+            if winner:
+                d['incumbent'] = winner
+                d['probe_winners'][str(d['completed'])] = winner
+                current_probe = d.get('active_probe', {}).get('id', '')
+                group = current_probe.removeprefix('tune_').removeprefix('refine_')
+                if group in PROBE_GROUPS:
+                    d['probe_controls'][group] = d['candidates'][winner]['controls'][group]
+            d['completed'] += 1
+            if d['completed'] >= d['block_end']:
+                d['checkpoint'] = 'cap'
+            if not d['checkpoint']:
+                self._prepare_probe_pair(d, rng)
+            if self._commit(d):
+                self._stats = self._empty_stats()
+            return
         method = d.get('learning_method', 'evolutionary')
         if method == 'evolutionary':
             winner = winner or d.get('parent') or rng.choice([a, b])
@@ -631,31 +822,226 @@ class LiveSearch(QObject):
                 d['survivors'].append(winner)
             else:
                 d['survivors'][d['lineage']] = winner
-        if d.get('algorithm') == 'gp-feature-v2' and d['completed'] < len(FEATURE_GROUPS):
+        elif method == 'recipe_preference':
+            if d['completed'] < 3:
+                d.setdefault('recipe_opening_winners', []).append(winner or a)
+            else:
+                d['incumbent'] = winner or d.get('incumbent') or a
+        groups = _feature_groups(d)
+        if d.get('algorithm') in GP_FEATURE_ALGORITHMS and d['completed'] < len(groups):
             expected = set(d['initial'][2*d['completed']:2*d['completed']+2])
             if winner and set(d['pair'].values()) == expected:
                 d['feature_winners'][str(d['completed'])] = winner
-        if d.get('algorithm') in ('gp-preference-ei-v2', 'gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2'):
+        if d.get('algorithm') in ('gp-preference-ei-v2', 'gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4'):
             d['incumbent'] = winner or d.get('incumbent') or a
         d['completed'] += 1
-        if d['completed'] % 20 == 10:
-            d['checkpoint'] = 'break'
         if d['completed'] >= d['block_end']:
             d['checkpoint'] = 'cap'
         if not d['checkpoint']:
-            if method == 'gp_preference':
+            if method == 'recipe_preference':
+                self._prepare_recipe_pair(d, rng)
+            elif method == 'gp_preference':
                 self._prepare_gp_pair(d, rng)
             else:
                 self._prepare_next(d, rng)
         if self._commit(d):
             self._stats = self._empty_stats()
-            if method == 'gp_preference':
+            if method == 'recipe_preference':
+                detail = 'Recipe pair selected.' if not d['checkpoint'] else 'Waiting for continuation.'
+            elif method == 'gp_preference':
                 detail = 'GP pair selected.' if not d['checkpoint'] else 'Waiting for continuation.'
             else:
                 detail = f"{len(d['survivors'])} sounds retained."
                 if d['checkpoint']:
                     detail += ' Waiting for continuation.'
             logging.getLogger('Search').info('Comparison %s saved. %s', d['completed'], detail)
+
+    def _prepare_recipe_pair(self, d, rng):
+        completed = d['completed']
+        if completed in (1, 2):
+            offset = 2 * completed
+            self._pair(d, d['initial'][offset:offset + 2], rng)
+            return
+        if completed == 3:
+            self._pair(d, d['recipe_opening_winners'][1:3], rng)
+            return
+        parent = d['incumbent']
+        source = d['candidates'][parent]
+        recipe_id = source['recipe_id']
+        kind = 'recipe-tune' if completed < 14 else 'recipe-combination' if completed < 18 else 'recipe-refine'
+        reason = ('Tune one linked group' if completed < 14 else
+                  'Combine preferred groups' if completed < 17 else
+                  'Challenge with other recipe' if completed == 17 else 'Refine preferred sound')
+        if completed == 17:
+            recipe_id = next(rid for rid in recipe_ids(d['mode']) if rid != recipe_id)
+            kind = 'recipe-branch-challenge'
+        groups = recipe_controls(recipe_id)
+        previous = [candidate['controls'] for candidate in d['candidates'].values()
+                    if candidate.get('recipe_id') == recipe_id and candidate['id'] not in d.get('rejected', ())]
+        for _ in range(100):
+            controls = dict(source['controls']) if recipe_id == source['recipe_id'] else dict.fromkeys(RECIPE_CONTROLS, .5)
+            if completed == 17:
+                for group in groups:
+                    controls[group] = rng.uniform(.15, .85)
+            elif 14 <= completed < 17:
+                winners = [d['candidates'][row['winner']]['controls'] for row in d['history']
+                           if row.get('winner') and d['candidates'][row['winner']].get('recipe_id') == recipe_id]
+                for group in rng.sample(list(groups), min(2, len(groups))):
+                    controls[group] = rng.choice(winners)[group] if winners else rng.uniform(0., 1.)
+            else:
+                group = groups[(completed - 4) % len(groups)] if completed < 14 else rng.choice(groups)
+                step = rng.uniform(.20, .45) if completed < 14 else rng.uniform(.08, .25)
+                controls[group] = min(1., max(0., controls[group] + rng.choice((-1., 1.)) * step))
+            if all(sum((controls[key] - old[key]) ** 2 for key in groups) > .10 ** 2 for old in previous):
+                break
+        else:
+            for _ in range(100):
+                controls = dict(source['controls'])
+                for group in groups:
+                    controls[group] = rng.uniform(0., 1.)
+                if all(sum((controls[key] - old[key]) ** 2 for key in groups) > .10 ** 2 for old in previous):
+                    kind, reason = 'recipe-exploration', 'Broader candidate after repeated combinations'
+                    break
+            else:
+                raise ValueError('Could not generate a distinct recipe candidate.')
+        child = self._candidate(d, controls, [parent], kind, recipe_id, reason)
+        self._pair(d, [parent, child], rng)
+
+    def _reject_recipe_pair(self):
+        d = deepcopy(self.data)
+        self._flush_audition(d)
+        old_pair = dict(d['pair'])
+        rng = random.Random(d['seed'] + d['completed'] + 17431 * (len(d.get('skipped_pairs', [])) + 1))
+        ids = []
+        for old_id in old_pair.values():
+            recipe_id = d['candidates'][old_id]['recipe_id']
+            groups = recipe_controls(recipe_id)
+            existing = [candidate['controls'] for candidate in d['candidates'].values()
+                        if candidate.get('recipe_id') == recipe_id]
+            for _ in range(100):
+                controls = dict.fromkeys(RECIPE_CONTROLS, .5)
+                for group in groups:
+                    controls[group] = rng.uniform(0., 1.)
+                if all(sum((controls[key] - old[key]) ** 2 for key in groups) > .12 ** 2 for old in existing):
+                    break
+            else:
+                self.message = 'Could not find a distinct replacement sound.'
+                self.changed.emit()
+                return
+            ids.append(self._candidate(d, controls, kind='neither-replacement', recipe_id=recipe_id,
+                                       reason='Both previous sounds rejected'))
+        d.setdefault('rejected', []).extend(old_pair.values())
+        if d.get('incumbent') in old_pair.values():
+            d['incumbent'] = ids[0]
+        d.setdefault('skipped_pairs', []).append(dict(number=d['completed'] + 1, pair=old_pair,
+                                                       reason='neither', replacements=ids, time=now()))
+        self._pair(d, ids, rng)
+        d['selected'] = 'A'
+        d['tried']['A'] = True
+        d['playing'] = d['pair']['A']
+        if self._commit(d):
+            self._stats = self._empty_stats()
+            self.controller._update_audio()
+
+    def _prepare_probe_pair(self, d, rng):
+        completed = d['completed']
+        if completed < 4:
+            ids = d['probe_pairs'][completed]
+            candidate = d['candidates'][ids[0]]
+            d['active_probe'] = dict(id=candidate['probe_id'], reason=candidate['query_reason'])
+            self._pair(d, ids, rng)
+            return
+
+        recipes = recipe_ids(d['mode'])
+        reference = d['probe_reference_recipe']
+        controls = dict(d['probe_controls'])
+        if completed < 14:
+            group = PROBE_GROUPS[(completed - 4) % len(PROBE_GROUPS)]
+            recipe_id = reference
+            current = controls[group]
+            step = .25
+            alternatives = sorted({max(0., current - step), min(1., current + step)} - {current})
+            if not alternatives:
+                alternatives = [1. if current <= .5 else 0.]
+            if d['learning_method'] == 'gp_preference' and len(alternatives) > 1:
+                pool = [[controls[key] for key in PROBE_GROUPS]]
+                for value in alternatives:
+                    variant = dict(controls, **{group: value})
+                    pool.append([variant[key] for key in PROBE_GROUPS])
+                observations = [row for row in d['history'] if row.get('preference') in ('A', 'equal', 'B')]
+                xa = [[d['candidates'][row['pair']['A']]['controls'][key] for key in PROBE_GROUPS]
+                      for row in observations]
+                xb = [[d['candidates'][row['pair']['B']]['controls'][key] for key in PROBE_GROUPS]
+                      for row in observations]
+                anchor = [controls[key] for key in PROBE_GROUPS]
+                proposal = select_query(pool, xa, xb, [row['preference'] for row in observations], anchor,
+                                        incumbent=0, min_distance=.01)
+                value = alternatives[proposal[1] - 1] if proposal and proposal[1] > 0 else alternatives[0]
+            else:
+                direction = rng.choice((-1., 1.))
+                if d['learning_method'] == 'recipe_preference':
+                    previous = next((row for row in reversed(d['history'])
+                                     if row.get('probe_id') == f'tune_{group}' and row.get('winner')), None)
+                    if previous:
+                        winner_id = previous['winner']
+                        loser_id = next((ident for ident in previous['pair'].values() if ident != winner_id), None)
+                        if loser_id:
+                            winner_value = d['candidates'][winner_id]['controls'][group]
+                            loser_value = d['candidates'][loser_id]['controls'][group]
+                            direction = 1. if winner_value >= loser_value else -1.
+                value = min(1., max(0., current + direction * step))
+                if value == current:
+                    value = min(1., max(0., current - direction * step))
+            child_controls = dict(controls, **{group: value})
+            anchor_id = d.get('incumbent')
+            if (not anchor_id or d['candidates'][anchor_id].get('recipe_id') != recipe_id
+                    or d['candidates'][anchor_id]['controls'] != controls):
+                anchor_id = self._candidate(d, controls, kind='probe-anchor', recipe_id=recipe_id,
+                                            reason=f'Current setting before {group} tuning', probe_id=f'tune_{group}')
+            child_id = self._candidate(d, child_controls, [anchor_id], 'probe-tune', recipe_id,
+                                       f'Tune {group} by 25% of its normalized window', f'tune_{group}')
+            d['parent'] = anchor_id
+            d['active_probe'] = dict(id=f'tune_{group}', reason=f'Change only {group}; step is 25% of normalized range')
+            self._pair(d, [anchor_id, child_id], rng)
+            return
+
+        if completed < 17:
+            alternate = recipes[1]
+            selected_groups = (PROBE_GROUPS if completed == 14 else
+                               ('register', 'response') if completed == 15 else ('tone', 'regen'))
+            combination = {key: controls[key] if key in selected_groups else .5 for key in PROBE_GROUPS}
+            ids = []
+            for recipe_id in (reference, alternate):
+                ids.append(self._candidate(d, combination, kind='probe-combination', recipe_id=recipe_id,
+                                           reason='Combine preferred group settings across recipe families',
+                                           probe_id='combine'))
+            d['active_probe'] = dict(id='combine', reason='Compare combined group settings across sound families')
+            self._pair(d, ids, rng)
+            return
+
+        if completed == 17:
+            incumbent = d.get('incumbent')
+            current_recipe = d['candidates'][incumbent]['recipe_id'] if incumbent else reference
+            challenge_recipe = next(recipe_id for recipe_id in recipes if recipe_id != current_recipe)
+            anchor_id = incumbent or self._candidate(d, controls, kind='probe-anchor', recipe_id=current_recipe,
+                                                     reason='Current branch before challenge', probe_id='branch_challenge')
+            challenge_id = self._candidate(d, controls, [anchor_id], 'probe-branch-challenge', challenge_recipe,
+                                           'Challenge current sound family with alternate recipe', 'branch_challenge')
+            d['active_probe'] = dict(id='branch_challenge', reason='Test alternate recipe family against current branch')
+            self._pair(d, [anchor_id, challenge_id], rng)
+            return
+
+        group = PROBE_GROUPS[(completed - 18) % len(PROBE_GROUPS)]
+        current = controls[group]
+        step = .12
+        value = min(1., max(0., current + (step if current <= .5 else -step)))
+        anchor_id = self._candidate(d, controls, kind='probe-refine-anchor', recipe_id=reference,
+                                    reason='Current combined settings', probe_id=f'refine_{group}')
+        child_controls = dict(controls, **{group: value})
+        child_id = self._candidate(d, child_controls, [anchor_id], 'probe-refine', reference,
+                                   f'Refine {group} by 12% of its normalized window', f'refine_{group}')
+        d['active_probe'] = dict(id=f'refine_{group}', reason=f'Fine adjustment to {group}; step is 12% of normalized range')
+        self._pair(d, [anchor_id, child_id], rng)
 
     def _prepare_next(self, d, rng):
         if d['completed'] < 3:
@@ -666,14 +1052,20 @@ class LiveSearch(QObject):
         parent = d['survivors'][d['lineage']]
         d['parent'] = parent
         broad = (d['completed'] - 3) % 5 == 4
-        exploratory = d.get('algorithm') in ('three-lineage-comfort-v1', 'three-lineage-character-v1')
-        sigma = (.30 if d['completed'] < 8 else .18 if d['completed'] < 14 else .10) if exploratory else .15
-        minimum_distance = (.25 if d['completed'] < 8 else .14 if d['completed'] < 14 else .08) if exploratory else .05
+        algorithm = d.get('algorithm')
+        exploratory = algorithm in ('three-lineage-comfort-v1', 'three-lineage-character-v1', 'three-lineage-character-v2')
+        sigma = ((.08 if d['completed'] < 8 else .055 if d['completed'] < 14 else .035)
+                 if algorithm == 'three-lineage-character-v2' else
+                 (.30 if d['completed'] < 8 else .18 if d['completed'] < 14 else .10) if exploratory else .15)
+        minimum_distance = ((.10 if d['completed'] < 8 else .065 if d['completed'] < 14 else .035)
+                            if algorithm == 'three-lineage-character-v2' else
+                            (.25 if d['completed'] < 8 else .14 if d['completed'] < 14 else .08) if exploratory else .05)
         existing = [x['controls'] for x in d['candidates'].values()]
         for _ in range(100):
             controls = dict(d['candidates'][parent]['controls'])
             for k in rng.sample(list(control_keys), len(control_keys) if broad else rng.randint(1, 2)):
-                controls[k] = rng.random() if broad else min(1., max(0., controls[k] + rng.gauss(0, sigma)))
+                low, high = _bounds(d, k)
+                controls[k] = rng.uniform(low, high) if broad else min(high, max(low, controls[k] + rng.gauss(0, sigma)))
             if all(sum((controls[k]-other[k])**2 for k in control_keys) > minimum_distance**2 for other in existing):
                 break
         else:
@@ -682,18 +1074,24 @@ class LiveSearch(QObject):
         self._pair(d, [parent, child], rng)
 
     def _prepare_gp_pair(self, d, rng):
-        feature = d.get('algorithm') == 'gp-feature-v2'
-        if feature and d['completed'] < len(FEATURE_GROUPS):
+        algorithm = d.get('algorithm')
+        feature = algorithm in GP_FEATURE_ALGORITHMS
+        feature_groups = _feature_groups(d)
+        if feature and d['completed'] < len(feature_groups):
             self._pair(d, d['initial'][2*d['completed']:2*d['completed']+2], rng)
             return
         if feature and 17 <= d['completed'] < 20 and self._prepare_feature_mix(d, rng):
             return
-        exploratory = d.get('algorithm') in ('gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2')
-        character = d.get('algorithm') in ('gp-character-v1', 'gp-feature-v2')
-        improvement_search = d.get('algorithm') in ('gp-preference-ei-v2', 'gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2')
+        exploratory = algorithm in ('gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4')
+        character = algorithm in ('gp-character-v1', 'gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4')
+        improvement_search = algorithm in ('gp-preference-ei-v2', 'gp-preference-comfort-v1', 'gp-character-v1', 'gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4')
         control_keys = tuple(d.get('control_keys', GP_CONTROLS))
-        sigma = (.30 if d['completed'] < 8 else .18 if d['completed'] < 14 else .10) if exploratory else .16
-        minimum_distance = (.25 if d['completed'] < 8 else .14 if d['completed'] < 14 else .08) if exploratory else .01
+        sigma = ((.08 if d['completed'] < 8 else .055 if d['completed'] < 14 else .035)
+                 if algorithm in ('gp-feature-v3', 'gp-feature-v4') else
+                 (.30 if d['completed'] < 8 else .18 if d['completed'] < 14 else .10) if exploratory else .16)
+        minimum_distance = ((.10 if d['completed'] < 8 else .065 if d['completed'] < 14 else .035)
+                            if algorithm in ('gp-feature-v3', 'gp-feature-v4') else
+                            (.25 if d['completed'] < 8 else .14 if d['completed'] < 14 else .08) if exploratory else .01)
         if d['completed'] < (5 if character else 3):
             ids = ([d['incumbent'], d['initial'][d['completed'] + 1]] if improvement_search
                    else d['initial'][2*d['completed']:2*d['completed']+2])
@@ -719,9 +1117,9 @@ class LiveSearch(QObject):
                 center = (rng.choice(preferred) if feature
                           else d['candidates'][d['incumbent']]['controls'] if improvement_search
                           else rng.choice(preferred))
-            controls = ({key: min(1., max(0., center[key] + rng.gauss(0, sigma)))
+            controls = ({key: min(_bounds(d, key)[1], max(_bounds(d, key)[0], center[key] + rng.gauss(0, sigma)))
                          for key in control_keys} if center is not None
-                        else {key: rng.random() for key in control_keys})
+                        else {key: rng.uniform(*_bounds(d, key)) for key in control_keys})
             if all(sum((controls[key] - old[key]) ** 2 for key in control_keys) > (.0001 if improvement_search else .01)
                    for old in pool):
                 pool.append(controls)
@@ -752,7 +1150,7 @@ class LiveSearch(QObject):
                                min_distance=minimum_distance,
                                kernel_length=.65 if character else .35,
                                kernel_groups=tuple(tuple(control_keys.index(key) for key in group)
-                                                   for group in FEATURE_GROUPS) if feature else None)
+                                                   for group in feature_groups) if feature else None)
         if indices is None:
             if improvement_search:
                 raise ValueError('Could not generate a distinct challenger.')
@@ -770,7 +1168,8 @@ class LiveSearch(QObject):
         planned = FEATURE_MIXES[d['completed'] - 17]
         incumbent = d['incumbent']
         original = d['candidates'][incumbent]['controls']
-        available = [index for index in range(len(FEATURE_GROUPS))
+        feature_groups = _feature_groups(d)
+        available = [index for index in range(len(feature_groups))
                      if d['feature_winners'].get(str(index))
                      and d['feature_winners'][str(index)] not in d.get('rejected', ())]
         if len(available) < 2:
@@ -782,7 +1181,7 @@ class LiveSearch(QObject):
                 if group not in choices:
                     choices.append(group)
         for groups in choices:
-            sources = [(FEATURE_GROUPS[index], d['feature_winners'][str(index)]) for index in groups]
+            sources = [(feature_groups[index], d['feature_winners'][str(index)]) for index in groups]
             for fraction in (1., .75, .5):
                 controls = dict(original)
                 for group, ident in sources:
@@ -807,7 +1206,11 @@ class LiveSearch(QObject):
         self._flush_audition(d)
         d['checkpoint'] = ''
         rng = random.Random(d['seed'] + d['completed'])
-        if d.get('learning_method', 'evolutionary') == 'gp_preference':
+        if d.get('algorithm') in PROBE_ALGORITHM_IDS:
+            self._prepare_probe_pair(d, rng)
+        elif d.get('learning_method') == 'recipe_preference':
+            self._prepare_recipe_pair(d, rng)
+        elif d.get('learning_method', 'evolutionary') == 'gp_preference':
             self._prepare_gp_pair(d, rng)
         else:
             self._prepare_next(d, rng)

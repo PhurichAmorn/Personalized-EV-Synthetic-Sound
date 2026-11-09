@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import random
 import tempfile
 import unittest
 from unittest.mock import Mock
@@ -7,8 +8,11 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QCoreApplication
 from audio import SOUND_THEMES
+from experiment.recipes import (PROBE_GROUP_FIELDS, mode_bounds, recipe_bounds, recipe_controls,
+                                recipe_ids, recipe_profile, probe_profile, recipe_probe_groups)
 from experiment.live_search import (LiveSearch, CONTROLS, GP_CONTROLS, COMFORT_CONTROLS,
-                                    CHARACTER_CONTROLS, profile_for)
+                                    CHARACTER_CONTROLS, profile_for, preset_profile_for,
+                                    preset_controls_for)
 
 
 class LiveSearchTest(unittest.TestCase):
@@ -35,32 +39,135 @@ class LiveSearchTest(unittest.TestCase):
         self.search.rate('B', b)
         self.search.next()
 
+    def prefer_recipe_pair(self, preference='B'):
+        self.search.choose('A')
+        self.search.choose('B')
+        self.search.ratePreference(preference)
+        self.search.next()
+
+    def test_new_methods_share_four_controlled_opening_probes(self):
+        for method in ('evolutionary', 'gp_preference', 'recipe_preference'):
+            with self.subTest(method=method):
+                self.search.start('Pilot', 'Comfort', method)
+                data = self.search.data
+                self.assertEqual(len(data['initial']), 8)
+                self.assertEqual(data['probe_version'], 2)
+                self.assertEqual(data['mode'], 'Comfort')
+                candidates = data['candidates']
+                expected = ('mode_character', 'register', 'tone', 'response')
+                for index, probe_id in enumerate(expected):
+                    pair = [candidates[ident] for ident in data['initial'][2*index:2*index+2]]
+                    self.assertEqual({item['probe_id'] for item in pair}, {probe_id})
+                    self.assertEqual({item['mode'] for item in pair}, {'Comfort'})
+                    self.assertTrue(all(item['physical_bounds'] == mode_bounds('Comfort') for item in pair))
+                    if index:
+                        a, b = pair
+                        self.assertEqual(a['recipe_id'], b['recipe_id'])
+                        group = probe_id
+                        self.assertEqual({a['group_values'][group], b['group_values'][group]}, {0., 1.})
+                        self.assertTrue(all(a['group_values'][key] == b['group_values'][key]
+                                            for key in a['group_values'] if key != group))
+                        changed = {key for key in a['profile'] if a['profile'][key] != b['profile'][key]}
+                        self.assertLessEqual(changed, set(PROBE_GROUP_FIELDS[group]))
+                self.search.finish(False)
+
+    def test_new_search_tunes_one_linked_group_per_pair_within_mode_bounds(self):
+        self.search.start('Pilot', 'Sport', 'gp_preference')
+        for _ in range(4):
+            self.search.choose('A')
+            self.search.choose('B')
+            self.search.ratePreference('A')
+            self.search.next()
+        pair = [self.search.data['candidates'][ident] for ident in self.search.data['pair'].values()]
+        self.assertEqual(self.search.data['active_probe']['id'], 'tune_register')
+        self.assertEqual(len({candidate['recipe_id'] for candidate in pair}), 1)
+        a, b = pair
+        changed = {key for key in a['profile'] if a['profile'][key] != b['profile'][key]}
+        self.assertLessEqual(changed, set(PROBE_GROUP_FIELDS['register']))
+        self.assertTrue(all(candidate['physical_bounds'] == mode_bounds('Sport') for candidate in pair))
+
+    def test_recipe_preference_search_uses_shared_probe_stages(self):
+        self.search.start('Pilot', 'Sport', 'recipe_preference')
+        self.assertEqual(self.search.data['algorithm'], 'recipe-pairwise-v2')
+        self.assertEqual({self.search.data['candidates'][ident]['recipe_id']
+                          for ident in self.search.data['pair'].values()}, set(recipe_ids('Sport')))
+        for number in range(1, 21):
+            self.assertEqual(self.search.pairNumber, number)
+            for ident in self.search.data['pair'].values():
+                candidate = self.search.data['candidates'][ident]
+                self.assertEqual(candidate['profile'], probe_profile(
+                    'Sport', candidate['recipe_id'],
+                    {key: candidate['controls'][key] for key in recipe_probe_groups(candidate['recipe_id'])}))
+                self.assertEqual(candidate['recipe_version'], 2)
+                self.assertTrue(candidate['physical_bounds'])
+            self.prefer_recipe_pair()
+        self.assertEqual(self.search.checkpoint, 'cap')
+        self.assertEqual(len(self.search.data['history']), 20)
+
+    def test_recipe_preference_neither_replaces_pair_without_consuming_turn(self):
+        self.search.start('Pilot', 'Deep', 'recipe_preference')
+        original = set(self.search.data['pair'].values())
+        self.search.choose('A')
+        self.search.choose('B')
+        self.search.rejectBoth()
+        self.assertEqual(self.search.data['completed'], 0)
+        self.assertTrue(original.isdisjoint(self.search.data['pair'].values()))
+        self.assertEqual(self.search.data['skipped_pairs'][0]['reason'], 'neither')
+
+    def test_recipe_preference_neither_does_not_restore_rejected_incumbent(self):
+        self.search.start('Pilot', 'Deep', 'recipe_preference')
+        for _ in range(4):
+            self.prefer_recipe_pair()
+        old_incumbent = self.search.data['incumbent']
+        self.search.choose('A')
+        self.search.choose('B')
+        rejected = set(self.search.data['pair'].values())
+        self.search.rejectBoth()
+        self.assertTrue(rejected.issubset(self.search.data['rejected']))
+        self.assertNotIn(old_incumbent, self.search.data['pair'].values())
+        self.prefer_recipe_pair('equal')
+        self.assertNotIn(old_incumbent, self.search.data['pair'].values())
+
+    def test_recipe_preference_restores_exact_pair_and_saved_profiles(self):
+        self.search.start('Pilot', 'Comfort', 'recipe_preference')
+        for _ in range(5):
+            self.prefer_recipe_pair('equal')
+        saved_pair = dict(self.search.data['pair'])
+        saved_profiles = {ident: dict(candidate['profile']) for ident, candidate in self.search.data['candidates'].items()}
+        session_id = self.search.data['id']
+        self.search.finish(False)
+        self.search.restore(session_id)
+        self.assertTrue(self.search.active)
+        self.assertEqual(self.search.data['pair'], saved_pair)
+        self.assertEqual({ident: candidate['profile'] for ident, candidate in self.search.data['candidates'].items()},
+                         saved_profiles)
+
+    def test_recipe_preference_uses_recorded_review_gain(self):
+        self.search.start('Pilot', 'Sport', 'recipe_preference')
+        for slot, ident in self.search.data['pair'].items():
+            self.search.choose(slot)
+            recipe_id = self.search.data['candidates'][ident]['recipe_id']
+            self.assertAlmostEqual(self.search.volume, .38 if recipe_id == 'sport_electric_v1' else 1.)
+
     def test_search_blocks_resume_and_favorite(self):
         self.search.start('Pilot', 'Comfort')
-        self.assertEqual(len(self.search.data['candidates']), 6)
+        self.assertEqual(len(self.search.data['candidates']), 8)
         self.assertEqual(len(self.search.data['survivors']), 0)
         for _ in range(3):
             self.rate_pair()
-        self.assertEqual(len(self.search.data['survivors']), 3)
+        self.assertEqual(self.search.data['active_probe']['id'], 'response')
+        self.rate_pair()
         parent = self.search.data['parent']
         self.search.choose('A')
         self.search.rate('A', 4)
         self.search.choose('B')
         self.search.rate('B', 4)
         self.search.next()
-        self.assertIn(parent, self.search.data['survivors'])
-        for _ in range(6):
+        self.assertIn(parent, self.search.data['pair'].values())
+        for _ in range(5):
             self.rate_pair()
-        self.assertEqual(self.search.checkpoint, 'break')
-        self.assertEqual(len(self.search.traceSession(self.search.data['id'])['comparisons']), 10)
-        completed = self.search.data['completed']
-        pair_at_break = dict(self.search.data['pair'])
-        candidates_at_break = len(self.search.data['candidates'])
-        self.search.next()
-        self.assertEqual(self.search.data['completed'], completed)
-        self.search.continueBlock()
-        self.assertNotEqual(self.search.data['pair'], pair_at_break)
-        self.assertGreater(len(self.search.data['candidates']), candidates_at_break)
+        self.assertEqual(self.search.checkpoint, '')
+        self.assertEqual(self.search.data['completed'], 10)
         self.assertEqual(len(self.search.traceSession(self.search.data['id'])['comparisons']), 11)
         for _ in range(10):
             self.rate_pair()
@@ -85,7 +192,7 @@ class LiveSearchTest(unittest.TestCase):
         stored = json.loads(self.search.path.read_text())
         self.assertEqual(stored['favorite'], favorite)
         for c in stored['candidates'].values():
-            self.assertEqual(set(c['controls']), set(CHARACTER_CONTROLS))
+            self.assertEqual(set(c['controls']), set(PROBE_GROUP_FIELDS))
             self.assertEqual(c['profile']['gain'], SOUND_THEMES['Comfort']['gain'])
 
     def test_satisfaction_requires_explicit_favorite_sound(self):
@@ -122,21 +229,22 @@ class LiveSearchTest(unittest.TestCase):
 
     def test_evolutionary_carries_a_repeated_sounds_score(self):
         self.search.start('Pilot', 'Deep', 'evolutionary')
-        for _ in range(3):
+        for _ in range(5):
             self.rate_pair(6, 2)
-        first_winner = self.search.data['history'][0]['winner']
+        first_winner = self.search.data['history'][4]['winner']
         slot = next(slot for slot, ident in self.search.data['pair'].items() if ident == first_winner)
         other = 'B' if slot == 'A' else 'A'
         self.assertEqual(self.search.data['ratings'][slot], 6)
-        self.assertEqual(self.search.ratingSources[slot], 1)
+        self.assertEqual(self.search.ratingSources[slot], 5)
         self.assertEqual(self.search.data['ratings'][other], 0)
         self.assertFalse(self.search.feedbackReady)
         self.search.choose(other)
         self.search.rate(other, 7)
         self.assertTrue(self.search.feedbackReady)
         self.search.next()
-        self.assertEqual(self.search.data['history'][3]['rating_sources'][slot], 1)
-        self.assertEqual(self.search.data['history'][3]['winner'], self.search.data['history'][3]['pair'][other])
+        history = self.search.data['history'][-1]
+        self.assertEqual(history['rating_sources'][slot], 5)
+        self.assertEqual(history['winner'], history['pair'][other])
 
     def test_evolutionary_needs_both_scores_and_accepts_an_old_pairwise_pair(self):
         self.search.start('Pilot', 'Deep', 'evolutionary')
@@ -197,56 +305,36 @@ class LiveSearchTest(unittest.TestCase):
             self.search.next()
             self.assertTrue(original.isdisjoint(self.search.data['pair'].values()))
 
-    def test_gp_feature_discovery_and_final_combinations(self):
+    def test_gp_runs_probe_tune_combine_challenge_and_refine_stages(self):
         with patch('experiment.live_search.secrets.randbits', return_value=12345):
             self.search.start('Pilot', 'Deep', 'gp_preference')
-        self.assertEqual(self.search.data['algorithm'], 'gp-feature-v2')
-        self.assertEqual(len(self.search.data['initial']), 12)
-        groups = (('register',), ('motion',), ('tone', 'whirl'),
-                  ('pulse', 'shimmer'), ('ensemble', 'phrase'), ('response', 'regen'))
-        for number, group in enumerate(groups):
-            pair = self.search.data['pair']
-            self.assertEqual(set(pair.values()), set(self.search.data['initial'][2*number:2*number+2]))
-            a, b = (self.search.data['candidates'][pair[slot]]['controls'] for slot in ('A', 'B'))
-            self.assertEqual({key for key in CHARACTER_CONTROLS if a[key] != b[key]}, set(group))
-            self.search.choose('A'); self.search.choose('B')
-            self.search.ratePreference('B')
-            self.search.next()
-            self.assertEqual(self.search.data['feature_winners'][str(number)], pair['B'])
-            if number == 3:
-                pending = dict(self.search.data['pair'])
-                ident = self.search.data['id']
-                self.search.finish(False)
-                self.search.restore(ident, False)
-                self.assertEqual(self.search.data['pair'], pending)
-                self.assertEqual(len(self.search.data['feature_winners']), 4)
-        self.assertEqual(self.search.data['completed'], 6)
-        for _ in range(11):
-            self.search.choose('A'); self.search.choose('B')
-            self.search.ratePreference('B'); self.search.next()
-            if self.search.checkpoint:
-                self.search.continueBlock()
-        self.assertEqual(self.search.pairNumber, 18)
-        for number in (18, 19, 20):
-            pair = self.search.data['pair']
-            mixed = self.search.data['candidates'][max(pair.values())]
-            self.assertEqual(mixed['kind'], 'feature-mix')
-            self.assertGreaterEqual(len(mixed['parents']), 2)
+        expected = ['mode_character', 'register', 'tone', 'response',
+                    'tune_register', 'tune_tone', 'tune_response', 'tune_regen',
+                    'tune_register', 'tune_tone', 'tune_response', 'tune_regen',
+                    'tune_register', 'tune_tone', 'combine', 'combine', 'combine',
+                    'branch_challenge', 'refine_register', 'refine_tone']
+        for probe_id in expected:
+            self.assertEqual(self.search.data['active_probe']['id'], probe_id)
             self.search.choose('A'); self.search.choose('B')
             self.search.ratePreference('B'); self.search.next()
         self.assertEqual(self.search.checkpoint, 'cap')
 
-    def test_gp_mix_tries_other_preferred_groups_when_first_mix_duplicates_favorite(self):
+    def test_gp_combine_and_branch_challenge_cross_recipe_families(self):
         with patch('experiment.live_search.secrets.randbits', return_value=12345):
-            self.search.start('Pilot', 'Comfort', 'gp_preference')
-        for number in range(20):
-            if number >= 17:
-                latest = max(self.search.data['pair'].values())
-                self.assertEqual(self.search.data['candidates'][latest]['kind'], 'feature-mix')
+            self.search.start('Pilot', 'Sport', 'gp_preference')
+        for _ in range(14):
             self.search.choose('A'); self.search.choose('B')
             self.search.ratePreference('A'); self.search.next()
-            if self.search.checkpoint == 'break':
-                self.search.continueBlock()
+        pair = [self.search.data['candidates'][ident] for ident in self.search.data['pair'].values()]
+        self.assertEqual({candidate['kind'] for candidate in pair}, {'probe-combination'})
+        self.assertEqual({candidate['probe_id'] for candidate in pair}, {'combine'})
+        self.assertEqual(len({candidate['recipe_id'] for candidate in pair}), 2)
+        for _ in range(3):
+            self.search.choose('A'); self.search.choose('B')
+            self.search.ratePreference('B'); self.search.next()
+        self.assertEqual(self.search.data['active_probe']['id'], 'branch_challenge')
+        challenge = [self.search.data['candidates'][ident] for ident in self.search.data['pair'].values()]
+        self.assertIn('probe-branch-challenge', {candidate['kind'] for candidate in challenge})
 
     def test_gp_ties_leave_features_unresolved_and_continue_with_model(self):
         with patch('experiment.live_search.secrets.randbits', return_value=12345):
@@ -254,22 +342,28 @@ class LiveSearchTest(unittest.TestCase):
         for _ in range(20):
             self.search.choose('A'); self.search.choose('B')
             self.search.ratePreference('equal'); self.search.next()
-            if self.search.checkpoint == 'break':
-                self.search.continueBlock()
-        self.assertEqual(self.search.data['feature_winners'], {})
+        self.assertEqual(self.search.data['probe_winners'], {})
         self.assertEqual(self.search.checkpoint, 'cap')
 
-    def test_deep_first_pair_avoids_extreme_whirl_and_ensemble(self):
+    def test_deep_opening_compares_recipe_bases_without_modulation_sweeps(self):
         self.search.start('Pilot', 'Deep', 'evolutionary')
         seed, opening = (self.search.data['candidates'][ident] for ident in self.search.data['initial'][:2])
-        self.assertLessEqual(seed['controls']['ensemble'], .3)
-        self.assertLessEqual(opening['controls']['whirl'], .2)
-        self.assertEqual(opening['controls']['phrase'], 0)
+        self.assertEqual(seed['controls'], opening['controls'])
+        self.assertEqual(seed['probe_id'], 'mode_character')
+        self.assertNotEqual(seed['recipe_id'], opening['recipe_id'])
+        self.assertEqual(self.search.data['active_probe']['id'], 'mode_character')
 
-    def test_delete_saved_session_removes_directory_and_blocks_active(self):
+    def test_delete_empty_active_session_and_block_active_with_comparisons(self):
         self.search.start('Pilot', 'Deep')
         ident = self.search.data['id']
         path = self.search.path.parent
+        self.assertTrue(self.search.deleteSession(ident))
+        self.assertFalse(path.exists())
+        self.assertIsNone(self.search.data)
+        self.search.start('Pilot', 'Deep')
+        ident = self.search.data['id']
+        path = self.search.path.parent
+        self.rate_pair()
         self.assertFalse(self.search.deleteSession(ident))
         self.assertTrue(path.exists())
         self.search.finish(False)
@@ -320,12 +414,6 @@ class LiveSearchTest(unittest.TestCase):
                 self.assertEqual(self.search.data['history'], stored['history'])
                 self.assertEqual(self.search.data['pair'], stored['pair'])
                 self.assertEqual(self.search.data['incumbent'], stored['incumbent'])
-            if self.search.checkpoint == 'break':
-                self.assertEqual(len(self.search.traceSession(self.search.data['id'])['comparisons']), 10)
-                last_pair = dict(self.search.data['pair'])
-                self.search.continueBlock()
-                self.assertNotEqual(self.search.data['pair'], last_pair)
-                self.assertEqual(len(self.search.traceSession(self.search.data['id'])['comparisons']), 11)
         self.assertEqual(self.search.checkpoint, 'cap')
         self.search.continueBlock()
         self.assertEqual(self.search.data['block_end'], 40)
@@ -334,8 +422,8 @@ class LiveSearchTest(unittest.TestCase):
 
     def test_gp_retains_incumbent_on_tie_and_replaces_only_with_winner(self):
         self.search.start('Pilot', 'Comfort', 'gp_preference')
-        self.assertEqual(self.search.data['algorithm'], 'gp-feature-v2')
-        incumbent = self.search.data['pair']['A']
+        self.assertEqual(self.search.data['algorithm'], 'gp-preference-probe-v1')
+        incumbent = None
         for number, score in enumerate(('equal', 'equal', 'equal', 'A', 'B', 'equal')):
             pair = dict(self.search.data['pair'])
             self.search.choose('A'); self.search.choose('B')
@@ -354,11 +442,16 @@ class LiveSearchTest(unittest.TestCase):
         d['algorithm'] = 'gp-preference-active-v1'
         d['control_keys'] = GP_CONTROLS
         d['baseline_controls'] = dict.fromkeys(GP_CONTROLS, .5)
-        for candidate in d['candidates'].values():
-            candidate['controls'] = dict.fromkeys(GP_CONTROLS, .5)
-            candidate['profile'] = profile_for(d['base'], candidate['controls'])
-        for value in (.2, .8):
-            d['initial'].append(self.search._candidate(d, dict.fromkeys(GP_CONTROLS, value)))
+        d['bounds'] = {key: [0., 1.] for key in GP_CONTROLS}
+        d.pop('incumbent', None)
+        d['candidates'] = {}
+        d['initial'] = []
+        for index in range(6):
+            controls = dict.fromkeys(GP_CONTROLS, .5)
+            controls[GP_CONTROLS[index % len(GP_CONTROLS)]] = 0. if index % 2 else 1.
+            d['initial'].append(self.search._candidate(d, controls, kind='legacy-opening'))
+        self.search._pair(d, d['initial'][:2], random.Random(0))
+        self.search._commit(d)
         self.search.finish(False)
         self.search.restore(d['id'], False)
         for _ in range(3):
@@ -372,9 +465,21 @@ class LiveSearchTest(unittest.TestCase):
         self.search.start('Pilot', 'Sport', 'gp_preference')
         d = self.search.data
         d['algorithm'] = 'gp-character-v1'
-        d['initial'] = d['initial'][:6]
+        d['control_keys'] = CHARACTER_CONTROLS
+        controls = preset_controls_for(d['base'])
+        d['baseline_controls'] = controls
+        d['bounds'] = {key: [0., 1.] for key in CHARACTER_CONTROLS}
+        d['candidates'] = {}
+        d['initial'] = []
+        for index in range(6):
+            variant = dict(controls)
+            key = CHARACTER_CONTROLS[index % len(CHARACTER_CONTROLS)]
+            variant[key] = 0. if index % 2 else 1.
+            d['initial'].append(self.search._candidate(d, variant, kind='feature-contrast'))
         d['incumbent'] = d['initial'][0]
+        self.search._pair(d, d['initial'][:2], random.Random(0))
         ident = d['id']
+        self.search._commit(d)
         self.search.finish(False)
         self.search.restore(ident, False)
         self.search.choose('A'); self.search.choose('B')
@@ -386,24 +491,24 @@ class LiveSearchTest(unittest.TestCase):
 
     def test_every_mode_and_method_starts_with_distinct_character_options(self):
         for mode in SOUND_THEMES:
-          for method in ('gp_preference', 'evolutionary'):
+          for method in ('gp_preference', 'evolutionary', 'recipe_preference'):
             search = LiveSearch(self.controller, root=Path(self.directory.name) / method)
             search.start('Pilot', mode, method)
             candidates = [search.data['candidates'][ident] for ident in search.data['initial']]
-            self.assertEqual(len(candidates), 12 if method == 'gp_preference' else 6)
-            self.assertTrue(all(set(row['controls']) == set(CHARACTER_CONTROLS) for row in candidates))
-            for key in ('electric_pulse', 'electric_shimmer', 'orchestral_mix', 'traction_cycle_mix'):
-                self.assertGreater(max(c['profile'][key] for c in candidates), .3 if key == 'orchestral_mix' else .5)
-                self.assertLess(min(c['profile'][key] for c in candidates), .2)
-            if mode != 'Deep':
-                self.assertGreater(max(c['profile']['electric_whirl'] for c in candidates), .5)
-            if method == 'evolutionary':
-                self.assertEqual(candidates[0]['controls'], search.data['baseline_controls'])
+            self.assertEqual(len(candidates), 8)
+            self.assertTrue(all(set(row['controls']) == set(PROBE_GROUP_FIELDS) for row in candidates))
+            self.assertTrue(all(
+                all(search.data['bounds'][key][0] <= row['controls'][key] <= search.data['bounds'][key][1]
+                    for key in PROBE_GROUP_FIELDS) for row in candidates))
+            self.assertTrue(all(row['recipe_version'] == 2 and row['physical_bounds'] == mode_bounds(mode)
+                                for row in candidates))
             search.monitor.stop()
 
-        controls = dict.fromkeys(CHARACTER_CONTROLS, .5)
-        self.assertEqual(profile_for(SOUND_THEMES['Comfort'], controls),
-                         profile_for(SOUND_THEMES['Sport'], controls))
+        comfort, sport = SOUND_THEMES['Comfort'], SOUND_THEMES['Sport']
+        comfort_center, sport_center = preset_controls_for(comfort), preset_controls_for(sport)
+        self.assertNotEqual(comfort_center, sport_center)
+        self.assertNotEqual(preset_profile_for(comfort, comfort_center, comfort_center),
+                            preset_profile_for(sport, sport_center, sport_center))
 
     def test_legacy_comfort_session_keeps_old_controls(self):
         legacy = profile_for(SOUND_THEMES['Comfort'], dict(zip(COMFORT_CONTROLS, (.5, .5, 0., .5))))
@@ -445,15 +550,14 @@ class LiveSearchTest(unittest.TestCase):
         with patch('experiment.live_search.select_query', wraps=select_query) as query, patch(
                 'experiment.live_search.os.replace', side_effect=OSError('disk full')):
             self.search.next()
-            pool, xa, xb, outcomes, anchor, _ = query.call_args.args
-            first = next(iter(self.search.data['candidates'].values()))['controls']
-            self.assertEqual(pool[0], [first[key] for key in CHARACTER_CONTROLS])
-            self.assertTrue(all(len(row) == 10 for row in pool + xa + xb))
+            pool, xa, xb, outcomes, anchor = query.call_args.args
+            self.assertEqual(pool[0], [self.search.data['probe_controls'][key]
+                                       for key in PROBE_GROUP_FIELDS])
+            self.assertTrue(all(len(row) == 4 for row in pool + xa + xb))
             self.assertEqual(outcomes, ['A', 'B', 'equal', 'B', 'A', 'B', 'equal'])
-            self.assertEqual(anchor, [self.search.data['baseline_controls'][key] for key in CHARACTER_CONTROLS])
+            self.assertEqual(anchor, [self.search.data['probe_controls'][key] for key in PROBE_GROUP_FIELDS])
             incumbent = query.call_args.kwargs['incumbent']
-            expected = self.search.data['candidates'][original_incumbent]['controls']
-            self.assertEqual(pool[incumbent], [expected[key] for key in CHARACTER_CONTROLS])
+            self.assertEqual(incumbent, 0)
         self.assertEqual(self.search.data['completed'], 6)
         self.assertEqual(self.search.preference, 'equal')
         self.assertEqual(self.search.data['pair'], original_pair)

@@ -1,6 +1,6 @@
 # EV Sound Lab: Personalized EV Driving Sound through Interactive Preference Learning
 
-EV Sound Lab is a desktop research prototype for personalizing procedural electric-vehicle sounds through interactive preference learning. Users compare sound pairs and provide preferences to guide the search; the process does not require listening while driving. Gaussian-process and evolutionary search are explored as methods within the broader interactive preference-learning approach. A simplified vehicle simulator is included as an optional interaction context.
+EV Sound Lab is a desktop research prototype for personalizing procedural electric-vehicle sounds through interactive preference learning. Users compare sound pairs and provide preferences to guide the search. Gaussian-process and evolutionary search are explored as methods within the broader interactive preference-learning approach. A simplified vehicle simulator is included as an optional interaction context.
 
 **Research group:** Makoto Fukumoto Lab, FIT
 
@@ -25,7 +25,7 @@ A desktop audio output device is required to listen. A game controller is option
 ├── audio/                  # C++ synthesis engine and Python bindings
 ├── backend/                # Python simulator sidecar and input/audio services
 ├── desktop/                # React frontend and Tauri/Rust shell
-├── docs/                   # Research, sound behavior, and implementation notes
+├── docs/                   # Project guides, sound-design research, and proposals
 ├── experiment/             # Preference search and session management
 ├── simulation/             # Vehicle and powertrain model
 ├── tests/                  # Python and native engine tests
@@ -60,8 +60,6 @@ This starts the Tauri window, Vite frontend, and Python simulator sidecar. After
 
 MIT. See [LICENSE](LICENSE).
 
-## Research notes
+## Documentation
 
-- [Sound behavior and references](docs/sound_behavior.md)
-- [Interactive search and experiment records](docs/interactive_search.md)
-- [Pedal, coast, regen, and braking behavior](docs/pedal_behavior.md)
+See the [documentation guide](docs/README.md) for repository architecture, vehicle physics, interactive search, both sound-generation approaches, research findings, and integration proposals.

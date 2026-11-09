@@ -72,24 +72,30 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-fn open_tool_window(app: tauri::AppHandle, label: &str, title: &str, route: &str, size: (f64, f64)) {
+fn open_tool_window(app: tauri::AppHandle, label: &str, title: &str, route: &str, size: (f64, f64), always_on_top: bool) {
     if let Some(window) = app.get_webview_window(label) {
+        let _ = window.set_always_on_top(always_on_top);
         let _ = window.show();
         let _ = window.set_focus();
         return;
     }
-    if let Err(error) = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app,
         label,
         WebviewUrl::App(format!("index.html?window={route}").into()),
     )
     .title(title)
     .inner_size(size.0, size.1)
-    .min_inner_size(680.0, 500.0)
-    .build()
-    {
+    .min_inner_size(if always_on_top { 360.0 } else { size.0.min(680.0) }, if always_on_top { 260.0 } else { size.1.min(500.0) });
+    if always_on_top { builder = builder.always_on_top(true); }
+    if let Err(error) = builder.build() {
         eprintln!("Could not open {title} window: {error}");
     }
+}
+
+#[tauri::command]
+fn open_beamng_overlay(app: tauri::AppHandle) {
+    open_tool_window(app, "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (420.0, 340.0), true);
 }
 
 fn main() {
@@ -115,7 +121,7 @@ fn main() {
                 _ => return,
             };
             let app = app.clone();
-            std::thread::spawn(move || open_tool_window(app, label, title, route, size));
+            std::thread::spawn(move || open_tool_window(app, label, title, route, size, false));
         })
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -145,7 +151,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             send_backend,
             set_close_guard,
-            confirm_close
+            confirm_close,
+            open_beamng_overlay
         ])
         .build(tauri::generate_context!())
         .expect("Could not start EV Sound Lab")

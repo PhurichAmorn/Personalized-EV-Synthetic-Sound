@@ -88,6 +88,27 @@ class OrderSynthTests(unittest.TestCase):
         engine.set_parameters(0, 20000, 0, 0, profile, throttle=1, motor_load=0)
         self.assertFalse(engine.order_synth.request[2])
 
+    def test_ice_recipe_has_faster_virtual_v8_order(self):
+        from audio import SOUND_RECIPES, SoundEngine
+        engine = SoundEngine()
+        ice = SOUND_RECIPES['Sport']['ICE Inspired']
+        baseline = SOUND_RECIPES['Sport']['Electric Sport']
+        engine.set_driving_parameters(80, 65, .7, 2, 'ready', ice)
+        motion = engine.order_synth.pitch_progression(80)
+        expected = (1000 + 5000 * motion) * 1.35 + 3200 * .65 * (1 - motion)
+        self.assertAlmostEqual(engine.order_synth.request[0], expected)
+        self.assertEqual(engine.order_synth.config.dominant_order, 4.0)
+        engine.set_driving_parameters(0, 0, .7, 2, 'ready', ice)
+        idle_rpm = engine.order_synth.request[0]
+        engine.set_driving_parameters(0, 100, .7, 2, 'ready', ice)
+        self.assertAlmostEqual(engine.order_synth.request[0], idle_rpm + 3200)
+        engine.set_driving_parameters(80, 65, .7, 2, 'ready', baseline)
+        self.assertFalse(engine.order_active)
+        with self.assertRaises(ValueError):
+            engine.set_driving_parameters(80, 65, .7, 2, 'ready', dict(ice, order_rpm_scale=0))
+        with self.assertRaises(ValueError):
+            engine.set_driving_parameters(80, 65, .7, 2, 'ready', dict(ice, order_throttle_rpm_boost=-1))
+
     def test_universal_driving_inputs_and_regeneration(self):
         from audio import SoundEngine
         from audio import DEBUG_THEMES

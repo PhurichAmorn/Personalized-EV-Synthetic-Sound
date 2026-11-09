@@ -176,4 +176,5 @@ void traction_cycle(const double* rt,const double* h,const double* co,const doub
     state.phases[1] = std::fmod(phase[1], 2 * pi);
     state.morph_phase = std::fmod(phase[2], 2 * pi);
 }
+
 }

@@ -18,7 +18,7 @@ class GamepadInput(QObject):
         self.unmapped = False
         self.devices = []
         self.enabled = True
-        self.navigation_enabled = True
+        self.navigation_enabled = False
         self.selected_id = -1
         self._next_scan = 0.0
         self.battery_level = 'unknown'

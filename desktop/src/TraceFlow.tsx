@@ -1,5 +1,7 @@
 export type Candidate = {
   id: string
+  recipe_name?: string
+  query_reason?: string
   controls: Record<string, number>
   profile: Record<string, unknown>
   parents?: string[]
@@ -37,6 +39,7 @@ function scoreLabel(row: Comparison, method?: string) {
 }
 
 function origin(candidate: Candidate, parentId: string) {
+  if (candidate.query_reason) return candidate.query_reason
   if (candidate.kind === 'gp-proposal') return 'GP proposal · model score not saved'
   if (candidate.kind === 'feature-contrast') return 'Opening feature comparison'
   if (candidate.kind === 'feature-mix') return 'Combination of preferred features'
@@ -91,7 +94,7 @@ export default function TraceFlow({ comparisons, method, selectedId, onSelect }:
 }) {
   if (!comparisons.length) return <p className="text-slate-400">No comparisons recorded yet.</p>
   return <>
-    <p className="trace-legend">{method === 'evolutionary' ? 'Evolutionary: score each sound from 1 to 7.' : 'GP: Prefer A, Like both equally, or Prefer B. Neither skips both sounds.'} Green marks the retained sound. Green + and red − show higher or lower saved control values, not sound quality.</p>
+    <p className="trace-legend">{method === 'evolutionary' ? 'Evolutionary: score each sound from 1 to 7.' : method === 'recipe_preference' ? 'Recipe window pilot: choose a preferred sound, equal, or neither.' : 'GP: Prefer A, Like both equally, or Prefer B. Neither skips both sounds.'} Green marks the retained sound. Green + and red − show higher or lower saved control values, not sound quality.</p>
     <ol className="trace-flow" aria-label="Comparison flow">
       {comparisons.map((row, index) => <li className="trace-step" key={row.number}>
         <div className="trace-step-heading"><span className="trace-step-number">{row.number}</span><strong>Pair {row.number}</strong><span>{scoreLabel(row, method)}</span></div>
@@ -100,9 +103,9 @@ export default function TraceFlow({ comparisons, method, selectedId, onSelect }:
             const candidate = row.pair[slot]
             const retained = row.winner === candidate.id
             const firstSeen = comparisons.slice(0, index).find(previous => slots.some(previousSlot => previous.pair[previousSlot].id === candidate.id))
-            return <button key={slot} type="button" className={'trace-candidate' + (retained ? ' winner' : '')} aria-pressed={selectedId === candidate.id} onClick={() => onSelect(candidate, row.auditions[slot] || {})}>
+            return <button key={slot} type="button" className={'trace-candidate' + (retained ? ' winner' : '') + (row.final_choice === slot ? ' final-favorite' : '')} aria-pressed={selectedId === candidate.id} onClick={() => onSelect(candidate, row.auditions[slot] || {})}>
               <span className="trace-candidate-label">Sound {slot}{row.final_choice === slot ? <em>Final favorite</em> : retained && <em>{row.preference === 'equal' ? 'Retained after tie' : 'Selected'}</em>}</span>
-              <strong>{candidate.id}</strong>
+              <strong>{candidate.recipe_name ? `${candidate.recipe_name} · ${candidate.id}` : candidate.id}</strong>
               {!!row.ratings?.[slot] && <span className="trace-candidate-score">Score {row.ratings[slot]}/7{row.rating_sources?.[slot] ? ` · carried from pair ${row.rating_sources[slot]}` : ''}</span>}
               <small>{firstSeen ? `Same saved sound as pair ${firstSeen.number}` : candidate.kind?.replaceAll('-', ' ') || 'Saved sound'} · Inspect details</small>
             </button>

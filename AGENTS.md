@@ -2,28 +2,38 @@
 
 ## Purpose and scope
 
-EV Sound Lab is an internal desktop research prototype for driving a simplified EV model and exploring procedural in-cabin sound. It includes an interactive A/B sound-search demo. Treat vehicle specifications, sound mappings, and experiment results as provisional research artifacts, not validated OEM behavior or production calibration.
+EV Sound Lab is an internal desktop research prototype for exploring personalized, vehicle-responsive EV cabin sound through interactive preference learning. The simplified vehicle is an experimental context; it is not a validated vehicle model or production calibration. OEM sound references inform original sound design, not claims of exact reproduction.
 
 For user setup and launch instructions, see [README.md](README.md).
 
 ## Project map
 
-- `desktop/`: Tauri desktop shell and React interface; `backend/`: Python simulator sidecar, controller, gamepad input, and audio output monitor.
-- `simulation/vehicle_model.py`: longitudinal vehicle and powertrain simulation.
-- `audio/`: standalone C++ sound behavior, synthesis, presets, validation and device output. `audio/__init__.py`: required native desktop binding.
-- `experiment/`: interactive search, `preference_gp.py`, and experiment records.
-- `tests/`: automated checks; `tools/`: development utilities.
+Read [the project architecture guide](docs/system/project_architecture.md) for repository ownership and runtime data flow. Main layers:
 
-Keep UI, simulation, audio, and experiment responsibilities separated. Check relevant callers and docs before changing shared inputs, state, or data flow.
+- `desktop/`: Tauri shell and React interface.
+- `backend/`: Python sidecar, controller, command bridge, gamepad, and audio monitoring.
+- `simulation/`: vehicle and powertrain model.
+- `audio/`: native C++ sound engine and Python binding.
+- `experiment/`: interactive candidate search and local session records.
+- `tools/`: offline rendering and analysis.
+- `tests/`: automated checks.
 
-## Behavior references
+## Project documents
 
-- [Sound behavior](docs/sound_behavior.md): sound inputs, synthesis mapping, tuning parameters, and research references.
-- [Interactive search](docs/interactive_search.md): A/B workflow, candidate mutations, parameter bounds, and data persistence.
-- [Pedal behavior](docs/pedal_behavior.md): pedal map, coasting, regeneration, braking, and known calibration limits.
-- [README.md](README.md): user-facing overview, launch instructions, and current application features.
+[Documentation guide](docs/README.md) explains each document's purpose and when to read it.
 
-These docs are the source of truth for documented behavior and assumptions. Update the relevant doc when changing that behavior; avoid copying detailed parameter tables into this file.
+- [Vehicle physics](docs/system/vehicle_physics.md): intended vehicle and pedal behavior.
+- [Interactive algorithm](docs/system/interactive_algorithm.md): search goal, listener feedback, and current comparison policy.
+- [Sound behavior](docs/system/sound_behavior.md): existing procedural oscillator method and state mapping; baseline method.
+- [Source-first sound approach](docs/design/source_first_sound_approach.md): separate proposed method; not integrated into driving audio.
+- [Research notes](docs/research/sound_design_research.md) and [interactive search research](docs/research/interactive_search_research.md): evidence and limits behind design choices.
+- [BeamNG proposal](docs/integrations/beamng_audio_integration.md): planned integration only; no adapter exists yet.
+
+## How to use documentation
+
+These documents are durable project goals, behavior contracts, architecture boundaries, and research summaries—not a changelog. Read the relevant guide before changing its code layer. Keep intended outcome distinct from implementation status; label proposals as not implemented. Research claims should identify their source and limits; separate published findings from project interpretation.
+
+Do not update docs for every feature, UI, or parameter edit. Update a guide when project intent, a stable behavior contract, a layer boundary, a significant research conclusion, or method status changes. Source code is authoritative for exact implementation values. Keep temporary experiments in their own analysis or session record rather than adding them to stable guides.
 
 ## Working rules
 
@@ -32,6 +42,7 @@ These docs are the source of truth for documented behavior and assumptions. Upda
 - Preserve phase continuity, smoothing, audio headroom, and experiment-record integrity when touching audio or search code.
 - `experiment_data/` contains local participant/session data and must remain untracked. Do not expose or overwrite it during code changes.
 - Do not describe procedural sounds or vehicle presets as exact manufacturer reproductions or validated calibrations.
+- Preserve the existing procedural sound method as a baseline while source-first sound design remains a separate research direction.
 - Use the existing project environment. `./launch.sh` prepares dependencies and runs Tauri in development mode. Automated checks: `.venv/bin/python -m unittest discover -s tests -v` and `cd desktop && npm run build`.
 - For Tauri changes, use `cd desktop && npm run tauri dev` while editing. Release packaging is deferred for this research prototype.
 - If C++ audio code changed, rebuild its Python binding with `.venv/bin/python setup.py build_ext --inplace` before checking the Tauri app. Report any build or launch failure instead of claiming the app is updated.

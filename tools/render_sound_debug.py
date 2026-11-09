@@ -1,6 +1,6 @@
 """Render independent audio-input sweeps without a vehicle, UI or audio device.
 
-Run: .venv/bin/python tools/render_sound_debug.py [output.wav]
+Run: .venv/bin/python tools/render_sound_debug.py [output.wav] [Comfort|Sport|Deep|debug name]
 Each section lasts 8 seconds: speed, pedal, signed load, acceleration pulse.
 """
 from pathlib import Path
@@ -10,14 +10,16 @@ import numpy as np
 from scipy.io.wavfile import write
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from audio import DEBUG_THEMES
+from audio import DEBUG_THEMES, SOUND_THEMES
 from audio import SoundEngine
 
 
-def render_debug(output):
+def render_debug(output, theme='Comfort / Dynamic Orders'):
     rate, frames = 48000, 480
     chunks = []
-    profile = DEBUG_THEMES['Comfort / Dynamic Orders']
+    profile = SOUND_THEMES.get(theme) or DEBUG_THEMES.get(theme)
+    if profile is None:
+        raise ValueError(f'Unknown sound theme: {theme}')
     for section in range(4):
         engine = SoundEngine(rate)
         for i in range(800):
@@ -52,4 +54,5 @@ def render_debug(output):
 
 
 if __name__ == '__main__':
-    render_debug(sys.argv[1] if len(sys.argv) > 1 else 'artifacts/sound_input_debug.wav')
+    render_debug(sys.argv[1] if len(sys.argv) > 1 else 'artifacts/sound_input_debug.wav',
+                 sys.argv[2] if len(sys.argv) > 2 else 'Comfort / Dynamic Orders')

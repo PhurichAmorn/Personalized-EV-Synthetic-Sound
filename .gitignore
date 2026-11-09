@@ -26,3 +26,11 @@ desktop/public/audio/*.wav
 **/.impeccable/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+
+# Anonymous source-discovery development render cache
+/desktop/public/audio/source-search-cache/
+
+# Generated listening-test packs (rebuild with tools/build_listening_check.py, render_stress_pool.py, prepare_gs_baseline.py)
+/desktop/public/audio/baseline-v1/
+/desktop/public/audio/roughness-check-v1/
+/desktop/public/audio/stress-pool-v1/
