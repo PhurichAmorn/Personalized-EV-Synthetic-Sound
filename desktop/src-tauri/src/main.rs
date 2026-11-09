@@ -40,7 +40,8 @@ fn send_backend(message: String, backend: tauri::State<'_, Backend>) -> Result<(
 
 fn start_backend(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let project = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut child = Command::new(project.join(".venv/bin/python"))
+    let python = if cfg!(windows) { ".venv/Scripts/python.exe" } else { ".venv/bin/python" };
+    let mut child = Command::new(project.join(python))
         .arg("-m")
         .arg("backend.sidecar")
         .current_dir(&project)
