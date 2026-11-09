@@ -11,8 +11,12 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{ "label": "main", "title": "EV Sound Lab", "width": 1280, "height": 960, "minWidth": 980, "minHeight": 600 }],
-    "security": { "csp": null }
+    "windows": [],
+    "security": {
+      "csp": null
+    }
   },
-  "bundle": { "active": false }
+  "bundle": {
+    "active": false
+  }
 }

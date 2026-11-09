@@ -95,10 +95,37 @@ fn open_tool_window(app: tauri::AppHandle, label: &str, title: &str, route: &str
     }
 }
 
+fn open_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    if let Err(error) = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .title("EV Sound Lab")
+        .inner_size(1280.0, 960.0)
+        .min_inner_size(980.0, 600.0)
+        .build()
+    {
+        eprintln!("Could not open the dashboard window: {error}");
+    }
+}
+
+/// Startup choice: "beamng" opens only the overlay, anything else opens only the simulator dashboard.
 #[tauri::command]
-fn open_beamng_overlay(app: tauri::AppHandle) {
-    // Windows deadlocks if a window is built inside a synchronous command, so build it on its own thread.
-    std::thread::spawn(move || open_tool_window(app, "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (440.0, 640.0), true));
+fn start_mode(app: tauri::AppHandle, mode: String) {
+    // Windows deadlocks if a window is built inside a synchronous command, so do it on its own thread.
+    std::thread::spawn(move || {
+        if mode == "beamng" {
+            open_tool_window(app.clone(), "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (440.0, 640.0), true);
+        } else {
+            open_main_window(&app);
+        }
+        // Close the chooser only after the real window exists, so the app never has zero windows.
+        if let Some(chooser) = app.get_webview_window("chooser") {
+            let _ = chooser.close();
+        }
+    });
 }
 
 fn main() {
@@ -149,13 +176,19 @@ fn main() {
             let menu = menu_builder.item(&view).build()?;
             app.set_menu(menu)?;
             start_backend(app.handle())?;
+            WebviewWindowBuilder::new(app, "chooser", WebviewUrl::App("index.html?window=chooser".into()))
+                .title("EV Sound Lab")
+                .inner_size(460.0, 300.0)
+                .resizable(false)
+                .center()
+                .build()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             send_backend,
             set_close_guard,
             confirm_close,
-            open_beamng_overlay
+            start_mode
         ])
         .build(tauri::generate_context!())
         .expect("Could not start EV Sound Lab")

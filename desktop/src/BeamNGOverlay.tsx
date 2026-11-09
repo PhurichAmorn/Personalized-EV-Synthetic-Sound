@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { InputGraph, WaveGraph } from './OverlayGraphs'
 import type { State } from './App'
 
@@ -7,31 +7,25 @@ type Props = {
   error: string
   onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
   onPersonalize: () => void
+  onStartStop: () => void
+  granular: boolean
+  granularMode: 'steady' | 'rise' | 'evolving'
+  onGranular: () => void
+  onGranularCycle: () => void
+  onTheme: (name: string) => void
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="beamng-overlay-metric"><span>{label}</span><strong>{value}</strong></div>
 }
 
-type GranularStatus = { granularSelected: boolean; granularMode: 'steady' | 'rise' | 'evolving' }
-const ask = (message: { action: string; name?: string }) => { void window.__TAURI__?.event.emit('overlay-mode', message) }
-
-export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }: Props) {
-  const [mode, setMode] = useState<GranularStatus | null>(null)
-  useEffect(() => {
-    let stopListening = () => {}
-    let gone = false
-    void window.__TAURI__?.event.listen('sound-mode-status', event => setMode(event.payload as unknown as GranularStatus))
-      .then(stop => { if (gone) stop(); else { stopListening = stop; ask({ action: 'sync' }) } })
-    return () => { gone = true; stopListening() }
-  }, [])
-  const granular = mode ? mode.granularSelected : state.sourceAudition
-  const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
-  const cycleLabel = granular ? (mode?.granularMode ?? 'mode') : state.soundRecipeSelection[state.soundTheme]
+export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, onStartStop, granular, granularMode, onGranular, onGranularCycle, onTheme }: Props) {
   const connected = state.sourceMode !== 'BeamNG' || state.beamngConnected
   const throttle = state.sourceMode === 'BeamNG' ? state.beamngThrottle : state.throttleInput
   const brake = state.sourceMode === 'BeamNG' ? state.beamngBrake : state.brakeInput
   const regen = state.sourceMode === 'BeamNG' ? state.beamngRegen : state.charge
+  const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
+  const cycleLabel = granular ? granularMode : state.soundRecipeSelection[state.soundTheme]
   const [dragError, setDragError] = useState('')
   // Drag from any empty part of the card (not from buttons, the dropdown or the close button).
   const startDrag = (event: React.MouseEvent) => {
@@ -51,16 +45,11 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }
       </span>
       <button className="beamng-overlay-close" type="button" aria-label="Close overlay" onClick={() => void window.__TAURI__?.window?.getCurrentWindow().close()}>×</button>
     </header>
-    <label className="beamng-overlay-source">Input source
-      <select value={state.sourceMode} onChange={event => onCommand('sourceMode', { value: event.target.value })}>
-        <option>Simulator</option><option>BeamNG</option>
-      </select>
-    </label>
     <div className="overlay-modes" role="group" aria-label="Sound mode">
-      <button type="button" aria-pressed={granular} disabled={locked} onClick={() => ask({ action: 'gs' })}>GS</button>
-      {state.soundThemes.map(name => <button type="button" key={name} aria-pressed={!granular && name === state.soundTheme} disabled={locked} onClick={() => ask({ action: 'theme', name })}>{name}</button>)}
+      <button type="button" aria-pressed={granular} disabled={locked} onClick={onGranular}>GS</button>
+      {state.soundThemes.map(name => <button type="button" key={name} aria-pressed={!granular && name === state.soundTheme} disabled={locked} onClick={() => onTheme(name)}>{name}</button>)}
       <button type="button" className="overlay-modes-next" disabled={locked} title="Next mode / tune" aria-label={`Next mode, currently ${cycleLabel}`}
-        onClick={() => granular ? ask({ action: 'gs-cycle' }) : onCommand('recipeCycle', { name: state.soundTheme })}>⏭ <small>{cycleLabel}</small></button>
+        onClick={() => granular ? onGranularCycle() : onCommand('recipeCycle', { name: state.soundTheme })}>&#9197; <small>{cycleLabel}</small></button>
     </div>
     <InputGraph throttle={throttle} brake={brake} />
     <WaveGraph onCommand={onCommand} />
@@ -72,7 +61,7 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize }
     </section>
     {(error || state.beamngError || dragError) && <p className="beamng-overlay-error" role="alert">{error || state.beamngError || dragError}</p>}
     <footer className="beamng-overlay-actions">
-      <button className="control beamng-overlay-start" disabled={state.starting || state.soundSweepActive} onClick={() => onCommand('toggle')}>
+      <button className="control beamng-overlay-start" disabled={state.starting || state.soundSweepActive} onClick={onStartStop}>
         {state.starting ? 'Starting…' : state.running ? 'Stop sound' : 'Start sound'}
       </button>
       <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button>

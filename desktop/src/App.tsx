@@ -4,7 +4,7 @@ import Dashboard from './Dashboard'
 import type { SourceDiscoveryState } from './SourceSearch'
 import PageShell from './PageShell'
 import TraceFlow, { type Candidate, type Comparison } from './TraceFlow'
-import BeamNGOverlay from './BeamNGOverlay'
+import OverlayHost from './OverlayHost'
 
 type Search = {
   active: boolean; participant: string; mode: string; learningMethod: string; algorithm: string
@@ -204,12 +204,14 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     } catch (reason) { setError(readError(reason)); return null }
   }
 
-  async function openBeamNGOverlay() {
-    try {
-      await window.__TAURI__?.core.invoke('open_beamng_overlay', {})
-      setError('')
-    } catch (reason) { setError(readError(reason)) }
-  }
+  // The startup choice decides the input source: overlay window = BeamNG, dashboard window = Simulator.
+  const sourceChosen = useRef(false)
+  useEffect(() => {
+    if (!state || sourceChosen.current) return
+    sourceChosen.current = true
+    const wanted = overlay ? 'BeamNG' : 'Simulator'
+    if (state.sourceMode !== wanted) void command('sourceMode', { value: wanted })
+  }, [state])
 
   useEffect(() => {
     const update = () => {
@@ -321,9 +323,8 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     {closeRequested && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Close active search"><h2 className="text-xl">Close active search?</h2><p className="my-4 text-sm text-neutral-300">{sourceTrialPresent && !state?.search.active ? 'Source discovery is held in memory. Cancel and use Export in Personalize sound before closing to keep its results.' : 'Save progress, discard this session, or keep working.'}</p><div className="flex flex-wrap gap-2"><button className="control" onClick={() => setCloseRequested(false)}>Cancel</button>{(!sourceTrialPresent || state?.search.active) && <button className="control" onClick={() => void closeWithSearch(false)}>Save and close</button>}<button className="control border-red-500" onClick={() => void closeWithSearch(true)}>Discard and close</button></div></div></div>}
     {deleteTarget && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Delete experiment"><h2 className="text-xl">Delete experiment?</h2><p className="my-4 text-sm text-neutral-300">Delete “{deleteTarget.participant} · {deleteTarget.mode}” and all saved comparisons? This cannot be undone.</p>{deleteError && <p role="alert" className="mb-4 text-sm text-red-300">{deleteError}</p>}<div className="flex flex-wrap gap-2"><button className="control" onClick={() => { setDeleteTarget(null); setDeleteError('') }}>Cancel</button><button className="control border-red-500" onClick={() => void deleteExperiment()}>Delete experiment</button></div></div></div>}
     {!state && <div className="min-h-screen p-5 md:p-8"><div className="panel p-8">Connecting to simulator…</div></div>}
-    {state && overlay && page === 'dashboard' && <BeamNGOverlay state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} />}
-    {state && overlay && page === 'search' && <div className="overlay-personalization">{searchPanel}<button className="control overlay-return" onClick={leaveLab}>Back to driving</button></div>}
-    {state && !overlay && (page === 'dashboard' || page === 'search') && <Dashboard personalizeOpen={page === 'search'} state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onTrace={() => void openTrace()} onOpenOverlay={() => void openBeamNGOverlay()} searchPanel={page === 'search' && personalizationActive ? searchPanel : null} />}
+    {state && overlay && (page === 'dashboard' || page === 'search') && <OverlayHost state={state} error={error} page={page} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onLeave={leaveLab} searchPanel={searchPanel} />}
+    {state && !overlay && (page === 'dashboard' || page === 'search') && <Dashboard personalizeOpen={page === 'search'} state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onTrace={() => void openTrace()} searchPanel={page === 'search' && personalizationActive ? searchPanel : null} />}
       {state && page === 'trace' && <PageShell active="trace" onDashboard={() => setPage('dashboard')} onTrace={() => void openTrace()}>
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-500 bg-red-950 p-3 text-red-200">{error}</div>}
         {state.audioError && <div role="alert" className="mb-4 rounded-lg border border-red-500 bg-red-950 p-3 text-red-100">{state.audioError}</div>}

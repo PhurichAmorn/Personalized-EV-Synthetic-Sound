@@ -11,7 +11,6 @@ type Props = {
   onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
   onPersonalize: () => void
   onTrace: () => void
-  onOpenOverlay: () => void
   searchPanel?: ReactNode
   personalizeOpen?: boolean
 }
@@ -67,29 +66,11 @@ function PowerChargeBar({ power, charge }: { power: number; charge: number }) {
   </div>
 }
 
-export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, onOpenOverlay, searchPanel, personalizeOpen = false }: Props) {
+export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, searchPanel, personalizeOpen = false }: Props) {
   const sound = useRef<SourceHandle>(null)
   const [sourceAudioError, setSourceAudioError] = useState('')
   const [granularMode, setGranularMode] = useState<GranularMode>('evolving')
   const [granularSelected, setGranularSelected] = useState(true)
-  // The BeamNG overlay window has no sound player, so it asks this window to change the sound mode.
-  const publishMode = useRef(() => {})
-  publishMode.current = () => { void window.__TAURI__?.event.emit('sound-mode-status', { granularSelected, granularMode }) }
-  useEffect(() => { publishMode.current() }, [granularSelected, granularMode])
-  const overlayAction = useRef<(message: { action: string; name?: string }) => void>(() => {})
-  overlayAction.current = message => {
-    if (message.action === 'gs') { setGranularSelected(true); sound.current?.start(true) }
-    else if (message.action === 'gs-cycle') { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }
-    else if (message.action === 'theme' && message.name) { setGranularSelected(false); sound.current?.stop(); onCommand('theme', { name: message.name }) }
-    else if (message.action === 'sync') publishMode.current()
-  }
-  useEffect(() => {
-    let stopListening = () => {}
-    let gone = false
-    void window.__TAURI__?.event.listen('overlay-mode', event => overlayAction.current(event.payload as unknown as { action: string; name?: string }))
-      .then(stop => { if (gone) stop(); else stopListening = stop })
-    return () => { gone = true; stopListening() }
-  }, [])
   useEffect(() => {
     if (state.running && !state.starting && granularSelected && !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active) sound.current?.start(true)
   }, [state.running, state.starting])
@@ -174,9 +155,6 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
       <header className="dashboard-header" hidden={soundLabOpen}>
         <button className="header-sidebar" title="Toggle sidebar" aria-label="Toggle sidebar" onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
         <div className="dashboard-brand"><strong>EV SOUND LAB</strong><small>DRIVE SIMULATOR</small></div>
-        <select className="vehicle-selector source-selector" aria-label="Telemetry source" value={state.sourceMode} onChange={event => onCommand('sourceMode', { value: event.target.value })}><option>Simulator</option><option>BeamNG</option></select>
-        {state.sourceMode === 'BeamNG' && <span className={'source-link-status' + (state.beamngConnected ? ' connected' : '')}>{state.beamngConnected ? 'BEAMNG LINK' : 'DISCONNECTED'}</span>}
-        {state.sourceMode === 'BeamNG' && state.beamngError && <span className="source-link-status" role="alert" title={state.beamngError}>{state.beamngError}</span>}
         <div className="header-spacer" />
         <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : 'SOUND'}</span>
         <div className="theme-buttons" role="group" aria-label="Sound theme">
@@ -214,7 +192,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
           {showInputs && <div className="input-options"><label><input type="checkbox" checked={state.controllerEnabled} onChange={event => onCommand('controllerEnabled', { value: event.target.checked })} /> Controller enabled</label><select aria-label="Controller" onChange={event => onCommand('controller', { id: Number(event.target.value) })}><option value="-1">Automatic</option>{state.availableControllers.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}</select></div>}
         </div>
         <div className={'controls-spacer' + (searchPanel ? ' has-search-panel' : '')}>{searchPanel && <div className="dashboard-search-slot">{searchPanel}</div>}</div>
-        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.starting ? 'STARTING' : state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button><button className="control overlay-launch-button" onClick={onOpenOverlay}>Open BeamNG overlay</button></>}</div>
+        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.starting ? 'STARTING' : state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button></>}</div>
       </section>
       {(error || state.audioError || sourceAudioError) && <div role="alert" className="dashboard-error">{error || state.audioError || sourceAudioError}</div>}
       <SoundEditor onAudioError={setSourceAudioError} personalizeOpen={personalizeOpen} onSourceSelected={() => setGranularSelected(true)} granularMode={granularMode} onModeChange={setGranularMode} ref={sound} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />

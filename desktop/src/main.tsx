@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import ToolWindow from './ToolWindow'
+import ChooserWindow from './ChooserWindow'
 import './style.css'
 
 if (import.meta.env.DEV) {
@@ -13,5 +14,5 @@ if (requestedWindow === 'overlay') document.documentElement.classList.add('overl
 const toolView = requestedWindow === 'telemetry' || requestedWindow === 'sound-signal' ? requestedWindow : null
 
 createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>{toolView ? <ToolWindow view={toolView} /> : <App overlay={requestedWindow === 'overlay'} />}</React.StrictMode>,
+  <React.StrictMode>{requestedWindow === 'chooser' ? <ChooserWindow /> : toolView ? <ToolWindow view={toolView} /> : <App overlay={requestedWindow === 'overlay'} />}</React.StrictMode>,
 )
