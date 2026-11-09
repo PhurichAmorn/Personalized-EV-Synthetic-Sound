@@ -144,6 +144,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     let disconnect = () => {}
     // State arrives ~30x/s. Render only the newest one per animation frame so slow renders cannot build a backlog of stale states.
     let pending: State | null = null
+    let firstState = false
     let frame = 0
     const queueState = (next: State) => {
       pending = next
@@ -154,7 +155,10 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
       client.current = instance
       void instance.connect((message: BackendMessage) => {
         if (disposed) return
-        if (message.event === 'state') queueState(message.data as State)
+        if (message.event === 'state') {
+          if (!firstState) { firstState = true; void window.__TAURI__?.core.invoke('startup_mark', { label: `${overlay ? 'overlay' : 'dashboard'} got first backend state` }) }
+          queueState(message.data as State)
+        }
         if (message.event === 'error') setError(String(message.data))
         if (message.event === 'close-request' && !overlay) setCloseRequested(true)
         if (message.event === 'navigate') {

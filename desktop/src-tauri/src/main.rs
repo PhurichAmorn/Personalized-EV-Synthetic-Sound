@@ -14,6 +14,20 @@ struct Backend {
 
 struct CloseGuard(AtomicBool);
 
+static STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+/// Startup timeline on stderr: shows where the time goes before a window is usable.
+fn mark(label: &str) {
+    if let Some(start) = STARTED.get() {
+        eprintln!("[startup] {:>6.2}s  {}", start.elapsed().as_secs_f64(), label);
+    }
+}
+
+#[tauri::command]
+fn startup_mark(label: String) {
+    mark(&label);
+}
+
 #[tauri::command]
 fn set_close_guard(active: bool, guard: tauri::State<'_, CloseGuard>) {
     guard.0.store(active, Ordering::SeqCst);
@@ -115,6 +129,7 @@ fn open_main_window(app: &tauri::AppHandle) {
         .title("EV Sound Lab")
         .inner_size(1280.0, 960.0)
         .min_inner_size(980.0, 600.0)
+        .background_color(tauri::window::Color(17, 17, 17, 255))
         .build()
     {
         eprintln!("Could not open the dashboard window: {error}");
@@ -126,11 +141,13 @@ fn open_main_window(app: &tauri::AppHandle) {
 fn start_mode(app: tauri::AppHandle, mode: String) {
     // Windows deadlocks if a window is built inside a synchronous command, so do it on its own thread.
     std::thread::spawn(move || {
+        mark(&format!("mode chosen: {mode}"));
         if mode == "beamng" {
-            open_tool_window(app.clone(), "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (440.0, 640.0), true);
+            open_tool_window(app.clone(), "beamng-overlay", "EV Sound Lab · BeamNG", "overlay", (440.0, 480.0), true);
         } else {
             open_main_window(&app);
         }
+        mark("chosen window created");
         // Close the chooser only after the real window exists, so the app never has zero windows.
         if let Some(chooser) = app.get_webview_window("chooser") {
             let _ = chooser.close();
@@ -139,6 +156,7 @@ fn start_mode(app: tauri::AppHandle, mode: String) {
 }
 
 fn main() {
+    let _ = STARTED.set(Instant::now());
     tauri::Builder::default()
         .manage(CloseGuard(AtomicBool::new(false)))
         .on_window_event(|window, event| {
@@ -185,14 +203,18 @@ fn main() {
             let menu_builder = menu_builder.item(&app_menu);
             let menu = menu_builder.item(&view).build()?;
             app.set_menu(menu)?;
+            mark("setup begins");
             start_backend(app.handle())?;
-            WebviewWindowBuilder::new(app, "chooser", WebviewUrl::App("index.html?window=chooser".into()))
+            mark("backend process spawned");
+            let chooser = WebviewWindowBuilder::new(app, "chooser", WebviewUrl::App("index.html?window=chooser".into()))
                 .title("EV Sound Lab")
                 .inner_size(460.0, 300.0)
                 .resizable(false)
                 .center()
-                .build()?
-                .remove_menu()?;
+                .background_color(tauri::window::Color(17, 17, 17, 255))
+                .build()?;
+            chooser.remove_menu()?;
+            mark("chooser window created");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -200,6 +222,7 @@ fn main() {
             set_close_guard,
             confirm_close,
             start_mode,
+            startup_mark,
             set_overlay_focusable
         ])
         .build(tauri::generate_context!())

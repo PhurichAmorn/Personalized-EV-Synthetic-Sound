@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 const WINDOW_SECONDS = 15
 const GREEN = '#3ddc84'
 const RED = '#ff5a52'
+const BLUE = '#4aa3ff'
 
 function prepare(canvas: HTMLCanvasElement) {
   const ratio = window.devicePixelRatio || 1
@@ -40,8 +41,6 @@ export function InputGraph({ throttle, brake }: { throttle: number; brake: numbe
         if (index === 0) drawing.moveTo(x, y); else drawing.lineTo(x, y)
       })
       drawing.strokeStyle = color; drawing.lineWidth = 1.6; drawing.lineJoin = 'round'; drawing.stroke()
-      drawing.lineTo(width, height); drawing.lineTo(width - (now - list[0].t) / (WINDOW_SECONDS * 1000) * width, height); drawing.closePath()
-      drawing.globalAlpha = .16; drawing.fillStyle = color; drawing.fill(); drawing.globalAlpha = 1
     }
     trace('brake', RED)
     trace('throttle', GREEN)
@@ -49,11 +48,50 @@ export function InputGraph({ throttle, brake }: { throttle: number; brake: numbe
   return <canvas ref={canvas} className="overlay-graph" aria-label="Throttle (green) and brake (red) over the last 15 seconds" role="img" />
 }
 
-function drawWave(canvas: HTMLCanvasElement | null, wave: ArrayLike<number>) {
+/** Signed motor load over the last seconds: drive above the dashed zero line (light), regen below it (blue). Line only. */
+export function LoadGraph({ load }: { load: number }) {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const samples = useRef<{ t: number; v: number }[]>([])
+  useEffect(() => {
+    const element = canvas.current
+    if (!element) return
+    const now = performance.now()
+    const list = samples.current
+    list.push({ t: now, v: Math.max(-1, Math.min(1, load)) })
+    while (list.length > 1 && now - list[0].t > WINDOW_SECONDS * 1000) list.shift()
+    const surface = prepare(element)
+    if (!surface) return
+    const { drawing, width, height } = surface
+    const mid = height / 2
+    drawing.strokeStyle = 'rgb(255 255 255 / 28%)'; drawing.lineWidth = 1; drawing.setLineDash([3, 3])
+    drawing.beginPath(); drawing.moveTo(0, mid); drawing.lineTo(width, mid); drawing.stroke(); drawing.setLineDash([])
+    const path = () => {
+      drawing.beginPath()
+      list.forEach((sample, index) => {
+        const x = width - (now - sample.t) / (WINDOW_SECONDS * 1000) * width
+        const y = mid - sample.v * (mid - 3)
+        if (index === 0) drawing.moveTo(x, y); else drawing.lineTo(x, y)
+      })
+    }
+    drawing.lineWidth = 1.6; drawing.lineJoin = 'round'
+    for (const [top, bottom, color] of [[0, mid, '#e5e5e5'], [mid, height, BLUE]] as const) {
+      drawing.save(); drawing.beginPath(); drawing.rect(0, top, width, bottom - top); drawing.clip()
+      path(); drawing.strokeStyle = color; drawing.stroke(); drawing.restore()
+    }
+  })
+  return <canvas ref={canvas} className="overlay-graph" aria-label="Motor load over the last 15 seconds: drive above zero, regeneration below" role="img" />
+}
+
+function drawWave(canvas: HTMLCanvasElement | null, wave: ArrayLike<number>, level: { peak: number }) {
   if (!canvas || !wave.length) return
   const surface = prepare(canvas)
   if (!surface) return
   const { drawing, width, height } = surface
+  // Auto-gain: the output is quiet by design (-24 LUFS), so scale the trace to the recent peak (fast attack, slow release).
+  let peak = 0
+  for (let i = 0; i < wave.length; i++) peak = Math.max(peak, Math.abs(wave[i]))
+  level.peak = Math.max(peak, level.peak * .96)
+  const gain = level.peak > .002 ? Math.min(40, .9 / level.peak) : 1
   // Start on a rising zero crossing so successive frames line up.
   let start = 0
   for (let i = 1; i < wave.length / 2; i++) if (wave[i - 1] <= 0 && wave[i] > 0) { start = i; break }
@@ -63,10 +101,10 @@ function drawWave(canvas: HTMLCanvasElement | null, wave: ArrayLike<number>) {
   drawing.beginPath()
   for (let i = 0; i < count; i++) {
     const x = i / Math.max(1, count - 1) * width
-    const y = height / 2 - Math.max(-1, Math.min(1, wave[start + i])) * (height / 2 - 2)
+    const y = height / 2 - Math.max(-1, Math.min(1, wave[start + i] * gain)) * (height / 2 - 2)
     if (i === 0) drawing.moveTo(x, y); else drawing.lineTo(x, y)
   }
-  drawing.strokeStyle = '#d6d6d6'; drawing.lineWidth = 1.3; drawing.stroke()
+  drawing.strokeStyle = '#d6d6d6'; drawing.lineWidth = 1.4; drawing.stroke()
 }
 
 /** Live sound waveform: from the granular player's analyser (GS) or the native engine (Comfort/Sport/Deep). */
@@ -76,6 +114,7 @@ export function WaveGraph({ granular, analyser, onCommand }: {
   onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const level = useRef({ peak: 0 })
   const command = useRef(onCommand)
   command.current = onCommand
   const getAnalyser = useRef(analyser)
@@ -89,7 +128,7 @@ export function WaveGraph({ granular, analyser, onCommand }: {
         if (disposed) return
         const node = getAnalyser.current()
         if (node) node.getFloatTimeDomainData(samples); else samples.fill(0)
-        drawWave(canvas.current, samples)
+        drawWave(canvas.current, samples, level.current)
         frame = window.setTimeout(tick, 50)  // ~20 fps is plenty for a small trace
       }
       tick()
@@ -98,7 +137,7 @@ export function WaveGraph({ granular, analyser, onCommand }: {
     void command.current('debugVisible', { value: true })
     const timer = window.setInterval(() => {
       void Promise.resolve(command.current('soundDebug')).then(data => {
-        if (!disposed) drawWave(canvas.current, (data as { waveform?: number[] } | undefined)?.waveform ?? [])
+        if (!disposed) drawWave(canvas.current, (data as { waveform?: number[] } | undefined)?.waveform ?? [], level.current)
       }).catch(() => {})
     }, 100)
     return () => { disposed = true; window.clearInterval(timer); void command.current('debugVisible', { value: false }) }
@@ -106,15 +145,14 @@ export function WaveGraph({ granular, analyser, onCommand }: {
   return <canvas ref={canvas} className="overlay-graph overlay-wave" aria-label="Sound waveform" role="img" />
 }
 
-/** What the player is pressing on the controller (not the game's own pedal values). */
-export function PedalBars({ throttle, brake }: { throttle: number; brake: number }) {
-  const bar = (label: string, value: number, color: string) => <div className="overlay-pedal">
-    <span>{label}</span>
-    <div className="overlay-pedal-track"><b style={{ width: `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, background: color }} /></div>
-    <output>{Math.round(Math.max(0, Math.min(1, value)) * 100)}%</output>
+/** Three vertical bars, colour only: throttle (green) and brake (red) from the controller, regen (blue) from the car. */
+export function VerticalBars({ throttle, brake, regen }: { throttle: number; brake: number; regen: number }) {
+  const bar = (label: string, value: number, color: string) => <div className="overlay-vbar" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.max(0, Math.min(1, value)) * 100)}>
+    <b style={{ height: `${Math.max(0, Math.min(1, value)) * 100}%`, background: color }} />
   </div>
-  return <div className="overlay-pedals" role="group" aria-label="Controller input">
-    {bar('THROTTLE', throttle, GREEN)}
-    {bar('BRAKE', brake, RED)}
+  return <div className="overlay-vbars">
+    {bar('Controller throttle', throttle, GREEN)}
+    {bar('Controller brake', brake, RED)}
+    {bar('Regeneration', regen, BLUE)}
   </div>
 }

@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;600&family=Rajdhani:wght@500;600&display=swap" />
+    <!-- Dark first paint, and load the web fonts without blocking the first paint (a slow network used to show a white window). -->
+    <script>if (location.search.indexOf('window=overlay') >= 0) document.documentElement.classList.add('overlay-window')</script>
+    <style>body { margin: 0; } html:not(.overlay-window), html:not(.overlay-window) body { background: #111; }</style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;600&family=Rajdhani:wght@500;600&display=swap" media="print" onload="this.media='all'" />
     <title>EV Sound Lab</title>
   </head>
   <body>

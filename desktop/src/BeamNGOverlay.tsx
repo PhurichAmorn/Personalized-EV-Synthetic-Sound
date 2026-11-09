@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { InputGraph, PedalBars, WaveGraph } from './OverlayGraphs'
+import { InputGraph, LoadGraph, VerticalBars, WaveGraph } from './OverlayGraphs'
 import type { State } from './App'
 
 type Props = {
@@ -52,11 +52,22 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
       <button type="button" className="overlay-modes-next" disabled={locked} title="Next mode / tune" aria-label={`Next mode, currently ${cycleLabel}`}
         onClick={() => granular ? onGranularCycle() : onCommand('recipeCycle', { name: state.soundTheme })}>&#9197; <small>{cycleLabel}</small></button>
     </div>
-    <InputGraph throttle={throttle} brake={brake} />
-    <PedalBars throttle={state.controllerThrottle} brake={state.controllerBrake} />
+    <div className="overlay-grid">
+      <div>
+        <div className="overlay-caption">INPUT</div>
+        <div className="overlay-input-row">
+          <VerticalBars throttle={state.controllerThrottle} brake={state.controllerBrake} regen={regen} />
+          <InputGraph throttle={throttle} brake={brake} />
+        </div>
+      </div>
+      <div>
+        <div className="overlay-caption">MOTOR LOAD</div>
+        <LoadGraph load={state.motorLoad ?? 0} />
+      </div>
+    </div>
     <WaveGraph granular={granular} analyser={analyser} onCommand={onCommand} />
     <section className="beamng-overlay-metrics" aria-label="Live vehicle telemetry">
-      <Metric label="SPEED · KM/H" value={connected ? Math.round(state.speed).toString() : '—'} />
+      <Metric label="KM/H" value={connected ? Math.round(state.speed).toString() : '—'} />
       <Metric label="THROTTLE" value={connected ? `${Math.round(throttle * 100)}%` : '—'} />
       <Metric label="BRAKE" value={connected ? `${Math.round(brake * 100)}%` : '—'} />
       <Metric label="REGEN" value={connected ? `${Math.round(regen * 100)}%` : '—'} />
@@ -69,6 +80,5 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
       <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button>
     </footer>
     <div className="beamng-overlay-resize" role="separator" aria-label="Resize overlay" onMouseDown={startResize} />
-    <p className="beamng-overlay-hint">Drag the title area to move this overlay; × closes it. BeamNG remains in control of the car.</p>
   </main>
 }
