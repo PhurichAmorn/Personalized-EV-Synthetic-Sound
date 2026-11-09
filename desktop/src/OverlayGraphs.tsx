@@ -49,38 +49,59 @@ export function InputGraph({ throttle, brake }: { throttle: number; brake: numbe
   return <canvas ref={canvas} className="overlay-graph" aria-label="Throttle (green) and brake (red) over the last 15 seconds" role="img" />
 }
 
-/** Live waveform of the sound engine output (polled ~10x/s from the backend). Native sounds only. */
-export function WaveGraph({ onCommand }: { onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void }) {
+function drawWave(canvas: HTMLCanvasElement | null, wave: ArrayLike<number>) {
+  if (!canvas || !wave.length) return
+  const surface = prepare(canvas)
+  if (!surface) return
+  const { drawing, width, height } = surface
+  // Start on a rising zero crossing so successive frames line up.
+  let start = 0
+  for (let i = 1; i < wave.length / 2; i++) if (wave[i - 1] <= 0 && wave[i] > 0) { start = i; break }
+  const count = Math.min(wave.length - start, 1024)
+  drawing.strokeStyle = 'rgb(255 255 255 / 12%)'; drawing.lineWidth = 1
+  drawing.beginPath(); drawing.moveTo(0, height / 2); drawing.lineTo(width, height / 2); drawing.stroke()
+  drawing.beginPath()
+  for (let i = 0; i < count; i++) {
+    const x = i / Math.max(1, count - 1) * width
+    const y = height / 2 - Math.max(-1, Math.min(1, wave[start + i])) * (height / 2 - 2)
+    if (i === 0) drawing.moveTo(x, y); else drawing.lineTo(x, y)
+  }
+  drawing.strokeStyle = '#d6d6d6'; drawing.lineWidth = 1.3; drawing.stroke()
+}
+
+/** Live sound waveform: from the granular player's analyser (GS) or the native engine (Comfort/Sport/Deep). */
+export function WaveGraph({ granular, analyser, onCommand }: {
+  granular: boolean
+  analyser: () => AnalyserNode | null
+  onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
+}) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const command = useRef(onCommand)
   command.current = onCommand
+  const getAnalyser = useRef(analyser)
+  getAnalyser.current = analyser
   useEffect(() => {
     let disposed = false
+    if (granular) {
+      const samples = new Float32Array(2048)
+      let frame = 0
+      const tick = () => {
+        if (disposed) return
+        const node = getAnalyser.current()
+        if (node) node.getFloatTimeDomainData(samples); else samples.fill(0)
+        drawWave(canvas.current, samples)
+        frame = window.setTimeout(tick, 50)  // ~20 fps is plenty for a small trace
+      }
+      tick()
+      return () => { disposed = true; window.clearTimeout(frame) }
+    }
     void command.current('debugVisible', { value: true })
     const timer = window.setInterval(() => {
       void Promise.resolve(command.current('soundDebug')).then(data => {
-        const element = canvas.current
-        const wave = (data as { waveform?: number[] } | undefined)?.waveform
-        if (disposed || !element || !wave?.length) return
-        const surface = prepare(element)
-        if (!surface) return
-        const { drawing, width, height } = surface
-        // Start on a rising zero crossing so successive frames line up.
-        let start = 0
-        for (let i = 1; i < wave.length / 2; i++) if (wave[i - 1] <= 0 && wave[i] > 0) { start = i; break }
-        const count = wave.length - start
-        drawing.strokeStyle = 'rgb(255 255 255 / 12%)'; drawing.lineWidth = 1
-        drawing.beginPath(); drawing.moveTo(0, height / 2); drawing.lineTo(width, height / 2); drawing.stroke()
-        drawing.beginPath()
-        for (let i = 0; i < count; i++) {
-          const x = i / Math.max(1, count - 1) * width
-          const y = height / 2 - Math.max(-1, Math.min(1, wave[start + i])) * (height / 2 - 2)
-          if (i === 0) drawing.moveTo(x, y); else drawing.lineTo(x, y)
-        }
-        drawing.strokeStyle = '#d6d6d6'; drawing.lineWidth = 1.3; drawing.stroke()
+        if (!disposed) drawWave(canvas.current, (data as { waveform?: number[] } | undefined)?.waveform ?? [])
       }).catch(() => {})
     }, 100)
     return () => { disposed = true; window.clearInterval(timer); void command.current('debugVisible', { value: false }) }
-  }, [])
-  return <canvas ref={canvas} className="overlay-graph overlay-wave" aria-label="Sound engine waveform" role="img" />
+  }, [granular])
+  return <canvas ref={canvas} className="overlay-graph overlay-wave" aria-label="Sound waveform" role="img" />
 }

@@ -31,9 +31,11 @@ export default function OverlayHost({ state, error, page, onCommand, onPersonali
     }
     await onCommand('toggle')
   }
+  // The HUD never takes keyboard focus from the game, except on the Personalize page where typing is needed.
+  useEffect(() => { void window.__TAURI__?.core.invoke('set_overlay_focusable', { focusable: page === 'search' }) }, [page])
   return <>
     {page === 'dashboard'
-      ? <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onStartStop={() => void startStop()}
+      ? <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onStartStop={() => void startStop()} analyser={() => sound.current?.analyser() ?? null}
           granular={granularSelected} granularMode={granularMode}
           onGranular={() => { setGranularSelected(true); sound.current?.start(true) }}
           onGranularCycle={() => { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }}

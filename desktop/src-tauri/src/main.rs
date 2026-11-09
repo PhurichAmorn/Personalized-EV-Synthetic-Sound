@@ -19,6 +19,14 @@ fn set_close_guard(active: bool, guard: tauri::State<'_, CloseGuard>) {
     guard.0.store(active, Ordering::SeqCst);
 }
 
+/// The overlay normally refuses focus (so BeamNG keeps the keyboard); allow it while a text field is needed.
+#[tauri::command]
+fn set_overlay_focusable(app: tauri::AppHandle, focusable: bool) {
+    if let Some(window) = app.get_webview_window("beamng-overlay") {
+        let _ = window.set_focusable(focusable);
+    }
+}
+
 #[tauri::command]
 fn confirm_close(window: tauri::Window, guard: tauri::State<'_, CloseGuard>) -> Result<(), String> {
     guard.0.store(false, Ordering::SeqCst);
@@ -89,9 +97,11 @@ fn open_tool_window(app: tauri::AppHandle, label: &str, title: &str, route: &str
     .inner_size(size.0, size.1)
     .min_inner_size(if always_on_top { 360.0 } else { size.0.min(680.0) }, if always_on_top { 260.0 } else { size.1.min(500.0) });
     // Only the BeamNG overlay is always-on-top: make it a frameless, transparent HUD that blends into the game.
-    if always_on_top { builder = builder.always_on_top(true).decorations(false).transparent(true).shadow(false); }
-    if let Err(error) = builder.build() {
-        eprintln!("Could not open {title} window: {error}");
+    // The BeamNG overlay is a HUD: frameless, transparent, always on top and never focused, so clicking it keeps keyboard input in the game.
+    if always_on_top { builder = builder.always_on_top(true).decorations(false).transparent(true).shadow(false).focusable(false); }
+    match builder.build() {
+        Ok(window) => { if always_on_top { let _ = window.remove_menu(); } }
+        Err(error) => eprintln!("Could not open {title} window: {error}"),
     }
 }
 
@@ -181,14 +191,16 @@ fn main() {
                 .inner_size(460.0, 300.0)
                 .resizable(false)
                 .center()
-                .build()?;
+                .build()?
+                .remove_menu()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             send_backend,
             set_close_guard,
             confirm_close,
-            start_mode
+            start_mode,
+            set_overlay_focusable
         ])
         .build(tauri::generate_context!())
         .expect("Could not start EV Sound Lab")

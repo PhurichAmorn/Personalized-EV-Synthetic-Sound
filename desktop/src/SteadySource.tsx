@@ -9,7 +9,7 @@ import { GranularPlayer, type GranularMode } from './granularPlayer'
 import { drivingSoundTargets, responseRiseSeconds, type SoundResponse, type DrivingInput } from './drivingSoundMapping'
 
 type Voice = { sources: (AudioBufferSourceNode | GranularPlayer)[]; gains: GainNode[]; filter: BiquadFilterNode; level: GainNode; dry: GainNode; wet: GainNode; drive: GainNode; expression: GainNode; driveTarget?: number; response?: SoundResponse; granularMode?: GranularMode; authored?: boolean; sourceRevision?: number }
-export type SourceHandle = { start: (refresh?: boolean) => void; stop: () => void; auditionContext: () => Record<string, unknown>; audition: (urls: string[], input: 'driving' | 'simulated', label: string) => Promise<boolean | string> }
+export type SourceHandle = { start: (refresh?: boolean) => void; stop: () => void; analyser: () => AnalyserNode | null; auditionContext: () => Record<string, unknown>; audition: (urls: string[], input: 'driving' | 'simulated', label: string) => Promise<boolean | string> }
 const STEMS = ['body', 'pad', 'glass', 'air']
 const granularWorklets = new WeakMap<AudioContext, Promise<void>>()  // processor modules are registered per AudioContext
 export default function SteadySource({ blocked, onPlay, driving, onPlayingChange, onError, compact = false, headless = false, ref, granularMode, onModeChange }: { granularMode: GranularMode; onModeChange: (mode: GranularMode) => void; ref?: Ref<SourceHandle>; compact?: boolean; headless?: boolean; blocked: boolean; onPlay: () => void; driving?: DrivingInput; onError?: (message: string) => void; onPlayingChange?: (playing: boolean) => void }) {
@@ -275,7 +275,7 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
       refreshRequested.current = refresh
       setMethod('granular')
     } else if (refresh || (!voice.current && !loading)) void play(refresh)
-  }, stop, auditionContext: () => ({ volume: controls.current.volume, candidateId: externalSourceUrls.current?.[0].split('/')[3] ?? null, input: settingsRef.current.inputMode === 'simulated' ? 'simulated' : 'live', style: settingsRef.current.granularMode, response: settingsRef.current.response, spatial: controls.current.spatial }), audition: (urls, input, label) => {
+  }, stop, analyser: () => analyser.current, auditionContext: () => ({ volume: controls.current.volume, candidateId: externalSourceUrls.current?.[0].split('/')[3] ?? null, input: settingsRef.current.inputMode === 'simulated' ? 'simulated' : 'live', style: settingsRef.current.granularMode, response: settingsRef.current.response, spatial: controls.current.spatial }), audition: (urls, input, label) => {
     if (urls.length !== 4 || !urls.every(url => /^\/audio\/source-search-cache\/[a-f0-9]{32}\/stem-[0-2]\.wav$/.test(url) || url === '/audio/original_steady_air.wav?v=17')) return Promise.resolve(false)
     auditionPending.current?.(false)
     stop(); externalSourceUrls.current = urls; setExternalLabel(label); setMethod('granular'); setInputMode(input); setEvolvingSource('transformed'); setSpatial(true); setResponse('exponential')

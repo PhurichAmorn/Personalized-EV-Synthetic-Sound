@@ -24,7 +24,7 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
   const startSound = (refresh = false) => {
     if (source.current) { command.current('sourceAudition', { value: true }); source.current.start(refresh) }
   }
-  useImperativeHandle(ref, () => ({ start: startSound, auditionContext: () => source.current?.auditionContext() ?? {}, audition: (urls, input, label) => source.current?.audition(urls, input, label) ?? Promise.resolve(false), stop: () => { source.current?.stop(); setSourcePlaying(false); setBaselineActive(false); command.current('sourceAudition', { value: false }) } }))
+  useImperativeHandle(ref, () => ({ start: startSound, analyser: () => source.current?.analyser() ?? null, auditionContext: () => source.current?.auditionContext() ?? {}, audition: (urls, input, label) => source.current?.audition(urls, input, label) ?? Promise.resolve(false), stop: () => { source.current?.stop(); setSourcePlaying(false); setBaselineActive(false); command.current('sourceAudition', { value: false }) } }))
   const discoveryWorkspace = embedded && !state.search.active && !state.soundSweepActive && !!state.sourceDiscovery?.active
   useEffect(() => { void command.current('sourceAudition', { value: sourcePlaying || baselineActive || discoveryWorkspace }) }, [sourcePlaying, baselineActive, discoveryWorkspace])
   useEffect(() => () => { void command.current('sourceAudition', { value: false }) }, [])

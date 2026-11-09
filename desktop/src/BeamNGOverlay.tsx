@@ -8,6 +8,7 @@ type Props = {
   onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
   onPersonalize: () => void
   onStartStop: () => void
+  analyser: () => AnalyserNode | null
   granular: boolean
   granularMode: 'steady' | 'rise' | 'evolving'
   onGranular: () => void
@@ -19,7 +20,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <div className="beamng-overlay-metric"><span>{label}</span><strong>{value}</strong></div>
 }
 
-export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, onStartStop, granular, granularMode, onGranular, onGranularCycle, onTheme }: Props) {
+export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, onStartStop, analyser, granular, granularMode, onGranular, onGranularCycle, onTheme }: Props) {
   const connected = state.sourceMode !== 'BeamNG' || state.beamngConnected
   const throttle = state.sourceMode === 'BeamNG' ? state.beamngThrottle : state.throttleInput
   const brake = state.sourceMode === 'BeamNG' ? state.beamngBrake : state.brakeInput
@@ -27,16 +28,11 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
   const cycleLabel = granular ? granularMode : state.soundRecipeSelection[state.soundTheme]
   const [dragError, setDragError] = useState('')
-  // Drag from any empty part of the card (not from buttons, the dropdown or the close button).
-  const startDrag = (event: React.MouseEvent) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest('button, select, input, a')) return
-    window.__TAURI__?.window?.getCurrentWindow().startDragging().catch(reason => setDragError(`Cannot move window: ${reason}`))
-  }
   const startResize = (event: React.MouseEvent) => {
     event.stopPropagation()
     window.__TAURI__?.window?.getCurrentWindow().startResizeDragging('SouthEast').catch(reason => setDragError(`Cannot resize window: ${reason}`))
   }
-  return <main className="beamng-overlay-card" onMouseDown={startDrag}>
+  return <main className="beamng-overlay-card">
     <div className="beamng-overlay-grip" aria-hidden="true" />
     <header className="beamng-overlay-header" data-tauri-drag-region>
       <div data-tauri-drag-region><span className="beamng-overlay-kicker" data-tauri-drag-region>EV SOUND LAB</span><h1 data-tauri-drag-region>Drive audio</h1></div>
@@ -52,7 +48,7 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
         onClick={() => granular ? onGranularCycle() : onCommand('recipeCycle', { name: state.soundTheme })}>&#9197; <small>{cycleLabel}</small></button>
     </div>
     <InputGraph throttle={throttle} brake={brake} />
-    <WaveGraph onCommand={onCommand} />
+    <WaveGraph granular={granular} analyser={analyser} onCommand={onCommand} />
     <section className="beamng-overlay-metrics" aria-label="Live vehicle telemetry">
       <Metric label="SPEED · KM/H" value={connected ? Math.round(state.speed).toString() : '—'} />
       <Metric label="THROTTLE" value={connected ? `${Math.round(throttle * 100)}%` : '—'} />
@@ -67,6 +63,6 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
       <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>Personalize sound</button>
     </footer>
     <div className="beamng-overlay-resize" role="separator" aria-label="Resize overlay" onMouseDown={startResize} />
-    <p className="beamng-overlay-hint">Drag any empty area of this overlay to move it; × closes it. BeamNG remains in control of the car.</p>
+    <p className="beamng-overlay-hint">Drag the title area to move this overlay; × closes it. BeamNG remains in control of the car.</p>
   </main>
 }
