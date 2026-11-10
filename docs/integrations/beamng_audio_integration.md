@@ -2,17 +2,17 @@
 
 ## Status
 
-The desktop app now receives EVS1 UDP telemetry from the BeamNG protocol mod and can drive its existing sound engine from that data. The always-on-top Tauri overlay exposes source selection, live telemetry, Start/Stop, and the existing sound personalization flow.
+The desktop app receives EVS1 UDP telemetry from the BeamNG protocol mod and drives its existing sound engine from that data. Choosing **BeamNG** at startup opens only an always-on-top overlay showing live telemetry, Start/Stop, and the existing sound personalization flow.
 
-The app does **not** yet mute BeamNG's stock drivetrain audio. The sound plays through the desktop app's audio output, so stock drivetrain sound may overlap. A safe, target-vehicle-only BeamNG sound blend hook is still unverified; this prototype does not change vehicle audio or physics. The FMOD design below remains a future in-game integration option.
+The app does **not** mute BeamNG's stock drivetrain audio. The mod also tries to silence BeamNG's AVAS pedestrian warning, but this is not confirmed to work in game. The sound plays through the desktop app's audio output, so stock drivetrain sound may overlap. A safe, target-vehicle-only BeamNG sound blend hook is still unverified; this prototype does not change vehicle audio or physics. The FMOD design below remains a future in-game integration option.
 
 ## Run the current prototype
 
 1. Install `beamng/evsound_telemetry` in BeamNG's `mods/unpacked/` folder and enable **EV Sound Lab telemetry** under **Options → Other → Protocols**.
-2. Start EV Sound Lab, select **BeamNG** as telemetry source, and open **Open BeamNG overlay**. The app listens on `127.0.0.1:4445`.
+2. Start EV Sound Lab and pick **BeamNG** in the startup chooser. The overlay opens and switches the app to BeamNG telemetry; the app listens on `127.0.0.1:4445`.
 3. Start sound in the overlay. Use **Personalize sound** to enter the existing session setup and comparison flow; **Back to driving** returns to telemetry.
 4. BeamNG sends at most 30 packets per second. Display/audio timing also includes app, operating-system, and output-device buffering; no zero-latency guarantee.
-5. Stop or pause the game to confirm the overlay reports disconnect and the app sound fades. Switch source back to **Simulator** to resume local simulation.
+5. Stop or pause the game to confirm the overlay reports disconnect and the app sound fades. Restart the app and pick **Simulator** to use local simulation.
 
 Throttle, brake, regen, speed, and signed motor load come from the mod packet. Missing powertrain values are treated as unavailable. BeamNG's stock drivetrain sound remains enabled until a validated vehicle-specific mute control is added.
 

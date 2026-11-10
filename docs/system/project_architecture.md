@@ -10,9 +10,10 @@ This guide shows where project responsibilities live and how the desktop, vehicl
 | --- | --- | --- |
 | `desktop/` | React/TypeScript interface and Tauri 2 desktop shell | `desktop/src/`, `desktop/src-tauri/` |
 | `backend/` | Python sidecar, simulator controller, UI command bridge, keyboard/controller input, audio output monitoring | `backend/sidecar.py`, `backend/controller.py`, `backend/bridge.py` |
+| `beamng/` | BeamNG protocol mod that sends `EVS1` vehicle telemetry over local UDP; BeamNG stays the physics authority | [BeamNG integration](../integrations/beamng_audio_integration.md) |
 | `simulation/` | Vehicle and powertrain state updates from pedal inputs and elapsed time | [Vehicle physics](vehicle_physics.md) |
 | `audio/` | Native C++ sound engine, synthesis, presets, validation, PortAudio output, and Python binding | [Sound behavior](sound_behavior.md) |
-| `experiment/` | Interactive comparison policies, candidate profiles, local session persistence | [Interactive algorithm](interactive_algorithm.md) |
+| `experiment/` | Interactive comparison policies (native-profile search and the source-discovery trial), candidate profiles, local session persistence. Source-discovery sessions autosave to untracked `experiment_data/source_history/` and appear in the Sound trace page; trace previews are re-rendered on demand and discarded when the page closes | [Interactive algorithm](interactive_algorithm.md) |
 | `tools/` | Offline audio analysis and rendering utilities; not part of normal runtime | [Sound design research](../research/sound_design_research.md) |
 | `tests/` | Automated checks for backend, simulation, audio, and UI-facing bridge behavior | Relevant source module |
 | `docs/` | Durable behavior/design guidance, research findings, and integration proposals | [Documentation guide](../README.md) |
@@ -28,12 +29,13 @@ React UI
 Rust desktop shell
   ↕ newline-delimited JSON over standard input/output
 Python backend.sidecar
-  ├─ SimulatorController → VehicleModel
+  ├─ SimulatorController → VehicleModel (Simulator source)
+  │    or EVS1 UDP on 127.0.0.1:4445 ← BeamNG mod (BeamNG source)
   ├─ live search → candidate profiles and local session records
   └─ Pybind11 binding → native C++ SoundEngine → PortAudio
 ```
 
-The UI sends commands and displays snapshots. The Python controller owns live application state and passes pedal inputs to the vehicle model. The experiment search proposes sound profiles but does not alter vehicle physics. The controller passes vehicle state and the active profile to the C++ engine. Sound output does not feed back into simulated torque or acceleration.
+The UI sends commands and displays snapshots. The Python controller owns live application state and passes pedal inputs to the vehicle model. The experiment search proposes sound profiles but does not alter vehicle physics. The controller passes vehicle state and the active profile to the C++ engine. Sound output does not feed back into simulated torque or acceleration. At startup the user picks Simulator (dashboard window) or BeamNG (overlay window); the overlay switches the controller to the BeamNG source, and stale telemetry fades the sound instead of falling back to the simulator.
 
 ## Change boundaries
 

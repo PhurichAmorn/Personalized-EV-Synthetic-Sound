@@ -9,6 +9,7 @@ These documents help developers, researchers, and AI agents understand the proje
 | [Project architecture](system/project_architecture.md) | Repository ownership, runtime flow, and boundaries between UI, backend, physics, search, and audio | Locating a feature or changing data flow/layer ownership |
 | [Vehicle physics](system/vehicle_physics.md) | Intended vehicle and pedal behavior, limits, and calibration caveats | Changing acceleration, coasting, braking, or regeneration |
 | [Interactive algorithm](system/interactive_algorithm.md) | Search purpose, listener feedback, candidate schedule, persistence, and current version | Changing comparisons, algorithms, candidate generation, or session records |
+| [Source-search benchmark](system/source_search_benchmark.md) | Simulated-listener benchmark for source-discovery approaches: procedure, targets, metrics, results | Changing the source pool or search, or comparing approaches |
 | [Sound behavior](system/sound_behavior.md) | Existing procedural C++ method and its vehicle-state mapping | Changing the current sound engine or defining its role as the baseline |
 | [Source-first sound approach](design/source_first_sound_approach.md) | Proposed new method: sound material, renderer, mapping, listening goals, and validation order | Working on the second sound-generation method; it is not yet integrated |
 
@@ -17,7 +18,7 @@ These documents help developers, researchers, and AI agents understand the proje
 - [Sound design research](research/sound_design_research.md): findings from acoustics/music studies, OEM references, and the supplied audio analyses. Each finding states its source and limits.
 - [Interactive preference research](research/interactive_search_research.md): IEC, pairwise GP/PBO, and music-preference evidence; distinguishes research results from project proposals.
 - [GS personalization baseline](research/gs_personalization_baseline.md): perceptual control groups, granular qualification, parameter sensitivity and recorded-string/hall baseline comparison; audition implemented, parameter search still proposed.
-- [BeamNG integration](integrations/beamng_audio_integration.md): proposed telemetry and in-game audio path, with a clear not-implemented status.
+- [BeamNG integration](integrations/beamng_audio_integration.md): how to run the app from BeamNG telemetry with the overlay (implemented), plus the proposed in-game FMOD audio path (not implemented).
 
 The repository [README](../README.md) covers setup and technology stack. Tauri is the current desktop UI; no migration-status document is maintained.
 

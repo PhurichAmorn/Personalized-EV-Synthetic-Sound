@@ -23,6 +23,7 @@ A desktop audio output device is required to listen. A game controller is option
 
 ```text
 ├── audio/                  # C++ synthesis engine and Python bindings
+├── beamng/                 # BeamNG telemetry protocol mod
 ├── backend/                # Python simulator sidecar and input/audio services
 ├── desktop/                # React frontend and Tauri/Rust shell
 ├── docs/                   # Project guides, sound-design research, and proposals
@@ -55,6 +56,8 @@ npm run tauri dev
 ```
 
 This starts the Tauri window, Vite frontend, and Python simulator sidecar. After setup, `./launch.sh` from the repository root checks the environment and starts the app. `cd desktop && npm run dev` starts Vite only; it does not start the Tauri shell or simulator sidecar. The launcher requires the native audio extension to build successfully and stops with an error if compilation fails.
+
+At launch, a chooser opens either **Simulator** (full dashboard with the built-in vehicle model) or **BeamNG** (a small always-on-top overlay driven by the BeamNG telemetry mod). See the [BeamNG integration guide](docs/integrations/beamng_audio_integration.md) for mod setup.
 
 ## License
 

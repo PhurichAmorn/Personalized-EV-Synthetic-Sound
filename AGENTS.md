@@ -15,6 +15,7 @@ Read [the project architecture guide](docs/system/project_architecture.md) for r
 - `simulation/`: vehicle and powertrain model.
 - `audio/`: native C++ sound engine and Python binding.
 - `experiment/`: interactive candidate search and local session records.
+- `beamng/`: BeamNG telemetry protocol mod (sends vehicle state to the app over local UDP).
 - `tools/`: offline rendering and analysis.
 - `tests/`: automated checks.
 
@@ -27,7 +28,7 @@ Read [the project architecture guide](docs/system/project_architecture.md) for r
 - [Sound behavior](docs/system/sound_behavior.md): existing procedural oscillator method and state mapping; baseline method.
 - [Source-first sound approach](docs/design/source_first_sound_approach.md): separate proposed method; not integrated into driving audio.
 - [Research notes](docs/research/sound_design_research.md) and [interactive search research](docs/research/interactive_search_research.md): evidence and limits behind design choices.
-- [BeamNG proposal](docs/integrations/beamng_audio_integration.md): planned integration only; no adapter exists yet.
+- [BeamNG integration](docs/integrations/beamng_audio_integration.md): telemetry mod, UDP receiver, and always-on-top overlay are implemented. BeamNG's own drivetrain sound is not muted. The in-game FMOD path is a proposal only.
 
 ## How to use documentation
 
