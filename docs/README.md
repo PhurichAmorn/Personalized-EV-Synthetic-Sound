@@ -12,11 +12,13 @@ These documents help developers, researchers, and AI agents understand the proje
 | [Source-search benchmark](system/source_search_benchmark.md) | Simulated-listener benchmark for source-discovery approaches: procedure, targets, metrics, results | Changing the source pool or search, or comparing approaches |
 | [Sound behavior](system/sound_behavior.md) | Existing procedural C++ method and its vehicle-state mapping | Changing the current sound engine or defining its role as the baseline |
 | [Source-first sound approach](design/source_first_sound_approach.md) | Proposed new method: sound material, renderer, mapping, listening goals, and validation order | Working on the second sound-generation method; it is not yet integrated |
+| [Generated source plan](design/generated_source_plan.md) | Proposed pilot: text-to-audio source clips, conditioning, listening check, and git policy for generated audio | Generating or evaluating new source material; not implemented |
 
 ## Research and integration references
 
 - [Sound design research](research/sound_design_research.md): findings from acoustics/music studies, OEM references, and the supplied audio analyses. Each finding states its source and limits.
 - [Interactive preference research](research/interactive_search_research.md): IEC, pairwise GP/PBO, and music-preference evidence; distinguishes research results from project proposals.
+- [Personalization approaches](research/personalization_approaches.md): literature review of alternatives to rating-based IEC, granular and AI source generation, OEM EV sound practice, and comfort guards; [supporting notes](research/personalization_approaches_notes/). Some sources were seen only as abstracts or snippets; the notes flag them.
 - [GS personalization baseline](research/gs_personalization_baseline.md): perceptual control groups, granular qualification, parameter sensitivity and recorded-string/hall baseline comparison; audition implemented, parameter search still proposed.
 - [BeamNG integration](integrations/beamng_audio_integration.md): how to run the app from BeamNG telemetry with the overlay (implemented), plus the proposed in-game FMOD audio path (not implemented).
 
