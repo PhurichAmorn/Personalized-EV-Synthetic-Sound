@@ -38,16 +38,35 @@ class TorqueScaler:
 
     BeamNG gives no torque limits, and its load field never goes negative, so regen would never sound.
     The remembered peaks decay slowly toward a floor, so a car or regen-setting change re-scales within minutes.
+    Small torques (noise around zero) and standstill read as exactly 0, and the output is lightly smoothed,
+    so the gauges and the regen sound do not flicker.
     """
 
-    def __init__(self, drive_floor=100.0, regen_floor=40.0, forget_s=90.0):
+    def __init__(self, drive_floor=100.0, regen_floor=40.0, forget_s=90.0,
+                 deadband_nm=3.0, deadband_fraction=0.04, still_speed_m_s=0.3, smooth_s=0.12):
         self.floors = (drive_floor, regen_floor)
         self.peaks = [drive_floor, regen_floor]
         self.forget_s = forget_s
+        self.deadband_nm = deadband_nm
+        self.deadband_fraction = deadband_fraction
+        self.still_speed = still_speed_m_s
+        self.smooth_s = smooth_s
+        self.value = 0.0
+        self.started = False
 
-    def update(self, torque, dt):
-        keep = math.exp(-max(0.0, min(dt, 1.0)) / self.forget_s)
+    def update(self, torque, dt, speed=None):
+        dt = max(0.0, min(dt, 1.0))
+        keep = math.exp(-dt / self.forget_s)
         self.peaks = [floor + (peak - floor) * keep for floor, peak in zip(self.floors, self.peaks)]
         side = 0 if torque >= 0 else 1
-        self.peaks[side] = max(self.peaks[side], abs(torque))
-        return max(-1.0, min(1.0, torque / self.peaks[side]))
+        still = speed is not None and speed < self.still_speed
+        if still or abs(torque) < max(self.deadband_nm, self.deadband_fraction * self.peaks[side]):
+            raw = 0.0
+        else:
+            self.peaks[side] = max(self.peaks[side], abs(torque))
+            raw = max(-1.0, min(1.0, torque / self.peaks[side]))
+        if not self.started or self.smooth_s <= 0 or dt <= 0:
+            self.value, self.started = raw, True
+        else:
+            self.value += (raw - self.value) * (1.0 - math.exp(-dt / self.smooth_s))
+        return self.value

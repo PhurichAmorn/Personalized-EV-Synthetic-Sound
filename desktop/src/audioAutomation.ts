@@ -26,7 +26,9 @@ export function createChorus(audio: AudioContext) {
     oscillator.connect(motion); motion.connect(delay.delayTime); oscillator.start()
     return { delay, motion, oscillator }
   })
-  return { input, output, dispose() {
+  /** amount: 1 = usual 25% wet, 0 = off (Engine: its slow delay modulation was heard as wobble). */
+  const setAmount = (amount: number, when: number) => { dry.gain.setTargetAtTime(1 - .25 * amount, when, .05); wet.gain.setTargetAtTime(.25 * amount, when, .05) }
+  return { input, output, setAmount, dispose() {
     voices.forEach(({ delay, motion, oscillator }) => { oscillator.stop(); oscillator.disconnect(); motion.disconnect(); delay.disconnect() })
     input.disconnect(); output.disconnect(); dry.disconnect(); wet.disconnect(); split.disconnect(); merge.disconnect()
   } }

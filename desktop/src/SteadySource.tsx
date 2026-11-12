@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, useImperativeHandle, type Ref } from 'react'
 import SoundWaveform from './SoundWaveform'
 import SourceCharacterPanel from './SourceCharacterPanel'
-import { sourceAudioBuffers } from './sourceDesigner'
+import { engineStageFor, PITCH_TRAVEL, sourceAudioBuffers, type EngineStageConfig } from './sourceDesigner'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from './simulatedDrive'
 import { smoothParameter, driveEnvelopeTarget, createChorus } from './audioAutomation'
 import { climbTargets } from './sourceClimb'
 import { GranularPlayer, type GranularMode } from './granularPlayer'
 import { drivingSoundTargets, responseRiseSeconds, type SoundResponse, type DrivingInput } from './drivingSoundMapping'
 
-type Voice = { sources: (AudioBufferSourceNode | GranularPlayer)[]; gains: GainNode[]; filter: BiquadFilterNode; level: GainNode; dry: GainNode; wet: GainNode; drive: GainNode; expression: GainNode; driveTarget?: number; response?: SoundResponse; granularMode?: GranularMode; authored?: boolean; sourceRevision?: number }
+type Voice = { chorus: ReturnType<typeof createChorus>; sources: (AudioBufferSourceNode | GranularPlayer)[]; gains: GainNode[]; filter: BiquadFilterNode; level: GainNode; dry: GainNode; wet: GainNode; drive: GainNode; expression: GainNode; driveTarget?: number; response?: SoundResponse; granularMode?: GranularMode; authored?: boolean; sourceRevision?: number }
 export type SourceHandle = { start: (refresh?: boolean) => void; stop: () => void; analyser: () => AnalyserNode | null; auditionContext: () => Record<string, unknown>; audition: (urls: string[], input: 'driving' | 'simulated', label: string) => Promise<boolean | string> }
 const STEMS = ['body', 'pad', 'glass', 'air']
 const granularWorklets = new WeakMap<AudioContext, Promise<void>>()  // processor modules are registered per AudioContext
@@ -24,6 +24,8 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
   const generatedBuffers = useRef<AudioBuffer[] | null>(null)
   const [sourceRevision, setSourceRevision] = useState(0)
   const [trialRequested, setTrialRequested] = useState(false)
+  const engineStage = useRef<EngineStageConfig | null>(null)  // live stage after the player for Engine/Orchestral (stems 0-2, not air)
+  const travel = useRef(1)  // pitch climb of the selected style (PITCH_TRAVEL); 1 for the original sound and discovery candidates
   const [sourceReplayRequested, setSourceReplayRequested] = useState(false)
   const analyser = useRef<AnalyserNode | null>(null)
   const request = useRef(0)
@@ -113,7 +115,7 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
     const audio = context.current
     if (!audio) return
     const input = inputMode === 'simulated' ? simulatedDrive(audio.currentTime - simulationStart.current) : inputRef.current
-    const target = inputMode !== 'manual' ? drivingSoundTargets(input ?? { running: false, starting: false, speedKmh: 0, throttle: 0, motorLoad: null }, inputMode === 'driving' && performance.now() - receivedAt.current > 750, response, granularMode) : { ...climbTargets(value), driveGain: 1, loopHold: 0, cycleSpeed: 1 }
+    const target = inputMode !== 'manual' ? drivingSoundTargets(input ?? { running: false, starting: false, speedKmh: 0, throttle: 0, motorLoad: null }, inputMode === 'driving' && performance.now() - receivedAt.current > 750, response, granularMode, travel.current) : { ...climbTargets(value), driveGain: 1, loopHold: 0, cycleSpeed: 1 }
     const set = (param: AudioParam, value: number, smoothing = .15) => {
       if (immediate) param.setValueAtTime(value, audio.currentTime)
       else smoothParameter(param, value, audio.currentTime, smoothing)
@@ -121,6 +123,12 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
     const authored = granularMode === 'evolving' && evolvingSource === 'authored'
     if ((current.authored !== authored || current.sourceRevision !== sourceRevision) && buffers.current) {
       current.sources.forEach((source, index) => {
+        if (source instanceof GranularPlayer) source.setEngine(index < 3 ? engineStage.current : null)
+        if (index === 0) {
+          current.chorus.setAmount(engineStage.current?.chorus ?? 1, audio.currentTime)
+          const room = controls.current.spatial && (engineStage.current?.room ?? true)
+          smoothParameter(current.dry.gain, room ? .68 : 1, audio.currentTime, .1); smoothParameter(current.wet.gain, room ? .32 : 0, audio.currentTime, .1)
+        }
         if (source instanceof GranularPlayer) source.setSource(!authored && generatedBuffers.current ? generatedBuffers.current[index] : buffers.current![index + (authored ? 4 : 0)])
       })
     }
@@ -150,7 +158,8 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
     }
     set(current.sources[1].playbackRate, tonalRate, .35)
     set(current.sources[2].playbackRate, tonalRate, .35)
-    ;[target.bodyGain, target.padGain, target.glassGain, target.airGain].forEach((gain, i) => set(current.gains[i].gain, gain))
+    // Engine style: no air layer. It bypasses the engine stage's 1.2 kHz low-pass, so its breathy hiss stood out while driving.
+    ;[target.bodyGain, target.padGain, target.glassGain, engineStage.current ? 0 : target.airGain].forEach((gain, i) => set(current.gains[i].gain, gain))
     set(current.filter.frequency, target.cutoff)
   }
   useEffect(() => { if (voice.current) applyGesture(voice.current, climb) }, [climb, driving, inputMode, response, granularMode, evolvingSource, sourceRevision])
@@ -205,15 +214,17 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
       const filter = audio.createBiquadFilter(), convolver = audio.createConvolver()
       filter.type = 'lowpass'; filter.Q.value = .5
       convolver.buffer = decoded[8]
-      const chorus = createChorus(audio)
+      const chorus = createChorus(audio); chorus.setAmount(engineStage.current?.chorus ?? 1, audio.currentTime)
       bus.connect(chorus.input); chorus.output.connect(drive); drive.connect(expression); expression.connect(dry); dry.connect(level); expression.connect(convolver); convolver.connect(wet); wet.connect(level); level.connect(analyser.current!)
       filter.connect(bus)
-      dry.gain.value = controls.current.spatial ? .68 : 1; wet.gain.value = controls.current.spatial ? .32 : 0
+      // Engine style is dry: the bright 2 s room reverb (61% of its energy at 1-4 kHz) sat above the engine's 1.2 kHz low-pass and was heard as air.
+      const room = controls.current.spatial && (engineStage.current?.room ?? true)
+      dry.gain.value = room ? .68 : 1; wet.gain.value = room ? .32 : 0
       const gains = STEMS.map(() => audio.createGain())
       const selectedBuffers = selectedMode === 'evolving' && selectedSource === 'authored' ? decoded.slice(4, 8) : generatedBuffers.current ?? decoded.slice(0, 4)
       const sources = STEMS.map((_, i) => {
         let source: AudioBufferSourceNode | GranularPlayer
-        if (selectedMethod === 'granular') source = new GranularPlayer(audio, selectedBuffers[i])
+        if (selectedMethod === 'granular') { source = new GranularPlayer(audio, selectedBuffers[i]); source.setEngine(i < 3 ? engineStage.current : null) }
         else { source = audio.createBufferSource(); source.buffer = selectedBuffers[i]; source.loop = true }
         source.connect(gains[i]); gains[i].connect(i === 1 || i === 2 ? filter : bus)
         return source
@@ -223,7 +234,7 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
         source.disconnect()
         if (--remaining === 0) { gains.forEach(gain => gain.disconnect()); filter.disconnect(); bus.disconnect(); chorus.dispose(); dry.disconnect(); wet.disconnect(); convolver.disconnect(); level.disconnect(); drive.disconnect(); expression.disconnect() }
       } })
-      const current = { sources, gains, filter, level, dry, wet, drive, expression, granularMode: selectedMode, sourceRevision: settingsRef.current.sourceRevision, authored: selectedMode === 'evolving' && selectedSource === 'authored' }
+      const current = { chorus, sources, gains, filter, level, dry, wet, drive, expression, granularMode: selectedMode, sourceRevision: settingsRef.current.sourceRevision, authored: selectedMode === 'evolving' && selectedSource === 'authored' }
       simulationStart.current = audio.currentTime; setSimulationTime(0)
       voice.current = current; applyGesture(current, controls.current.climb, true)
       const when = audio.currentTime + .02
@@ -278,12 +289,27 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
   }, stop, analyser: () => analyser.current, auditionContext: () => ({ volume: controls.current.volume, candidateId: externalSourceUrls.current?.[0].split('/')[3] ?? null, input: settingsRef.current.inputMode === 'simulated' ? 'simulated' : 'live', style: settingsRef.current.granularMode, response: settingsRef.current.response, spatial: controls.current.spatial }), audition: (urls, input, label) => {
     if (urls.length !== 4 || !urls.every(url => /^\/audio\/source-search-cache\/[a-f0-9]{32}\/stem-[0-2]\.wav$/.test(url) || url === '/audio/original_steady_air.wav?v=17')) return Promise.resolve(false)
     auditionPending.current?.(false)
-    stop(); externalSourceUrls.current = urls; setExternalLabel(label); setMethod('granular'); setInputMode(input); setEvolvingSource('transformed'); setSpatial(true); setResponse('exponential')
+    stop(); travel.current = 1; engineStage.current = null; externalSourceUrls.current = urls; setExternalLabel(label); setMethod('granular'); setInputMode(input); setEvolvingSource('transformed'); setSpatial(true); setResponse('exponential')
     return new Promise(resolve => { auditionPending.current = resolve; setAuditionRequest(value => value + 1) })
   } }))
-  if (headless) return null
+  const stylePanel = <SourceCharacterPanel hidden={false} sharedSource={granularMode !== 'evolving' || evolvingSource !== 'authored'} blocked={loading || method !== 'granular' || !!externalLabel} onTrial={() => {
+      setTrialRequested(true); setMethod('granular'); onModeChange('rise'); setInputMode('simulated'); setEvolvingSource('transformed'); setSpatial(true); setResponse('exponential')
+    }} onSource={(stems, family) => {
+      travel.current = PITCH_TRAVEL[family] ?? 1; engineStage.current = engineStageFor(family)
+      externalSourceUrls.current = null; setExternalLabel('')
+      generatedSource.current = stems
+      generatedBuffers.current = context.current && buffers.current ? [...sourceAudioBuffers(context.current, stems), buffers.current[3]] : null
+      setEvolvingSource('transformed'); setSourceRevision(value => value + 1); if (settingsRef.current.inputMode === 'simulated') setSourceReplayRequested(true)
+    }} onReset={() => { travel.current = 1; engineStage.current = null; externalSourceUrls.current = null; setExternalLabel(''); generatedSource.current = null; generatedBuffers.current = null; setSourceRevision(value => value + 1); if (settingsRef.current.inputMode === 'simulated') setSourceReplayRequested(true) }} />
+  // Sound Lab shows only the style picker; the dashboard and personalization use this component as a hidden audio engine.
+  if (headless) return compact ? null : <section className="reference-reconstruction steady-source-panel" aria-label="Sound styles">
+    {stylePanel}
+    <div className="sound-editor-transport"><button type="button" className="sound-play" disabled={inputMode !== 'simulated' && !playing} onClick={() => void play()}>{playing ? 'Stop' : loading ? 'Cancel loading' : 'Replay drive'}</button>{inputMode === 'simulated' && <span>Same 22-second drive · {simulationTime.toFixed(1)} s · 0–120 km/h and stop</span>}</div>
+    <SoundWaveform analyser={analyser} active={playing} />
+    {error && <p role="alert">{error}</p>}
+  </section>
   const displayedInput = inputMode === 'simulated' ? simulatedDrive(simulationTime) : driving
-  const target = inputMode !== 'manual' && displayedInput ? drivingSoundTargets(displayedInput, false, response, granularMode) : climbTargets(climb)
+  const target = inputMode !== 'manual' && displayedInput ? drivingSoundTargets(displayedInput, false, response, granularMode, travel.current) : climbTargets(climb)
   const displayedPitch = target.semitones
   return <section className="reference-reconstruction steady-source-panel" aria-labelledby="steady-source-title">
     <h3 id="steady-source-title">Original granular template <small>{compact ? 'Controlled by START · power and speed' : inputMode === 'driving' ? 'Live driving inputs · fixed mapping' : inputMode === 'simulated' ? 'Simulated style comparison' : 'Manual comparison'}</small></h3>
@@ -311,8 +337,9 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
       <label className="sound-check"><input type="checkbox" disabled={!!externalLabel} checked={spatial} onChange={event => {
         const enabled = event.target.checked; setSpatial(enabled)
         if (voice.current && context.current) {
-          smoothParameter(voice.current.dry.gain, enabled ? .68 : 1, context.current.currentTime, .1)
-          smoothParameter(voice.current.wet.gain, enabled ? .32 : 0, context.current.currentTime, .1)
+          const room = enabled && (engineStage.current?.room ?? true)  // Engine style stays dry
+          smoothParameter(voice.current.dry.gain, room ? .68 : 1, context.current.currentTime, .1)
+          smoothParameter(voice.current.wet.gain, room ? .32 : 0, context.current.currentTime, .1)
         }
       }} />Spatial reverb</label>
       <label className="sound-slider"><span>Source listening volume<output>{Math.round(volume * 100)}%</output></span><input type="range" min="0" max="1" step=".01" value={volume} onChange={event => {
@@ -324,14 +351,7 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
     </div>
     {externalLabel && <p>Source discovery audition: {externalLabel} <button type="button" onClick={() => { stop(); externalSourceUrls.current = null; setExternalLabel(''); generatedBuffers.current = null; setSourceRevision(value => value + 1) }}>Leave candidate audition</button></p>}
     <SoundWaveform analyser={analyser} active={playing} />
-    <SourceCharacterPanel hidden={compact} sharedSource={granularMode !== 'evolving' || evolvingSource !== 'authored'} blocked={loading || method !== 'granular' || !!externalLabel} onTrial={() => {
-      setTrialRequested(true); setMethod('granular'); onModeChange('rise'); setInputMode('simulated'); setEvolvingSource('transformed'); setSpatial(true); setResponse('exponential')
-    }} onSource={stems => {
-      externalSourceUrls.current = null; setExternalLabel('')
-      generatedSource.current = stems
-      generatedBuffers.current = context.current && buffers.current ? [...sourceAudioBuffers(context.current, stems), buffers.current[3]] : null
-      setEvolvingSource('transformed'); setSourceRevision(value => value + 1); if (settingsRef.current.inputMode === 'simulated') setSourceReplayRequested(true)
-    }} onReset={() => { externalSourceUrls.current = null; setExternalLabel(''); generatedSource.current = null; generatedBuffers.current = null; setSourceRevision(value => value + 1); if (settingsRef.current.inputMode === 'simulated') setSourceReplayRequested(true) }} />
+    {stylePanel}
     <p hidden={compact}>{inputMode !== 'manual' ? 'Steady follows power; Rise follows speed with acceleration expression; Evolving layers overlapping pitch rises on the shared source. Pedal and motor load control brightness and layer balance. Sound mutes when the vehicle stops running or telemetry becomes stale.' : 'Manual comparison keeps the foundation anchored.'} Room timing stays fixed. {method === 'granular' ? 'Granular: audio-thread rendering, 160 ms grains with waveform-aligned overlap, fixed scan speed, no random pitch or scatter.' : 'Sample playback: pitch changes also change source traversal speed.'}</p>
     {error && <p role="alert">{error}</p>}
   </section>

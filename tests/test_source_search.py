@@ -30,18 +30,7 @@ class SourceSearchTest(unittest.TestCase):
         self.assertEqual(peak,2)
         self.assertLess(time.monotonic()-started,.35)  # one parallel batch, not two sequential renders
 
-    def test_favourites_do_not_come_from_feedback(self):
-        discovery=SourceDiscovery(renderer=lambda recipe: {'id':str(recipe['seed']), 'label':'test','recipe':recipe,'urls':[], 'checks':[]})
-        self.addCleanup(discovery.close)
-        discovery.candidates={'a':{'id':'a','recipe':make_recipe(random.Random(1)),'label':'a'},'b':{'id':'b','recipe':make_recipe(random.Random(2)),'label':'b'}}
-        discovery.pair=['a','b'];discovery.active=True
-        with self.assertRaises(ValueError):discovery.feedback('A')
-        discovery.heard('a');discovery.heard('b')
-        discovery.bookmark('a',True);discovery.bookmark('a',True)
-        self.assertEqual(len(discovery.favourites),1)
-        discovery.bookmark('a',False);self.assertEqual(discovery.favourites,[])
-
-    def test_finish_keeps_bookmarks_and_export_is_a_copy(self):
+    def test_finish_stops_session_and_export_is_a_copy(self):
         import hashlib,json,time
         def render(recipe):
             ident=hashlib.sha256(json.dumps(recipe,sort_keys=True).encode()).hexdigest()[:32]
@@ -52,21 +41,12 @@ class SourceSearchTest(unittest.TestCase):
         self.assertEqual(len(d.pair),2)
         pair=d.pair.copy()
         for ident in pair:d.heard(ident)
-        d.bookmark(pair[0],True)
         d.finish();self.assertFalse(d.active)
-        self.assertIn(pair[0],d.favourites)
-        result=d.export();self.assertEqual(result['favourites'],d.favourites)
-        result['favourites'].clear();self.assertEqual(len(d.favourites),1)
+        result=d.export();result['candidates'].clear();self.assertTrue(d.candidates)
 
-    def test_favourites_have_no_small_hard_limit(self):
+    def test_only_finalists_can_be_chosen(self):
         d=SourceDiscovery(renderer=lambda recipe: {});self.addCleanup(d.close)
-        for i in range(12):
-            ident=f'candidate-{i}';d.candidates[ident]={'id':ident,'label':ident,'recipe':make_recipe(random.Random(i))}
-            d.bookmark(ident,True)
-        self.assertEqual(len(d.favourites),12)
-        d.bookmark('candidate-0',True,note='Warm and full')
-        self.assertEqual(len(d.favourites),12)
-        self.assertEqual(d.notes['candidate-0'],'Warm and full')
+        d.candidates['candidate-0']={'id':'candidate-0','label':'c','recipe':make_recipe(random.Random(0))}
         with self.assertRaises(ValueError):d.finish('unknown')
         with self.assertRaises(ValueError):d.finish('candidate-0')  # Only ranked finalists can be chosen.
         d.finalists=['candidate-0'];d.finish('candidate-0');self.assertEqual(d.final,'candidate-0')
@@ -102,12 +82,10 @@ class SourceSearchTest(unittest.TestCase):
             while d.busy and time.monotonic()<deadline:time.sleep(.005)
             self.assertFalse(d.error);self.assertEqual(len(d.pair),2)
             for ident in d.pair:d.heard(ident)
-            if turn==0:d.bookmark(d.pair[0],True)
             d.feedback({'A':4+turn%3,'B':4})
         d.finish()
         result=d.export()
         self.assertEqual(len(result['history']),8)
-        self.assertEqual(len(result['favourites']),1)
         self.assertTrue(any(c['recipe']['seed'] for c in result['candidates'].values()))
 
     def test_broad_search_balances_families_and_arrangements_with_capped_anchor_reuse(self):
@@ -146,11 +124,11 @@ class SourceSearchTest(unittest.TestCase):
         d.active=True;d.completed=MAX_COMPARISONS-1
         d.candidates={'a':{'id':'a','label':'a','recipe':make_recipe(random.Random(1))},'b':{'id':'b','label':'b','recipe':make_recipe(random.Random(2))}}
         d.pair=['a','b']
-        d.heard('a');d.heard('b');d.bookmark('a',True)
+        d.heard('a');d.heard('b')
         d.feedback({'A':5,'B':3})
         self.assertEqual(d.completed,MAX_COMPARISONS)
         self.assertEqual(d.stage,'playoff');self.assertFalse(d.busy);self.assertEqual(set(d.pair),{'a','b'})
-        self.assertEqual(d.favourites,['a']);self.assertEqual(len(d.export()['history']),1)
+        self.assertEqual(len(d.export()['history']),1)
 
     def test_playoff_round_robin_orders_finalists_by_bradley_terry(self):
         from experiment.source_search import MAX_COMPARISONS,PLAYOFF_PAIRS,FINALIST_COUNT
@@ -197,12 +175,6 @@ class SourceSearchTest(unittest.TestCase):
                 else:self.assertIsNone(value)
         self.assertEqual(seen,{0.,1.})
         self.assertNotIn('companionSub',make_recipe(random.Random(0),'glass')['layers'][0]['shape'],'References keep the original tuning')
-
-    def test_invalid_note_does_not_change_favourites(self):
-        d=SourceDiscovery(renderer=lambda recipe:{});self.addCleanup(d.close)
-        d.candidates={'a':{'id':'a','label':'a','recipe':make_recipe(random.Random(1))}}
-        with self.assertRaises(ValueError):d.bookmark('a',True,'x'*301)
-        self.assertEqual(d.favourites,[])
 
     def test_failed_next_pair_cannot_reuse_previous_votes(self):
         import hashlib,json,time
@@ -328,3 +300,190 @@ class SourceSearchTest(unittest.TestCase):
         while d.busy and time.monotonic()<deadline:time.sleep(.005)
         self.assertFalse(d.error);self.assertEqual(len(d.pair),2)
         self.assertTrue(blocked.isdisjoint(d.pair))
+
+
+def make_open_recipe_for_test():
+    from experiment.source_search import make_open_recipe
+    return make_open_recipe(random.Random(3),2)
+
+class OpenDiscoveryTest(unittest.TestCase):
+    def test_open_session_runs_to_finalists_with_only_open_blocks(self):
+        import json,time
+        from experiment.source_search import OpenDiscovery,MAX_COMPARISONS,PLAYOFF_PAIRS
+        def render(recipe):
+            rng=random.Random(json.dumps(recipe,sort_keys=True));d=[rng.random() for _ in range(12)];total=sum(d)
+            return {'id':str(abs(hash(json.dumps(recipe,sort_keys=True)))),'label':'test','recipe':recipe,'urls':[],'checks':[],'audio_descriptor':[x/total for x in d]}
+        d=OpenDiscovery(renderer=render);self.addCleanup(d.close);d.start()
+        for turn in range(MAX_COMPARISONS):
+            while d.busy:time.sleep(.002)
+            self.assertFalse(d.error,d.error);self.assertEqual(len(d.pair),2)
+            self.assertTrue(all(layer['method']=='blocks' for i in d.pair for layer in d.candidates[i]['recipe']['layers']))
+            for i in d.pair:d.heard(i)
+            if d.snapshot()['pairMode']=='choice':
+                with self.assertRaises(ValueError):d.feedback({'A':7,'B':2})  # parent checks take a choice, not ratings
+                d.feedback(choice='A')
+            else:d.feedback({'A':7,'B':2})
+        self.assertEqual(d.stage,'playoff');self.assertEqual(len(d.finalists),4)
+        for _ in range(PLAYOFF_PAIRS):
+            for i in d.pair:d.heard(i)
+            d.playoff_feedback('A')
+        self.assertEqual(d.stage,'done')
+        result=d.export();self.assertEqual(result['policy'],'source-open-groups-gp-v4')
+        origins=[c['origin'] for c in result['candidates'].values()]
+        self.assertTrue(all(o['kind'] in ('new','tuned') and o['summary'] for o in origins))
+        tuned=[o for o in origins if o['kind']=='tuned'];self.assertTrue(tuned)
+        self.assertTrue(all(o['parent'] in result['candidates'] and o['changes'] for o in tuned))
+        self.assertTrue(all(row['origin_by_candidate'] for row in result['history']))
+        self.assertIn('group_trends',result['preference_model'])
+        checks=[row for row in result['history'] if row['rating_source']=='choice'];self.assertTrue(checks)
+        for row in checks:  # the best sound returns next to a tuning of itself, answered as a choice
+            a,b=row['pair'];origins={i:result['candidates'][i]['origin'] for i in row['pair']}
+            self.assertTrue(any(o.get('parent') in row['pair'] for o in origins.values()),row['origin_by_candidate'])
+            self.assertEqual(row['rating_source'],'choice');self.assertEqual(len(row['inferred_rating']),1)
+        self.assertTrue(all(row['rating_source'] in ('rating-1-7','choice') for row in result['history']))
+        self.assertEqual(sum(result['session_metrics']['tuned_vs_parent'].values())>0,True)
+
+    def test_spectral_tunings_must_differ_from_parent_but_time_groups_may_not(self):
+        import json,time
+        from experiment.source_search import OpenDiscovery,move_group
+        parent=make_open_recipe_for_test()
+        class Fixed(OpenDiscovery):
+            def _proposals(self):  # three tunings of 'p'; every sound has the same spectrum
+                out=[]
+                for group in ('bright','rough','moving'):
+                    child,changes=move_group(self.rng,parent,group,1);self.origins[child['seed']]={'kind':'tuned','parent':'p','group':group,'summary':group};out.append(child)
+                return out
+        render=lambda recipe:{'id':str(abs(hash(json.dumps(recipe,sort_keys=True)))),'label':'t','recipe':recipe,'urls':[],'checks':[],'audio_descriptor':[1/12]*12}
+        d=Fixed(renderer=render);self.addCleanup(d.close)
+        d.candidates={'p':{'id':'p','label':'p','recipe':parent,'ratings':[6],'audio_descriptor':[1/12]*12}}
+        d.history=[{'pair':['p','p'],'ratings_by_candidate':{'p':6}}];d.active=True;d.completed=3
+        d._prepare()
+        while d.busy:time.sleep(.002)
+        accepted=[c['origin']['group'] for i,c in d.candidates.items() if i!='p']
+        self.assertEqual(accepted[:1],['rough'])  # passes: the spectrum cannot see roughness
+        self.assertIn('bright',[d.origins[x['recipe']['seed']]['group'] for x in d.diversity_skips])  # spectral near-copy of its parent
+
+    def test_tuning_step_halves_after_losses_and_settles_at_minimum(self):
+        from experiment.source_search import tuning_record
+        c={'p':{},'x':{}}
+        rows=[{'pair':['p','x'],'ratings_by_candidate':{'p':6,'x':2}}]
+        c['s1']={'origin':{'kind':'tuned','parent':'p'}};c['s2']={'origin':{'kind':'tuned','parent':'p'}}
+        rows.append({'pair':['s1','s2'],'ratings_by_candidate':{'s1':4,'s2':4}})  # two losing siblings: one halving only
+        self.assertEqual(tuning_record(c,rows)[0]['p'],.2)
+        c['c0']={'origin':{'kind':'tuned','parent':'p'}}
+        rows.append({'pair':['p','c0'],'rating_source':'choice','choice':'A','winner':'p','ratings_by_candidate':{'c0':5.}})  # choice: parent preferred
+        steps,settled,counts=tuning_record(c,rows)
+        self.assertEqual(steps['p'],.2);self.assertEqual(settled,{'p'});self.assertEqual(counts,{'win':0,'tie':0,'loss':3})
+        c['w']={'origin':{'kind':'tuned','parent':'x'}};rows.append({'pair':['w','y'],'ratings_by_candidate':{'w':5,'y':1}})  # vs parent mean 2
+        self.assertEqual(tuning_record(c|{'y':{}},rows)[2]['win'],1)
+
+    def test_group_trends_shrink_and_follow_rating_changes(self):
+        from experiment.source_search import group_trends
+        tuned=lambda parent,group,direction,rating:{'ratings':[rating],'origin':{'kind':'tuned','parent':parent,'group':group,'direction':direction}}
+        c={'p':{'ratings':[4]},'a':tuned('p','deep','more',6),'b':tuned('p','deep','more',6),'r':tuned('p','rough','more',1),'n':{'ratings':[7],'origin':{'kind':'new'}}}
+        t=group_trends(c)
+        self.assertEqual(t['deep+'],{'trend':1.0,'count':2})  # (2+2)/(2+2)
+        self.assertEqual(t['rough+'],{'trend':-1.0,'count':1})  # -3/(1+2)
+        self.assertEqual(set(t),{'deep+','rough+'})
+
+    def test_group_moves_stay_in_limits_and_touch_only_their_group(self):
+        from experiment.source_search import OPEN_KEYS,SOUND_GROUPS,make_open_recipe,move_group
+        rng=random.Random(4);bounds={k:(lo,hi) for k,lo,hi,_ in OPEN_KEYS}
+        grouped={key for members in SOUND_GROUPS.values() for key,_ in members}
+        self.assertLessEqual(set(bounds),grouped,'every parameter is reachable through some group')
+        a=make_open_recipe(rng)
+        for _ in range(300):
+            group=rng.choice(list(SOUND_GROUPS));child,changes=move_group(rng,a,group,rng.choice((1,-1)))
+            self.assertEqual({k.split('.')[1] for k in changes}-{key for key,_ in SOUND_GROUPS[group]},set())
+            self.assertEqual(len(child['layers']),len(a['layers']))
+            for layer in child['layers']:
+                for k,v in layer['shape'].items():
+                    if k in bounds:self.assertTrue(bounds[k][0]-1e-9<=v<=bounds[k][1]+1e-9,(k,v))
+                self.assertEqual('peak1Hz' in layer['shape'],'peak1Gain' in layer['shape'])
+            a=child
+        deeper,changes=move_group(rng,make_open_recipe(random.Random(1)),'deep',1)
+        self.assertTrue(changes['L0.rootRatio'][1]<changes['L0.rootRatio'][0] or changes['L0.rootRatio'][0]==.4)
+
+
+class StyleDiscoveryTest(unittest.TestCase):
+    def render(self,recipe):
+        import json
+        rng=random.Random(json.dumps(recipe,sort_keys=True));d=[rng.random() for _ in range(12)];t=sum(d)
+        return {'id':str(abs(hash(json.dumps(recipe,sort_keys=True)))),'label':'t','recipe':recipe,'urls':[],'checks':[],'audio_descriptor':[x/t for x in d]}
+
+    def test_session_opening_choices_tuning_and_shortlist(self):
+        import time
+        from experiment.source_search import StyleDiscovery,STYLES,OPENING_PAIRS,OPENING_SEVENTH,STYLE_PAIRS,SHORTLIST
+        d=StyleDiscovery(renderer=self.render);self.addCleanup(d.close);d.start()
+        style=lambda i:d.candidates[i]['recipe']['layers'][0]['method']
+        for turn in range(STYLE_PAIRS):
+            while d.busy:time.sleep(.002)
+            self.assertFalse(d.error,d.error);self.assertEqual(len(d.pair),2);self.assertEqual(d.snapshot()['pairMode'],'choice')
+            with self.assertRaises(ValueError):d.feedback({'A':5,'B':3})  # ratings are not accepted any more
+            for i in d.pair:d.heard(i)
+            styles=[style(i) for i in d.pair]
+            if turn<len(OPENING_PAIRS):self.assertEqual(set(styles),set(OPENING_PAIRS[turn]))
+            if turn==len(OPENING_PAIRS):self.assertIn(OPENING_SEVENTH,styles)
+            # Simulated taste: prefers Choir, and the deeper the better (each 'more deep' step wins)
+            o=lambda i:d.candidates[i].get('origin',{})
+            score=lambda i:(style(i)=='vocal')*2-d.candidates[i]['recipe']['layers'][0]['shape'].get('rootRatio',1.)
+            a,b=d.pair;d.feedback(choice='A' if score(a)>score(b) else 'B' if score(b)>score(a) else 'equal')
+        heard=[i for row in d.history for i in row['pair']]
+        self.assertEqual({style(i) for i in heard[:8]},set(STYLES),'every base style heard in the opening')
+        tuned=[d.candidates[i]['origin'] for i in heard if d.candidates[i].get('origin',{}).get('kind')=='tuned']
+        self.assertTrue(all(o['changes'] and o['reason'] for o in tuned))
+        # Direction learning: 'more deep' keeps winning its parent checks, so it scores highest (checked on the export below).
+        self.assertEqual(d.stage,'done');self.assertFalse(d.active);self.assertEqual(d.playoff_history,[])
+        self.assertTrue(1<=len(d.finalists)<=SHORTLIST)
+        d.finish(d.finalists[0]);self.assertEqual(d.final,d.finalists[0])
+        result=d.export();self.assertEqual(result['policy'],'source-style-explore-v1')
+        self.assertEqual(result['preference_model']['style_ranking'][0]['style'],'vocal')
+        # The preference model learns that deeper helps for this listener (who only cares about pitch). Chained moves can share
+        # some credit (a known limit of a linear model over chains), so only the sign is checked.
+        scores={(x['group'],x['direction']):x['score'] for x in result['preference_model']['direction_scores']}
+        self.assertGreater(scores[('deep','more')],0);self.assertLess(scores[('deep','less')],0)
+        self.assertTrue(all(row['rating_source']=='choice' and row['origin_by_candidate'] for row in result['history']))
+
+    def test_momentum_repeats_a_move_that_beat_its_parent_and_losers_go_last(self):
+        from experiment.source_search import StyleDiscovery,style_recipe,tune_style
+        d=StyleDiscovery(renderer=self.render);self.addCleanup(d.close)
+        parent=style_recipe('glass');d.candidates['P']={'id':'P','recipe':parent}
+        child,_=tune_style(random.Random(1),parent,'deep',1);d.candidates['C']={'id':'C','recipe':child,'origin':{'kind':'tuned','parent':'P','group':'deep','direction':'more','step':.5}}
+        loser,_=tune_style(random.Random(2),parent,'full',-1);d.candidates['L']={'id':'L','recipe':loser,'origin':{'kind':'tuned','parent':'P','group':'full','direction':'less','step':.5}}
+        d.history=[{'pair':['P','C'],'rating_source':'choice','choice':'B','winner':'C'},{'pair':['P','L'],'rating_source':'choice','choice':'A','winner':'P'}]
+        scores=d.direction_scores();self.assertGreater(scores[('deep','more')][0],0);self.assertLess(scores[('full','less')][0],0)
+        order=[(d._origin_for(r)['group'],d._origin_for(r)['direction'],d._origin_for(r)['reason']) for r in d._tunings('C')]
+        self.assertEqual(order[0][:2],('deep','more'));self.assertEqual(order[0][2],'repeats the move that just improved it')
+        self.assertIn(order[-1][:2],{('full','less'),('deep','less')})  # losers (and the opposite of a winner) go last
+
+    def test_feature_model_shares_evidence_and_settled_sounds_are_left_alone(self):
+        from experiment.source_search import StyleDiscovery,style_recipe,tune_style
+        d=StyleDiscovery(renderer=self.render);self.addCleanup(d.close)
+        cl,ch=style_recipe('airy'),style_recipe('vocal');d.candidates={'CL':{'id':'CL','recipe':cl},'CH':{'id':'CH','recipe':ch}}
+        rows=[]
+        for n in range(3):  # Cluster beats three of its own tunings in a row...
+            t,_=tune_style(random.Random(n),cl,'full',1);d.candidates[f't{n}']={'id':f't{n}','recipe':t,'origin':{'kind':'tuned','parent':'CL','group':'full','direction':'more','step':.5}}
+            rows.append({'pair':['CL',f't{n}'],'rating_source':'choice','choice':'A','winner':'CL'})
+        deeper,_=tune_style(random.Random(9),ch,'deep',1);d.candidates['CH2']={'id':'CH2','recipe':deeper,'origin':{'kind':'tuned','parent':'CH','group':'deep','direction':'more','step':.5}}
+        rows+=[{'pair':['CH','CL'],'rating_source':'choice','choice':'A','winner':'CH'},{'pair':['CH','t0'],'rating_source':'choice','choice':'A','winner':'CH'}]
+        d.history=rows
+        # ...but Choir beat Cluster directly: a brand-new, never-compared deeper Choir already ranks above Cluster.
+        self.assertGreater(d._utility('CH2'),d._utility('CL'))
+        self.assertTrue(d._settled('CL'));self.assertFalse(d._settled('CH'))
+
+    def test_bradley_terry_orders_by_choices(self):
+        from experiment.source_search import bt_strengths
+        rows=[{'pair':['a','b'],'choice':'A'},{'pair':['b','c'],'choice':'A'},{'pair':['a','c'],'choice':'equal'},{'pair':['c','b'],'choice':'B'}]
+        s=bt_strengths(['a','b','c','d'],rows)
+        self.assertGreater(s['a'],s['b']);self.assertGreater(s['b'],s['c']);self.assertAlmostEqual(s['d'],1.,places=6)
+
+    def test_tuning_moves_one_group_within_range(self):
+        from experiment.source_search import tune_style,style_recipe,STYLE_GROUPS,STYLE_RANGES
+        rng=random.Random(1)
+        for group in STYLE_GROUPS:
+            for direction in (1,-1):
+                child,changes=tune_style(rng,style_recipe('vocal'),group,direction)
+                self.assertEqual(set(changes),{k for k,_ in STYLE_GROUPS[group]} & set(changes))
+                for key,(old,new) in changes.items():self.assertTrue(STYLE_RANGES[key][0]<=new<=STYLE_RANGES[key][1])
+        child,changes=tune_style(rng,style_recipe('vocal'),'deep',1)
+        self.assertLess(child['layers'][0]['shape']['rootRatio'],1.);self.assertNotEqual(child['seed'],0)

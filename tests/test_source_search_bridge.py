@@ -15,11 +15,9 @@ class SourceSearchBridgeTest(unittest.TestCase):
     def test_commands_forward_ids_and_explicit_export(self):
         self.bridge.command('sourceDiscoveryStart',{})
         self.discovery.start.assert_called_once()
-        self.bridge.command('sourceDiscoveryBookmark',{'id':'a','enabled':True,'note':'Full'})
-        self.discovery.bookmark.assert_called_once_with('a',True,'Full')
         self.discovery.export.return_value={'format':'ev-source-discovery-v1'}
         self.assertEqual(self.bridge.command('sourceDiscoveryExport',{}),self.discovery.export.return_value)
-        with self.assertRaises(ValueError):self.bridge.command('sourceDiscoveryBookmark',{'id':'a','enabled':'yes'})
+        with self.assertRaises(ValueError):self.bridge.command('sourceDiscoveryBookmark',{'id':'a','enabled':True})  # favourites removed
 
     def test_native_and_source_trials_are_mutually_exclusive(self):
         self.controller.search.active=True

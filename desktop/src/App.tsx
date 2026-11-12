@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { tauriClient, type BackendMessage } from './client'
 import Dashboard from './Dashboard'
 import type { SourceDiscoveryState } from './SourceSearch'
 import PageShell from './PageShell'
-import TraceFlow, { type Candidate, type Comparison } from './TraceFlow'
+import type { HistoryPreview } from './TraceHistory'
+const TraceHistory = lazy(() => import('./TraceHistory'))
+import type { NavTarget } from './NavRail'
 import OverlayHost from './OverlayHost'
 
 type Search = {
@@ -25,11 +27,10 @@ export type State = {
   controllerName: string; controllerBattery: string; controllerError: string
   availableControllers: { id: number; name: string }[]; controllerEnabled: boolean
   sourceDiscovery?: SourceDiscoveryState
+  historyPreview?: HistoryPreview
   search: Search
 }
 type SavedSession = { id: string; text: string; favorite: boolean }
-type TraceSession = { id: string; participant: string; mode: string; created: string; completed: number }
-type Trace = { id: string; participant: string; mode: string; status: string; completed: number; learning_method?: string; skipped_pairs?: unknown[]; comparisons: Comparison[]; favorite?: string; favorite_slot?: string }
 
 function readError(error: unknown) { return error instanceof Error ? error.message : String(error) }
 function number(value: number, digits = 0) { return Number.isFinite(value) ? value.toFixed(digits) : '—' }
@@ -128,15 +129,10 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
   const [mode, setMode] = useState('Deep')
   const [method, setMethod] = useState('gp_preference')
   const [sessions, setSessions] = useState<SavedSession[]>([])
-  const [traceSessions, setTraceSessions] = useState<TraceSession[]>([])
-  const [trace, setTrace] = useState<Trace | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Trace | null>(null)
-  const [deleteError, setDeleteError] = useState('')
   const [favoriteChoiceOpen, setFavoriteChoiceOpen] = useState(false)
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
-  const [selectedAudition, setSelectedAudition] = useState<Record<string, number>>({})
   const [closeRequested, setCloseRequested] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState(false)
+  const [soundLabStart, setSoundLabStart] = useState(false)
   const back = useRef<() => void>(() => {})
 
   useEffect(() => {
@@ -178,7 +174,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     return () => { disposed = true; cancelAnimationFrame(frame); disconnect(); client.current = null }
   }, [overlay])
 
-  const sourceTrialPresent = !!(state?.sourceDiscovery?.active || state?.sourceDiscovery?.completed || state?.sourceDiscovery?.pair.length || state?.sourceDiscovery?.favourites.length)
+  const sourceTrialPresent = !!(state?.sourceDiscovery?.active || state?.sourceDiscovery?.completed || state?.sourceDiscovery?.pair.length)
   useEffect(() => {
     if (overlay) return
     void window.__TAURI__?.core.invoke('set_close_guard', { active: !!state?.search.active || sourceTrialPresent })
@@ -280,17 +276,11 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     if (result && !result.search.active && !result.search.error) { setFavoriteChoiceOpen(false); setPage('dashboard') }
   }
   async function refreshSessions() { setSessions(await command<SavedSession[]>('searchSessions', { participant }) || []) }
-  async function openTrace() { setTraceSessions(await command<TraceSession[]>('traceSessions') || []); setPage('trace') }
-  async function deleteExperiment() {
-    if (!deleteTarget) return
-    setDeleteError('')
-    try {
-      const deleted = await command<boolean>('traceDelete', { id: deleteTarget.id })
-      if (!deleted) throw new Error('Could not delete experiment.')
-      setTraceSessions(rows => rows.filter(row => row.id !== deleteTarget.id))
-      if (trace?.id === deleteTarget.id) { setTrace(null); setSelectedCandidate(null); setSelectedAudition({}) }
-      setDeleteTarget(null)
-    } catch (error) { setDeleteError(readError(error)) }
+  // The trace page needs no vehicle: stop the simulation (and its sound) instead of leaving it running unseen.
+  function openTrace() { if (state?.running) void command('toggle'); setPage('trace') }
+  function goTo(target: NavTarget) {
+    if (target === 'trace') return openTrace()
+    setSoundLabStart(target === 'soundlab'); setPage('dashboard')
   }
   // Leaving the lab mid-session keeps it in memory, but ask first so it is never left by accident.
   const leaveLab = () => { if (state?.sourceDiscovery?.active) setLeaveConfirm(true); else setPage('dashboard') }
@@ -298,7 +288,6 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     if (leaveConfirm) setLeaveConfirm(false)
     else if (favoriteChoiceOpen) setFavoriteChoiceOpen(false)
     else if (closeRequested) setCloseRequested(false)
-    else if (deleteTarget) { setDeleteTarget(null); setDeleteError('') }
     else if (page === 'search') leaveLab()
     else if (page !== 'dashboard') setPage('dashboard')
   }
@@ -323,23 +312,14 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
 
   return <div className={overlay ? 'beamng-overlay-root' : 'dashboard-wrapper'}>
     {favoriteChoiceOpen && state?.search.active && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Choose favorite sound"><h2 className="text-xl">Which sound do you prefer?</h2><p className="my-4 text-sm text-neutral-300">Choose the sound to save as your favorite.</p>{state.search.error && <p role="alert" className="mb-4 text-sm text-red-300">{state.search.error}</p>}<div className="flex flex-wrap gap-2"><button className="control" autoFocus onClick={() => setFavoriteChoiceOpen(false)}>Cancel</button><button className="control" onClick={() => void finishSearch(true, 'A')}>Save Sound A</button><button className="control" onClick={() => void finishSearch(true, 'B')}>Save Sound B</button></div></div></div>}
-    {leaveConfirm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Leave Preference Lab"><h2 className="text-xl">Leave the Preference Lab?</h2><p className="my-4 text-sm text-neutral-300">Your sound discovery session is still in progress ({state?.sourceDiscovery?.step ?? state?.sourceDiscovery?.completed ?? 0} / {state?.sourceDiscovery?.totalSteps ?? 20} steps). Leaving pauses it: open Personalize sound to continue where you stopped. Closing the app loses it unless you Export first.</p><div className="flex flex-wrap gap-2"><button className="control" autoFocus onClick={() => setLeaveConfirm(false)}>Stay</button><button className="control border-red-500" onClick={() => { setLeaveConfirm(false); setPage('dashboard') }}>Leave</button></div></div></div>}
-    {closeRequested && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Close active search"><h2 className="text-xl">Close active search?</h2><p className="my-4 text-sm text-neutral-300">{sourceTrialPresent && !state?.search.active ? 'Source discovery is held in memory. Cancel and use Export in Personalize sound before closing to keep its results.' : 'Save progress, discard this session, or keep working.'}</p><div className="flex flex-wrap gap-2"><button className="control" onClick={() => setCloseRequested(false)}>Cancel</button>{(!sourceTrialPresent || state?.search.active) && <button className="control" onClick={() => void closeWithSearch(false)}>Save and close</button>}<button className="control border-red-500" onClick={() => void closeWithSearch(true)}>Discard and close</button></div></div></div>}
-    {deleteTarget && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Delete experiment"><h2 className="text-xl">Delete experiment?</h2><p className="my-4 text-sm text-neutral-300">Delete “{deleteTarget.participant} · {deleteTarget.mode}” and all saved comparisons? This cannot be undone.</p>{deleteError && <p role="alert" className="mb-4 text-sm text-red-300">{deleteError}</p>}<div className="flex flex-wrap gap-2"><button className="control" onClick={() => { setDeleteTarget(null); setDeleteError('') }}>Cancel</button><button className="control border-red-500" onClick={() => void deleteExperiment()}>Delete experiment</button></div></div></div>}
+    {leaveConfirm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Leave Preference Lab"><h2 className="text-xl">Leave the Preference Lab?</h2><p className="my-4 text-sm text-neutral-300">Your sound discovery session is still in progress ({state?.sourceDiscovery?.step ?? state?.sourceDiscovery?.completed ?? 0} / {state?.sourceDiscovery?.totalSteps ?? 20} steps). Leaving pauses it: open Personalize sound to continue where you stopped. Closing the app loses unfinished work: finished ratings are saved to Sound trace automatically.</p><div className="flex flex-wrap gap-2"><button className="control" autoFocus onClick={() => setLeaveConfirm(false)}>Stay</button><button className="control border-red-500" onClick={() => { setLeaveConfirm(false); setPage('dashboard') }}>Leave</button></div></div></div>}
+    {closeRequested && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Close active search"><h2 className="text-xl">Close active search?</h2><p className="my-4 text-sm text-neutral-300">{sourceTrialPresent && !state?.search.active ? 'Source discovery ratings are saved to Sound trace automatically; the unfinished pair is not.' : 'Save progress, discard this session, or keep working.'}</p><div className="flex flex-wrap gap-2"><button className="control" onClick={() => setCloseRequested(false)}>Cancel</button>{(!sourceTrialPresent || state?.search.active) && <button className="control" onClick={() => void closeWithSearch(false)}>Save and close</button>}<button className="control border-red-500" onClick={() => void closeWithSearch(true)}>Discard and close</button></div></div></div>}
     {!state && <div className="min-h-screen p-5 md:p-8"><div className="panel p-8">Connecting to simulator…</div></div>}
     {state && overlay && (page === 'dashboard' || page === 'search') && <OverlayHost state={state} error={error} page={page} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onLeave={leaveLab} searchPanel={searchPanel} />}
-    {state && !overlay && (page === 'dashboard' || page === 'search') && <Dashboard personalizeOpen={page === 'search'} state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onTrace={() => void openTrace()} searchPanel={page === 'search' && personalizationActive ? searchPanel : null} />}
-      {state && page === 'trace' && <PageShell active="trace" onDashboard={() => setPage('dashboard')} onTrace={() => void openTrace()}>
+    {state && !overlay && (page === 'dashboard' || page === 'search') && <Dashboard personalizeOpen={page === 'search'} state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onTrace={openTrace} initialSoundLab={soundLabStart} searchPanel={page === 'search' && personalizationActive ? searchPanel : null} />}
+      {state && page === 'trace' && <PageShell active="trace" title="SOUND TRACE" onNavigate={goTo}>
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-500 bg-red-950 p-3 text-red-200">{error}</div>}
-        {state.audioError && <div role="alert" className="mb-4 rounded-lg border border-red-500 bg-red-950 p-3 text-red-100">{state.audioError}</div>}
-        <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
-          <section className="panel space-y-3 p-5"><h2 className="text-xl">Sound trace</h2>{traceSessions.map(session => <button key={session.id} className="control block w-full text-left" onClick={() => void command<Trace>('traceSession', { id: session.id }).then(data => { setTrace(data); setSelectedCandidate(null); setSelectedAudition({}) })}>{session.participant} · {session.mode}<span className="block text-xs text-neutral-400">{session.completed || 0} comparisons</span></button>)}</section>
-          <section className="panel p-6">{trace ? <>
-<div className="trace-panel-head"><div><h2 className="text-xl">{trace.participant} · {trace.mode}</h2><p className="mt-1 text-neutral-400">{trace.completed} comparisons{trace.skipped_pairs?.length ? ` · ${trace.skipped_pairs.length} skipped pair${trace.skipped_pairs.length === 1 ? '' : 's'}` : ''}</p>{trace.status === 'satisfied' && trace.favorite_slot && <p className="mt-1 text-neutral-200">Final favorite: Sound {trace.favorite_slot} · {trace.favorite}</p>}</div><button className="icon-button danger" title={trace.status === 'active' && trace.completed > 0 ? 'Pause or finish the active session before deleting' : 'Delete experiment'} aria-label="Delete experiment" disabled={trace.status === 'active' && trace.completed > 0} onClick={() => { setDeleteError(''); setDeleteTarget(trace) }}><img src="/icons/trash.svg" alt="" /></button></div>
-            <div className="mt-5 max-h-[62vh] overflow-y-auto pr-2"><TraceFlow comparisons={trace.comparisons} method={trace.learning_method} selectedId={selectedCandidate?.id} onSelect={(candidate, audition) => { setSelectedCandidate(candidate); setSelectedAudition(audition) }} /></div>
-            {selectedCandidate && <div className="mt-5 rounded-lg border border-neutral-600 p-4"><div className="flex items-center justify-between"><strong>{selectedCandidate.id}</strong><button className="control" disabled={state.search.active} onClick={() => void command('tracePreview', { sessionId: trace.id, candidateId: selectedCandidate.id })}>Replay</button></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs">{Object.entries(selectedCandidate.controls).map(([name, value]) => <div key={name}>{name}: {number(value, 3)}</div>)}</div><details className="mt-3 text-xs"><summary>Full DSP profile</summary><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap">{JSON.stringify(selectedCandidate.profile, null, 2)}</pre></details><details className="mt-3 text-xs"><summary>Saved audition summary</summary><pre className="mt-2 whitespace-pre-wrap">{JSON.stringify(selectedAudition, null, 2)}</pre></details></div>}
-          </> : 'Select a session to inspect.'}</section>
-        </div>
+        <Suspense fallback={null}><TraceHistory command={command} preview={state.historyPreview} /></Suspense>
       </PageShell>}
       {searchPanel && !personalizationActive && !overlay && <div className="search-overlay">{searchPanel}</div>}
   </div>

@@ -81,7 +81,7 @@ Status: a one-listener calibration, not a validated standard. The caps below are
 - All 28 renders passed the existing signal checks, so those checks do not catch modulation.
 - Nearly all candidate sounds carry a baseline envelope component near 43 Hz (roughness-band depth 0.26–0.44). It sits in the static source before granular processing. Hypothesis: beating between the foundation and the 0.75 x root pad voice (partials 0.25 x root, about 44 Hz apart). Supporting evidence: Rounded, whose companions are unison and octave, measured lowest, and the unison/octave tuning removed the peak. Not confirmed with a calibrated roughness metric.
 
-One listener (the developer), headphones, player volume 20 %, 20 clips (`desktop/src/RoughnessListeningCheck.tsx`):
+One listener (the developer), headphones, player volume 20 %, 20 clips (the listening-check panel was removed from Sound Lab on 2026-11-10; it is in git history as `desktop/src/RoughnessListeningCheck.tsx`, and the clips are in `desktop/public/audio/roughness-check-v1`):
 
 | Clip | Rating |
 | --- | --- |
@@ -328,6 +328,56 @@ These parts can be isolated for controlled experiments, but real sound design is
 
 The evidence does **not** establish low CPU use on target hardware, a suitable source library, an effective mapping, or preference-learning compatibility. The supplied BMW clip audition was removed after listening exposed pitch fluctuation and unrelated source dropouts. The separate organ preview is not mapped. Neither trial validates a source-first renderer.
 
+
+## IONIQ 5 N Ignition reference and the engine stage (2026-11-11)
+
+Project measurement of `ev-sound-example/hyundai-ignition-evolution-supersonic.mp3`. The clip plays three modes in sequence; 2–7 s is Ignition (confirmed by ear). It is a YouTube recording that includes cabin, speakers and compression, and Hyundai's method is not published.
+
+- **Pitch:** about 60 Hz at idle, rising to about 215–260 Hz in the first acceleration.
+- **Fixed resonances:** spectral-envelope peaks near 175, 370 and 560 Hz stay put while pitch climbs. Energy falls steeply above 1 kHz (−27 dB at 1 kHz, −51 dB at 2 kHz relative to the peak).
+- **Rasp:** loudness fluctuation at 15–80 Hz (envelope std / mean) is 25–40% at launch and 12–16% while accelerating. Noise content is near zero, so Ignition is a clean engine tone with rasp.
+
+**Why the loop-based Engine could not match it:** the granular player shifts everything in the loop with pitch, including resonances, and its overlapping 160 ms grains average out slow loudness pulses (loop 12% rasp, heard 4–9%).
+
+**Engine stage (implemented):** for the Engine style only, `EngineStage` in `desktop/public/audio/granular-processor.mjs` runs after the granular player in both the app and the offline renderer. Rasp: firing cycles alternate louder and softer (half-order growl) with a little per-cycle randomness (0.15). Earlier versions were heard as worse: regular sine pulses at 1/2, 1/4 and 1/8 of the firing rate sounded like tremolo, and fully random per-cycle loudness sounded noisy (tone-to-noise about 17 dB, against 34 dB now). The shared chorus and room reverb are switched off for the Engine style (a car cabin is small and nearly dry): the chorus's slow delay modulation added wobble, and the bright 2 s room reverb (61% of its energy at 1–4 kHz) sat above the engine's 1.2 kHz low-pass and was heard as air. The background air layer is also muted for the Engine, and the Engine uses its body layer only (pad and upper layers repeated the same pitches through separate granular players and could drift out of phase). The offline clip renderer (`tools/finalize_family_evaluation.py`) now also skips chorus and reverb for the Engine, so clips match the app: loudness wobble while accelerating fell from about 14% to under 1%. Rasp depth is 0.25 (gentler than the measured-match value 0.4, after listening). Then, at the listener's request for a deeper, more EV-like engine: loop pitch lowered (about 67 Hz at launch), a low boom at 50 Hz and body peaks at 120/250 Hz with a gentler 175 Hz peak and stronger half-order burble (lope 0.3), bringing the 63–500 Hz envelope within a few dB of Ignition; optional hollow colour (even harmonics at 0.45) and a short dark cabin reverb (about 0.5 s, wet 0.22) inside the engine stage. Fixed peaks at 175/370/560 Hz plus a 1.2 kHz low-pass. Settings: `engineStageFor` in `sourceDesigner.ts`.
+
+Gear-shift pitch drops were tried and removed at the listener's request: the target is one natural rev from idle to the limit.
+
+Earlier measurements of slow wobble (15–19%) included the shared chorus and reverb in the clip renderer, not the engine itself. Not yet matched: the reference's fuller 125–500 Hz region.
+
+## Orchestral style becomes a solo cello (2026-11-11)
+
+At the listener's request the Orchestral style (id `orchestra`, label "Solo cello") is a single bowed instrument rising from deep to high, with no wobble and no noise. Earlier versions (a nine-player section, then a six-player ensemble stage with vibrato) are in git history; lessons: fixed detuning beat as engine-like vibration, and vibrato baked into the loop was averaged out by the granular grains. Now: one plain bowed-string voice (sawtooth-like series), no vibrato, drift, bow noise, horn, chord or extra layers; cello-body resonances fixed in pitch after the player (near 105, 200, 400 Hz and a 1.5 kHz bridge region; approximate, from published cello acoustics) with a warm low end; no air layer. Pitch runs from about 56 Hz at rest upward (`PITCH_TRAVEL` 2.4).
+
+Follow-up after listening (too buzzy, not deep, wanted chorus and reverb): a smoother tone (harmonic slope 2.3, high cut near 2 kHz) cut launch roughness from 25% to 14%; a lower start and a 60 Hz body boost raised energy below 120 Hz from 4% to 18%. The shared chorus adds no measurable wobble (0.1%), so it is on. The shared room reverb is off for this style: on a rising note its tail holds the earlier pitch and beats against the current one (loudness wobble 11% with it, 0.1% without). Reverb is instead built into the loop (hall, wet 0.5), which rises with the note. The shared effects are now per style (`chorus` amount and `room` flag in `engineStageFor`), in the app and the clip renderer.
+
+## Bright styles tried and removed (2026-11-11)
+
+The six pad styles are all dark (0–1% of energy above 1 kHz); four (bowed, glass, resonant, airy) are within 0.09–0.19 spectral distance of each other. Two bright prototypes designed without a reference, an "Electric whine" (pure hum plus order-6 whine) and a "Futuristic" bright synth with a 2–5 kHz whoosh, were rejected by the listener (disliked strongly) and removed. Likely reasons: pure sine tones read as a test tone; a raw bright synth with hiss reads as harsh. Next attempt should match a reference recording the listener likes (as was done for the Engine).
+
+## Base styles: names and measured character (2026-11-11)
+
+Report names are plain one- or two-word labels (code ids unchanged). Measured on the simulated 22 s drive (brightness = spectral centroid, launch → top speed; roughness = 15–80 Hz envelope modulation; harmonic = energy at harmonics of the main pitch). Pitch rises with speed for every style; brightness (tone colour) is a separate property.
+
+| Code | Name (id) | What it is | Brightness | Roughness | Harmonic |
+| --- | --- | --- | --- | --- | --- |
+| S1 | Strings (`bowed`) | warm, dark bowed-string pad | 125 → 203 Hz | 30% | 60% |
+| S2 | Pure tone (`rounded`) | clean, smooth electronic tone | 187 → 189 Hz | 0.2% | 96% |
+| S3 | Choir (`vocal`) | small choir singing "aah"; the brightest style | 319 → 490 Hz | 14% | 59% |
+| S4 | Glass (`glass`) | bell-like, shimmering tones | 166 → 261 Hz | 25% | 59% |
+| S5 | Cluster (`airy`) | soft, diffuse clusters of tones | 143 → 205 Hz | 33% | 60% |
+
+| S6 | Electric (`evolution`) | smooth electric tone modelled on the IONIQ 5 N Evolution mode | about 500 Hz | 9% | strong orders 2 and 4 |
+
+Electric was matched to 7.5–10.5 s of `ev-sound-example/hyundai-ignition-evolution-supersonic.mp3` (Evolution mode). The reference's held section has a main note near 130 Hz with an almost silent fundamental, strongest orders 4 and 2, orders 3 and 6–9 about 8–13 dB lower, an off-series partial near 1.2× the main note, brightness 781 Hz and 23% of energy above 1 kHz. It is a plain style like the pads (no after-player stage; shared chorus, room reverb and air layer), so it layers and blends like any other style; only its larger pitch climb (`PITCH_TRAVEL` 2.2, from about 42 Hz at rest) is style-specific. Ours at top speed: orders 1–9 within about 1–5 dB of the reference, brightness 754 Hz, 18% above 1 kHz. Without the stage it has little rasp (1–8%, reference 12%), and the shared room reverb adds some movement while accelerating (11%), as for the other styles. No noise was added.
+
+After listening ("too sharp and pointy"), Electric was smoothed: harmonics above order 9 and the high cut lowered (energy above 2 kHz 7.8% → 0.8%), the off-series partial removed, and the harmonics' start phases staggered so they no longer peak together each cycle (roughness 18% → 9%, same spectrum). It is now darker than the reference (brightness about 500 Hz vs 781 Hz) but keeps its strong orders 2 and 4. Its peak was still a little sharp; of five listened options (less climb, softer orders 6–9, both, and both without chorus or room reverb), the listener chose softer orders 6–9 with the full climb (orders 6–9 at 0.2, 0.22, 0.12, 0.06; tail 0.05): energy above 2 kHz at the peak 1.3% → 0.3%.
+
+| S7 | Jet (`supersonic`) | turbine-like whine near 1 kHz over a low rumble, modelled on the IONIQ 5 N Supersonic mode | about 750 Hz | 7% | inharmonic side tones |
+
+Jet was matched to 11.5–16 s of the same clip (Supersonic mode). The reference has a steady whine near 1 kHz (987–1,031 Hz) with side tones at about 0.41, 0.68 and 0.9 of it, and a low rumble at 65–115 Hz (brightness 760 Hz, 31% above 1 kHz, 22% below 200 Hz, some noise, rasp 18%, wobble 28%). Ours is a plain style: a smooth rumble with staggered harmonic phases plus the whine and its side tones, rising gently (`PITCH_TRAVEL` 0.8; whine about 820 Hz → 1.24 kHz on the simulated drive). Measured: brightness 818 Hz, 25% below 200 Hz, 59% above 1 kHz (the reference's share is partly broadband noise, which ours leaves out), nothing above 2 kHz, rasp 3%. Noise and wobble were not copied. Tuned before listening: the 0.9× side tone, close to the whine, rubbed at about 100 Hz; lowering it (0.5 → 0.12) cut roughness from 18% to 7%, giving brightness 747 Hz, 49% above 1 kHz and 29% below 200 Hz.
+
+Metal (`resonant`) was merged into Cluster: the two measured almost identical (spectral distance 0.09, under the search's 0.10 near-duplicate limit). Its code stays so old session recipes replay; it is hidden in Sound Lab. Engine and Cello are parked. A bright style matched to a reference recording is planned.
 
 ## Deferred sound-design idea: slow organic drift
 

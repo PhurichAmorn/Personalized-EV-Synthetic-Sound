@@ -11,7 +11,7 @@ def packet(**fields):
 
 class TorqueScalerTests(unittest.TestCase):
     def test_drive_and_regen_scale_to_their_own_peaks(self):
-        scaler = TorqueScaler(drive_floor=100, regen_floor=40)
+        scaler = TorqueScaler(drive_floor=100, regen_floor=40, smooth_s=0)
         self.assertAlmostEqual(scaler.update(300, .03), 1.0)    # new peak
         self.assertAlmostEqual(scaler.update(150, .03), .5, places=2)
         self.assertAlmostEqual(scaler.update(-20, .03), -.5)     # half of the 40 Nm regen floor
@@ -19,11 +19,30 @@ class TorqueScalerTests(unittest.TestCase):
         self.assertAlmostEqual(scaler.update(-40, .03), -.5, places=2)
 
     def test_peaks_are_forgotten_slowly(self):
-        scaler = TorqueScaler(forget_s=10)
+        scaler = TorqueScaler(forget_s=10, smooth_s=0)
         scaler.update(1000, .03)
         for _ in range(100):
             scaler.update(0, 1.0)
         self.assertLess(scaler.peaks[0], 300)
+
+
+    def test_noise_around_zero_and_standstill_read_as_zero(self):
+        scaler = TorqueScaler(smooth_s=0)
+        scaler.update(200, .03, speed=20)                       # normal driving first
+        for torque in (-1.0, -2.5, 1.5, -0.5):                   # jitter at a standstill
+            self.assertEqual(scaler.update(torque, .03, speed=0.0), 0.0)
+        self.assertEqual(scaler.update(-2.0, .03, speed=15), 0.0)  # inside the deadband while moving too
+        self.assertLess(scaler.update(-30.0, .03, speed=15), 0)   # a real regen torque still shows
+        self.assertEqual(scaler.update(-30.0, .03, speed=0.1), 0.0)  # but not when stopped
+
+    def test_output_is_smoothed(self):
+        scaler = TorqueScaler(smooth_s=0.12)
+        scaler.update(0, .03, speed=10)
+        first = scaler.update(-60, .03, speed=10)
+        self.assertTrue(-1.0 < first < 0.0)                      # moving toward -1, not jumping
+        for _ in range(40):
+            last = scaler.update(-60, .03, speed=10)
+        self.assertLess(last, -.95)
 
 
 class ControllerRegenTests(unittest.TestCase):

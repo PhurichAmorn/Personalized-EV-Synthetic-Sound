@@ -1,5 +1,6 @@
 import math
 import logging
+import os
 import time
 
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer, QEvent, Qt
@@ -110,6 +111,22 @@ class SimulatorController(QObject):
         return (max(self.gamepad_throttle, self.external_throttle, float(Qt.Key.Key_W in self.keys_down)),
                 max(self.gamepad_brake, self.external_brake, float(Qt.Key.Key_S in self.keys_down)))
 
+    def _record_beamng(self, now, state):
+        """EV_SOUND_BEAMNG_LOG=<file>: append what BeamNG sent and what the app derived from it (10 rows/s)."""
+        path = os.environ.get('EV_SOUND_BEAMNG_LOG')
+        if not path or now - getattr(self, '_record_last', -1) < 0.1:
+            return
+        self._record_last = now
+        fresh = not os.path.exists(path) or os.path.getsize(path) == 0
+        value = lambda key: '' if state.get(key) is None else f'{state[key]:.4f}'
+        with open(path, 'a') as handle:
+            if fresh:
+                handle.write('t,speed_kmh,throttle,brake,motor_torque,regen_field,regen_torque,motor_load_field,app_signed_load,app_regen,peak_drive,peak_regen\n')
+            handle.write(f"{now:.2f},{state['speed_m_s'] * 3.6:.2f},{value('throttle')},{value('brake')},{value('motor_torque')},"
+                         f"{value('regen')},{value('regen_torque')},{value('motor_load')},"
+                         f"{'' if self.beamng_signed_load is None else f'{self.beamng_signed_load:.4f}'},{self._regen_level():.4f},"
+                         f"{self.beamng_torque.peaks[0]:.1f},{self.beamng_torque.peaks[1]:.1f}\n")
+
     def _telemetry_load(self, fallback):
         """Signed motor load -1..+1: scaled real torque if the car reports it, else BeamNG's load field."""
         if self.source_mode == 'BeamNG' and self.beamng_state is not None:
@@ -143,9 +160,10 @@ class SimulatorController(QObject):
         self.beamng_previous_sample = (speed, now)
         torque = state.get('motor_torque')
         self.beamng_signed_load = (None if torque is None else
-                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0))
+                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0, speed))
         self.beamng_state = state
         self.beamng_received_at = now
+        self._record_beamng(now, state)
         self.set_beamng_error('')
         self.changed.emit()
 

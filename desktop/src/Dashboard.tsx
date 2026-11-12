@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import ClusterGauge from './ClusterGauge'
 import SoundEditor from './SoundEditor'
+import NavRail from './NavRail'
 import type { SourceHandle } from './SteadySource'
 import type { GranularMode } from './granularPlayer'
 import type { State } from './App'
@@ -13,6 +14,7 @@ type Props = {
   onTrace: () => void
   searchPanel?: ReactNode
   personalizeOpen?: boolean
+  initialSoundLab?: boolean
 }
 
 type DisplayMode = 'classic' | 'sport' | 'digital'
@@ -66,7 +68,7 @@ function PowerChargeBar({ power, charge }: { power: number; charge: number }) {
   </div>
 }
 
-export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, searchPanel, personalizeOpen = false }: Props) {
+export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, searchPanel, personalizeOpen = false, initialSoundLab = false }: Props) {
   const sound = useRef<SourceHandle>(null)
   const [sourceAudioError, setSourceAudioError] = useState('')
   const [granularMode, setGranularMode] = useState<GranularMode>('evolving')
@@ -75,7 +77,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
     if (state.running && !state.starting && granularSelected && !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active) sound.current?.start(true)
   }, [state.running, state.starting])
   const [expanded, setExpanded] = useState(false)
-  const [soundLabOpen, setSoundLabOpen] = useState(false)
+  const [soundLabOpen, setSoundLabOpen] = useState(initialSoundLab)
   const [showInputs, setShowInputs] = useState(false)
   const [customizerOpen, setCustomizerOpen] = useState(false)
   const customizeButton = useRef<HTMLButtonElement>(null)
@@ -146,11 +148,11 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
     }
   }
   return <div className={'dashboard-screen display-' + display} style={{ '--ambient': glows[glow] } as CSSProperties}>
-    <aside className={'dashboard-rail' + (expanded ? ' expanded' : '')} aria-label="Main navigation">
-      <button className={"rail-button" + (!soundLabOpen ? " active" : "")} title="Dashboard" aria-label="Dashboard" onClick={() => { setSoundLabOpen(false); if (granularSelected && state.running) sound.current?.start() }}><img src="/icons/layout-dashboard.svg" alt="" /><span>DASHBOARD</span></button>
-      <button className="rail-button" title="Sound trace" aria-label="Sound trace" onClick={() => { setSoundLabOpen(false); onTrace() }}><img src="/icons/activity.svg" alt="" /><span>TRACE</span></button>
-      <button className={"rail-button" + (soundLabOpen ? " active" : "")} title="Sound Lab" aria-label="Sound Lab" onClick={() => { setSoundLabOpen(true) }}><img src="/icons/sliders.svg" alt="" /><span>SOUND LAB</span></button>
-    </aside>
+    <NavRail active={soundLabOpen ? 'soundlab' : 'dashboard'} expanded={expanded} onSelect={target => {
+      if (target === 'trace') { setSoundLabOpen(false); onTrace(); return }
+      setSoundLabOpen(target === 'soundlab')
+      if (target === 'dashboard' && granularSelected && state.running) sound.current?.start()
+    }} />
     <div className="dashboard-main">
       <header className="dashboard-header" hidden={soundLabOpen}>
         <button className="header-sidebar" title="Toggle sidebar" aria-label="Toggle sidebar" onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>

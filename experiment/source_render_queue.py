@@ -88,7 +88,7 @@ class SourceRenderer:
 
 
 def trim_cache(protected):
-    """Evict oldest unreferenced audio at 1 GiB; current/favourite audio is protected."""
+    """Evict oldest unreferenced audio at 1 GiB; current-session audio is protected."""
     if not CACHE.exists():return
     directories=[path for path in CACHE.iterdir() if path.is_dir()]
     sizes={path:sum(p.stat().st_size for p in path.rglob('*') if p.is_file()) for path in directories}

@@ -12,7 +12,8 @@ export function soundResponse(value: number, mode: SoundResponse) {
   return x
 }
 /** Power leads Steady; RPM/speed lead Rise/Evolving, with pedal/load presence and acceleration colour. */
-export function drivingSoundTargets(input: DrivingInput, stale = false, response: SoundResponse = 'exponential', mode: GranularMode = 'evolving') {
+/** travel: multiple of the usual pitch climb (1 = shared mapping); a family can climb further from the same resting pitch. */
+export function drivingSoundTargets(input: DrivingInput, stale = false, response: SoundResponse = 'exponential', mode: GranularMode = 'evolving', travel = 1) {
   // Service brake overrides propulsion (as in the vehicle model): throttle must not drive the sound.
   const pedal = unit(input.brake ?? 0) > 0 ? 0 : unit(input.throttle)
   const load = input.motorLoad !== null && Number.isFinite(input.motorLoad) ? Math.max(-1, Math.min(1, input.motorLoad)) : null
@@ -39,7 +40,7 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
     : 0
   // A little launch depth tapers away without raising the upper pitch endpoint.
   const launchDepth = 1 * (1 - pitchRegister) ** 2
-  const semitones = -10 - launchDepth + (mode === 'steady' ? 9 : 11) * pitchRegister + (mode === 'evolving' ? 4 * (1 - Math.exp(-highSpeed / 80)) : 0)
+  const semitones = -10 - launchDepth + (mode === 'steady' ? 9 : 11) * travel * pitchRegister + (mode === 'evolving' ? 4 * (1 - Math.exp(-highSpeed / 80)) : 0)
   return {
     cycleSpeed: mode === 'evolving' ? .25 + .75 * Math.max(pedal, power) : 1,
     loopHold: mode === 'evolving' && Number.isFinite(input.speedKmh) && input.speedKmh >= 100 ? 1 : 0,

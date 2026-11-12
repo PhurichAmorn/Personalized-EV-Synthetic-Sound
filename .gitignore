@@ -27,6 +27,9 @@ desktop/public/audio/*.wav
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 
+# Benchmark render library and personal listening/session renders (rebuild library with tools/build_source_library.py)
+/.cache/
+
 # Anonymous source-discovery development render cache
 /desktop/public/audio/source-search-cache/
 

@@ -9,7 +9,7 @@ async function moduleAt(path) {
 }
 const designerCode=ts.transpileModule(readFileSync('desktop/src/sourceDesigner.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText
 const designerUrl=`data:text/javascript;base64,${Buffer.from(designerCode).toString('base64')}`
-const {createSourceStems,SOURCE_FAMILIES,DEFAULT_SOURCE_CONTROLS}=await import(designerUrl)
+const {createSourceStems,SOURCE_FAMILIES,DEFAULT_SOURCE_CONTROLS,PITCH_TRAVEL,engineStageFor}=await import(designerUrl)
 const recipeCode=ts.transpileModule(readFileSync('desktop/src/sourceRecipe.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace("'./sourceDesigner'",JSON.stringify(designerUrl))
 const {renderRecipe}=await import(`data:text/javascript;base64,${Buffer.from(recipeCode).toString('base64')}`)
 const recipe=process.argv[4]?JSON.parse(readFileSync(process.argv[4],'utf8')):null
@@ -46,19 +46,22 @@ for(const {id} of recipe?[{id:'candidate'}]:SOURCE_FAMILIES) {
  const source=new Float32Array(5*rate*2)
  for(let i=0;i<5*rate;i++)for(let c=0;c<2;c++)source[2*i+c]=stems.reduce((sum,stem)=>sum+stem[c][i],0)
  writeFileSync(`${root}/${id}_source.f32`,Buffer.from(source.buffer))
- const engines=stems.map(stem=>new SourceLoopEngine(stem,rate))
+ const stage=engineStageFor(recipe?recipe.layers[0].method:id,recipe?recipe.layers[0].shape:{})
+ if(stage)(meta.effects??={})[id]={chorus:stage.chorus,room:stage.room}  // finalize applies the same shared chorus/room settings as the app
+ const engines=stems.map((stem,i)=>{const engine=new SourceLoopEngine(stem,rate);if(i<3)engine.setEngine(stage);return engine})  // engine stage after the player, not on air
  const direct=new Float32Array(frames*2),filtered=new Float32Array(frames*2),automation=new Float32Array(frames*2)
- let pitch=drivingSoundTargets(simulatedDrive(0),false,'exponential',mode).rate,target,previousTarget=0,gain=0,targetGain=0,smoothing=.18
+ const travel=PITCH_TRAVEL[recipe?recipe.layers[0].method:id]??1
+ let pitch=drivingSoundTargets(simulatedDrive(0),false,'exponential',mode,travel).rate,target,previousTarget=0,gain=0,targetGain=0,smoothing=.18
  const layers=[1,.65,.1,1]
  for(let i=0;i<frames;i++) {
   if(i%480===0) {
-   target=drivingSoundTargets(simulatedDrive(i/rate),false,'exponential',mode)
+   target=drivingSoundTargets(simulatedDrive(i/rate),false,'exponential',mode,travel)
    const envelope=driveEnvelopeTarget(target.driveGain,responseRiseSeconds.exponential,target.driveGain<previousTarget)
    targetGain=envelope.gain;smoothing=envelope.smoothing;previousTarget=target.driveGain
   }
   pitch+=(target.rate-pitch)*(1-Math.exp(-1/(.35*rate)))
   gain+=(targetGain-gain)*(1-Math.exp(-1/(smoothing*rate)))
-  const targets=[target.bodyGain,target.padGain,target.glassGain,target.airGain]
+  const targets=[target.bodyGain,target.padGain,target.glassGain,stage?0:target.airGain]  // styles with a stage: no air layer (see SteadySource)
   for(let stem=0;stem<4;stem++) {
    layers[stem]+=(targets[stem]-layers[stem])*(1-Math.exp(-1/(.15*rate)))
    const left=engines[stem].sample(stem===3?1:pitch,stem===3?0:target.loopHold,stem<3&&mode==='evolving'?1:0,stem<3?target.cycleSpeed:1),right=engines[stem].right

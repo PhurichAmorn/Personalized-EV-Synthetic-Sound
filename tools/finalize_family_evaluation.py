@@ -40,13 +40,15 @@ def finalize(root=None):
         bus=direct+filtered
         time=np.arange(len(bus))/RATE
         chorus=np.empty_like(bus)
+        effects=manifest.get('effects',{}).get(name,{'chorus':1,'room':True})  # per-style shared effects, as in the app
+        amount=effects['chorus']
         for channel,(delay,frequency) in enumerate([(.018,.28),(.023,.33)]):
             position=np.arange(len(bus))-(delay+.0012*np.sin(2*np.pi*frequency*time))*RATE
             delayed=np.interp(position,np.arange(len(bus)),bus[:,channel],left=0,right=0)
-            chorus[:,channel]=.75*bus[:,channel]+.25*delayed
+            chorus[:,channel]=(1-.25*amount)*bus[:,channel]+.25*amount*delayed
         driven=chorus*controls[:,0,None]
         wet=np.column_stack([fftconvolve(driven[:,c],impulse[:,c]) for c in range(2)])
-        drive=.68*np.pad(driven,((0,len(impulse)-1),(0,0)))+.32*wet
+        drive=.68*np.pad(driven,((0,len(impulse)-1),(0,0)))+.32*wet if effects['room'] else np.pad(driven,((0,len(impulse)-1),(0,0)))
         # Same output startup ramp and listening gain, before comparison normalization.
         drive[:len(driven)]*=np.minimum(1,np.maximum(0,(time+.02)/.3))[:,None]*.7
         drive[len(driven):]*=.7

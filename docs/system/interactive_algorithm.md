@@ -56,16 +56,72 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-**Current app policy: open pool (`source-open-mutation-gp-v1`, `OpenDiscovery`).** The family-preset trial described after this section is kept in code (`SourceDiscovery`) as the baseline. It was replaced in the app because sessions stayed inside the six family presets and, in the [simulated-listener benchmark](source_search_benchmark.md), did no better than random proposals.
+### Base-style exploration (stage 1 implemented: `source-style-explore-v1`, `StyleDiscovery`)
+
+Agreed 2026-11-11; it replaces the open-pool policy below in the app, and that policy stays in code as a baseline.
+
+**Build status.** Built in the app:
+- the opening, direct choices on every pair, exploration by tuned versions and parent checks, and the trace;
+- Bradley-Terry ranking of sounds and styles;
+- direction learning;
+- the shortlist ending.
+
+Tuning moves one generic group by half its range: deep lowers pitch by 1.26× per step (about 4 semitones) and raises body; bright moves harmonic character; full moves ensemble; moving moves movement. Electric and Jet ignore the four source controls, so they get pitch moves only.
+
+A pair never shows two tunings of the same sound. If every tuning of the best sound is a near-copy, the pair falls back to tunings of the next-ranked sounds; up to 20 renders are tried per pair.
+
+Not yet built: per-style sound groups (stage 2) and blends (stage 3).
+
+**Preference model and direction learning.** A single Bradley-Terry model over what sounds are made of: style (one-hot) plus net group steps along the tuning chain ("more deep" twice = +2), fitted by ridge logistic regression (strength 1) on every choice. It ranks sounds, chooses which sound to build on, and gives each move its learned effect. A new deeper Choir therefore inherits the evidence about Choir and about "deeper" instead of starting from zero.
+
+This replaced per-sound Bradley-Terry. In the 2026-11-11 15:52 session that version kept building on base Cluster, because winning parent checks made Cluster look strong, while Choir won the cross-style pairs (6 of the last 8). Replaying that session's choices, the feature model leaves Cluster at pair 8 and builds on deeper Choir from pair 13.
+
+The next tuning of a sound prefers, in order: the move that just beat its parent (momentum), then the higher learned effect, then a 0.3 bonus for moves not yet tried on that sound. A sound that beat its own tunings in its last 2 parent checks is left alone, and the search builds on the next-ranked sound.
+
+Known limit: moves that always come together in a chain share credit (in the replay, the inaudible "moving" got credit next to "deep"); parent checks, which change one thing at a time, reduce this.
+
+**Ending.** All 20 steps are discovery pairs; there is no final round. In the 2026-11-11 session it only confirmed the order the discovery ranking already had. The listener chooses from a shortlist: up to 5 audibly distinct sounds with at least 2 choices each, top 3 shown, #4–5 behind "Show more".
+
+**Goal.** Help a listener who has no sound in mind explore EV sounds and end with one they enjoy and would choose again. The search is not trying to find a hidden target. People without a clear target construct their preference while comparing options (Slovic 1995; Payne, Bettman & Johnson 1992), so the tool offers good, clearly different options and follows the listener's lean. Random open-pool sounds were often unpleasant (in one session 7 of 11 new random sounds were rated 1), which wastes turns and gives a poor first impression.
+
+**Base styles (7).** Strings, Pure tone, Choir, Glass, Cluster, Electric (after the IONIQ 5 N Evolution mode) and Jet (after the Supersonic mode); names and measurements are in [sound design research](../research/sound_design_research.md#base-styles-names-and-measured-character-2026-11-11). Engine and Cello are parked; Metal is merged into Cluster.
+
+**Feedback.** Every pair is a direct choice: Prefer A / Like both equally / Prefer B. Pairwise choices are steadier than separate 1–7 scores (one session rated the same sound 6 and later 3). The 1–7 rating code is kept but not shown.
+
+**Session (20 steps, as now).**
+
+| Pairs | Content |
+| --- | --- |
+| 1–4 | Opening: all 7 styles once, paired for contrast (for example Strings vs Choir, Cluster vs Jet, Pure tone vs Electric); pair 4 puts the 7th style against the style preferred so far, which also re-checks the leader. |
+| 5–20 | Exploration around the listener's lean (see below). |
+
+**Exploration pair types (pairs 5–14).**
+- *Tuned version:* one sound group of a preferred sound (deep, bright, rough, metallic, airy, moving) moved by a clearly audible step; it must pass the 0.10 audio-distance gate against its parent. The group-to-parameter map is defined per style.
+- *Parent check:* a tuned version next to its own parent, so the comparison directly shows whether the change helped.
+- *Blend:* the two most preferred styles layered (one as the main layer, the other mixed in at 30%, 50% or 70%), giving sounds no single style has. Layering uses the existing multi-layer recipe; averaging parameters across different style types is not meaningful.
+- *Unheard or lower-ranked style:* occasionally, so four opening choices do not lock the direction.
+
+**Learning.** A Bradley-Terry model over what each sound is made of (style, sound-group moves, blend share) fitted to all choices, with group trends (which directions the listener likes) carried across styles. It replaces the rating-based GP. A preference GP (Chu & Ghahramani 2005) is the heavier alternative if needed.
+
+**Trace.** Every sound records its origin (base style, tuned version with the changed parameters, or blend with its share), and each pair records the choice. The export holds session metrics.
+
+**Measuring success.** With listeners: satisfaction with the final sound; whether they choose it again later (liking can change with repeated exposure; Münder et al. 2025); whether different people end in different places; time taken. Benchmark (later): simulated listeners with different hidden tastes over the styles, not one target sound.
+
+**Current app policy: open pool (`source-open-groups-gp-v4`, `OpenDiscovery`).** The family-preset trial described after this section is kept in code (`SourceDiscovery`) as the baseline. It was replaced in the app because sessions stayed inside the six family presets and, in the [simulated-listener benchmark](source_search_benchmark.md), did no better than random proposals.
 
 - **Pool.** Every layer uses the generic `blocks` voice. It combines a harmonic series (slope, even-harmonic gain, up to 48 partials, optional inharmonic stretch) with two optional resonant peaks and a low-pass, and adds optional half-order pulse lope, FM, a looping noise band, a tanh waveshaper and amplitude modulation. Root pitch is 0.4–2 times the reference (about 70–350 Hz). Recipes have 1–3 layers, all drawn at random. Families are not inputs, and the loudness normalization and signal checks are unchanged.
 - **Same flow as before.** 20 listening steps (14 rated pairs, then 4 diverse finalists and a 6-pair Bradley-Terry final round), the 0.10 audio-distance gate, and an explicit final choice.
 - **Opening (pairs 1–3).** Random open recipes.
 - **Later pairs.** Each pair has two slots:
-  - *Exploit:* a mutation or crossover of the three best-rated sounds, picked by a GP upper bound. The GP regresses the ratings on the foundation layer's parameters scaled to 0–1, with a fixed RBF kernel.
-  - *Explore:* the random newcomer the GP is least certain about.
-  - Mutation perturbs each parameter, sometimes switches a block on or off or adds or removes a peak or layer. This lets a session move away from its starting sounds while keeping coverage.
-- **Status.** The policy is untested with listeners and has not been benchmarked: the open-pool render library is not built yet. The GP length and noise and the mutation scale are untuned defaults.
+  - *Exploit:* a tuned version of one of the three best-rated sounds. Tuning moves exactly one **sound group** by a fixed, audible step (30% of each parameter's range), more or less, and leaves everything else unchanged. A GP upper bound picks the parent, group and direction, so the choice comes from the listener's ratings, not chance. The GP regresses ratings on the foundation layer's parameters (plus ensemble and movement) scaled to 0–1, with a fixed RBF kernel.
+  - *Explore:* the random newcomer the GP is least certain about. Newcomers draw every parameter and the layer count at random, so the whole open pool stays reachable.
+  - **Sound groups** (named after listener timbre dimensions such as depth, brightness and roughness): deep (pitch, low peak, even harmonics), bright (cutoff, harmonic slope, upper peak), resonant (peak strength and width), rough (drive, AM depth and rate), metallic (FM amount, index, ratio, inharmonicity), airy (noise amount, width, centre) and moving (lope, ensemble, movement). Every parameter belongs to a group, so grouping limits how one step moves, not which sounds exist. "Less" of a feature that is off is skipped as inaudible; "more" can switch a feature on.
+  - **Parent check (pairs 5, 8, 11 and 14).** The current best sound returns next to one tuning of itself, so the tuning is judged directly against its parent and a lucky first rating is re-checked. If a newcomer outscores it, the newcomer becomes the parent. Skipped once the best sound has 3 ratings or is settled. The listener answers with a direct choice (Prefer A / Like both equally / Prefer B), because the same sound was rated 6 and then 3 in one session and pairwise choices are steadier than separate scores. The parent keeps its ratings; the tuned sound gets an inferred rating of the parent's mean +1, 0 or −1 (`rating_source: choice`, `inferred_rating` in the trace). Legacy option: `PARENT_CHECK_MODE='rating'` keeps the 1–7 sliders on these pairs (`rating_source: rating-1-7`).
+  - **Shrinking step.** Each parent's step starts at 30% and halves after a tuning scores below it, at most once per pair, down to 20%. A loss at 20% marks the parent as settled. Rough and moving always use 30%. Idea from the 1/5 success rule of evolution strategies (Rechenberg): big steps while far from a good sound, smaller when close. Steps of 10–15% sounded like copies.
+  - **Group trends.** For each group and direction (for example `deep+`, `rough-`) the search averages how much a tuned sound's rating changed against its parent, shrunk toward 0 with prior weight 2, and adds it to the GP score of new tunings. A lesson such as "deeper helps" then carries over to other parents, which the distance-based GP alone cannot do. Same idea as per-band weights from rating changes in EQ preference learning (Sabin & Pardo 2008). Exported as `preference_model.group_trends`.
+  - Every tuned sound must also pass the 0.10 audio-distance gate against its own parent, except rough and moving tunings: the spectrum descriptor cannot hear roughness or movement, so those keep the full step instead.
+- **Trace.** Every candidate stores `origin`: `new` (random) or `tuned`, with parent, parent score, group, direction, step and each changed parameter as `[old, new]`. Each history row lists `origin_by_candidate` as a one-line summary (a returning parent is labelled as such). `session_metrics` reports tuned-vs-parent wins, ties and losses, the best rating and the first pair that reached it, and each parent's current step. Origins are in the export only; listeners are not told what changed.
+- **Status.** The policy is untested with listeners and has not been benchmarked: the open-pool render library is not built yet. The GP length and noise and the group step are untuned defaults. One simulated session with real renders ran end to end.
 
 ### Family-preset baseline (`SourceDiscovery`)
 
@@ -83,7 +139,7 @@ Candidate labels join the methods used by the source roles; `+` means a synthesi
 
 Preparation uses the raw source plus the Rise driving sweep as its sole qualification proxy. It does not rerun qualification when the listener selects Steady or Evolving; all three share the candidate source. Exported qualification_modes records this scope.
 
-Source discovery opens through the dashboard’s Personalize sound button, using the same GS player and live telemetry. During an active trial the panel occupies the existing dashboard personalization slot; the ordinary dashboard and Sound Lab do not show a separate discovery section. The portal container stays mounted when the panel closes. Change style with the dashboard GS next-mode button; the trial has no separate Style selector. START preserves the trial candidate instead of launching the original template. Native theme switches are disabled while the source trial is active. The old Original granular template control section is no longer rendered. Its component remains mounted as the shared audio engine, with audio errors forwarded to the dashboard. Personalize sound uses the existing setup/comparison panel classes for source discovery rather than stacking the new experiment above the legacy form; finalists use a matching panel. The retained Sound Lab views are separate comparison/stress tools.
+Source discovery opens through the dashboard’s Personalize sound button, using the same GS player and live telemetry. During an active trial the panel occupies the existing dashboard personalization slot; the ordinary dashboard and Sound Lab do not show a separate discovery section. The portal container stays mounted when the panel closes. Change style with the dashboard GS next-mode button; the trial has no separate Style selector. START preserves the trial candidate instead of launching the original template. Native theme switches are disabled while the source trial is active. The old Original granular template control section is no longer rendered. Its component remains mounted as the shared audio engine, with audio errors forwarded to the dashboard. Personalize sound uses the existing setup/comparison panel classes for source discovery rather than stacking the new experiment above the legacy form; finalists use a matching panel. Sound Lab shows only the base-style picker: each style replays the same simulated drive. The earlier baseline, Audiobox and roughness listening panels were removed on 2026-11-10 (in git history).
 
 Opening rounds include fresh fallback recipes within the existing eight-render attempt budget. A withheld reference no longer leaves only the same two seeds to retry. Retry generates a fresh fallback pool; it does not lower technical or diversity thresholds. Preparation errors report ready count, similarity skips and rendering/check failures, including the latest renderer reason when present.
 

@@ -178,6 +178,7 @@ class Sidecar:
                           {'event': 'error', 'data': str(exc)})
 
     def close(self):
+        self.bridge.history.clear()
         self.bridge.source_discovery.close()
         if isinstance(self.input, QSocketNotifier):
             self.input.setEnabled(False)

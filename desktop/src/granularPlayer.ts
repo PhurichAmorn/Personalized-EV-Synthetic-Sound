@@ -18,6 +18,8 @@ export class GranularPlayer {
     this.node.port.postMessage({ type: 'buffer', samples: [buffer.getChannelData(0), buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1))] })
     this.node.port.onmessage = () => this.onended?.()
   }
+  /** Engine stage after the player (Engine style only); null turns it off. */
+  setEngine(config: unknown) { this.node.port.postMessage({ type: 'engine', config }) }
   setSource(buffer: AudioBuffer) {
     this.node.port.postMessage({ type: 'buffer', samples: [buffer.getChannelData(0), buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1))] })
   }
