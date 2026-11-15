@@ -154,7 +154,8 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
       if (target === 'dashboard' && granularSelected && state.running) sound.current?.start()
     }} />
     <div className="dashboard-main">
-      <header className="dashboard-header" hidden={soundLabOpen}>
+      {/* Header and cluster unmount while Sound Lab is open, so backend state updates do not re-render hidden gauges. */}
+      {!soundLabOpen && <header className="dashboard-header">
         <button className="header-sidebar" title="Toggle sidebar" aria-label="Toggle sidebar" onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
         <div className="dashboard-brand"><strong>EV SOUND LAB</strong><small>DRIVE SIMULATOR</small></div>
         <div className="header-spacer" />
@@ -169,7 +170,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
         <button ref={customizeButton} className="display-customize-button" aria-label="Customize dashboard display and ambient color" aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>DISPLAY</span></button>
         <div className="info-holder"><button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button><pre className="specs-popover">{state.specs}</pre></div>
-      </header>
+      </header>}
       {customizerOpen && <div className="display-customizer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) { setCustomizerOpen(false); customizeButton.current?.focus() } }}>
         <section className="display-customizer" role="dialog" aria-modal="true" aria-labelledby="display-customizer-title" onKeyDown={trapCustomizerFocus}>
           <header className="customizer-header"><div><h2 id="display-customizer-title">Display</h2><p>Set your instrument style.</p></div><button ref={closeButton} className="customizer-close" onClick={() => { setCustomizerOpen(false); customizeButton.current?.focus() }}>Close</button></header>
@@ -177,7 +178,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
           <section className="customizer-section ambient-section" aria-labelledby="ambient-title"><h3 id="ambient-title">Speed glow</h3><div className="ambient-options" role="group" aria-label="Glow under the speed reading">{Object.entries(glows).map(([name, color]) => <button key={name} className={'ambient-option' + (glow === name ? ' selected' : '')} aria-label={name} aria-pressed={glow === name} onClick={() => setGlowColor(name as keyof typeof glows)}><span style={{ backgroundColor: color }} /></button>)}</div></section>
         </section>
       </div>}
-      <section className="dashboard-cluster" hidden={soundLabOpen} aria-label="Instrument cluster">
+      {!soundLabOpen && <section className="dashboard-cluster" aria-label="Instrument cluster">
         {display !== 'digital' && <ClusterGauge kind="power" power={state.power} charge={state.charge} startupProgress={startupProgress} startupBlend={startupBlend} design={display === 'classic' ? 'circle' : undefined} />}
         <div className="cluster-center">
           <div className="speed-reading"><span>{!state.running || state.starting ? '—' : Math.round(state.speed)}</span><small>km/h</small></div>
@@ -186,7 +187,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
           <div className={'cluster-status ' + (state.running && !state.starting ? 'ready' : '')}>{status}</div>
         </div>
         {display !== 'digital' && <ClusterGauge kind="speed" speed={state.speed} maximum={state.speedGaugeMaximum} startupProgress={startupProgress} startupBlend={startupBlend} design={display === 'classic' ? 'circle' : undefined} />}
-      </section>
+      </section>}
       <section className={'dashboard-controls' + (personalizeOpen ? ' personalize-active' : '')} hidden={soundLabOpen} aria-label="Driving controls">
         <div className="input-controls">
           <button className={'controller-status' + (connected ? ' connected' : '')} title={state.controllerError || 'W throttle · S brake · controller triggers'} onClick={() => setShowInputs(!showInputs)}>{connected ? '●  CONTROLLER CONNECTED' : '○  CONTROLLER DISCONNECTED'}</button>

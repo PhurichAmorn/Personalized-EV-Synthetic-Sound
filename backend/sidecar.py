@@ -17,6 +17,10 @@ from backend.gamepad_input import GamepadInput
 from backend.beamng_telemetry import decode_ev_sound_packet
 
 
+# Longest gap between state messages while nothing changes (page treats live input as stale after 750 ms).
+STATE_HEARTBEAT_SECONDS = 0.25
+
+
 class StdinPump(QObject):
     """Windows: QSocketNotifier cannot watch a pipe, so a thread reads stdin and queues chunks to the Qt thread."""
     received = Signal(bytes)
@@ -50,7 +54,13 @@ class Sidecar:
         self.gamepad.navigation.connect(lambda action: self.send({'event': 'navigate', 'data': action}))
         self.audio_monitor = AudioOutputMonitor(self.controller, app)
         self.buffer = bytearray()
-        self.last_publish = 0.0
+        self.last_publish = self.last_check = 0.0
+        self.last_message = None
+        self.dirty = True
+        c = self.controller
+        for signal in (c.changed, c.vehicleChanged, c.sessionChanged, c.soundThemeChanged, c.audioErrorChanged,
+                       c.controllerChanged, c.controllerDevicesChanged, c.controllerBatteryChanged, c.inputChanged):
+            signal.connect(self.mark_dirty)
         self.beamng_seen = False
         self.beamng_last_error = ''
         if os.environ.get('EV_SOUND_STALL_TRACE'):
@@ -93,7 +103,7 @@ class Sidecar:
         reported = 0.0
         while True:
             time.sleep(0.02)
-            last = self.last_publish
+            last = self.last_check
             if last and time.monotonic() - last > 0.12 and last != reported:
                 reported = last
                 lines = [f'[trace] state stalled {(time.monotonic() - last) * 1000:.0f} ms; thread stacks:']
@@ -104,12 +114,29 @@ class Sidecar:
                         lines.extend(line.rstrip() for line in traceback.format_stack(frame)[-6:])
                 sys.stderr.write('\n'.join(lines) + '\n')
 
+    def mark_dirty(self):
+        self.dirty = True
+
     def publish_state(self):
         # Stall log (stderr, shown in the dev terminal): a gap here means the backend, not the page, froze.
         start = time.monotonic()
-        if self.last_publish and start - self.last_publish > 0.15:
-            sys.stderr.write(f'[stall] no state sent for {(start - self.last_publish) * 1000:.0f} ms\n')
-        self.send({'event': 'state', 'data': self.bridge.snapshot()})
+        if self.last_check and start - self.last_check > 0.15:
+            sys.stderr.write(f'[stall] state timer late by {(start - self.last_check) * 1000:.0f} ms\n')
+        self.last_check = start
+        c = self.controller
+        due = start - self.last_publish >= STATE_HEARTBEAT_SECONDS
+        # Idle (car off, no signal or command since the last state): build the snapshot 4x/s instead of 30x/s.
+        if not (due or self.dirty or c.running or c.soundSweepActive or c._beamng_fresh() or any(c.controller_pedals())):
+            return
+        self.dirty = False
+        message = encode_message({'event': 'state', 'data': self.bridge.snapshot()})
+        # Identical state (e.g. car on but parked) is not re-sent, so the page does not re-render for nothing.
+        # The heartbeat still sends it, keeping the page's 750 ms live-input staleness check satisfied.
+        if message == self.last_message and not due:
+            return
+        self.last_message = message
+        sys.stdout.write(message)
+        sys.stdout.flush()
         self.last_publish = time.monotonic()
         if self.last_publish - start > 0.03:
             sys.stderr.write(f'[slow] building+sending state took {(self.last_publish - start) * 1000:.0f} ms\n')
@@ -170,6 +197,7 @@ class Sidecar:
                 elif not self.controller.running and was_running:
                     self.startup.stop()
                 self.send({'id': ident, 'result': result})
+                self.dirty = True  # publish the command's effect on the next 33 ms tick
             except (ValueError, TypeError) as exc:
                 self.send({'id': ident, 'error': str(exc)} if ident is not None else
                           {'event': 'error', 'data': str(exc)})
