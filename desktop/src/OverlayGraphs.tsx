@@ -107,9 +107,42 @@ function drawWave(canvas: HTMLCanvasElement | null, wave: ArrayLike<number>, lev
   drawing.strokeStyle = '#d6d6d6'; drawing.lineWidth = 1.4; drawing.stroke()
 }
 
-/** Live sound waveform: from the granular player's analyser (GS) or the native engine (Comfort/Sport/Deep). */
-export function WaveGraph({ granular, analyser, onCommand }: {
+// Spectrogram colour ramp (same as Sound Lab's scope), precomputed once: dark = quiet, bright amber = loud.
+const RAMP = Array.from({ length: 256 }, (_, i) => {
+  const level = i / 255, hue = (30 + 30 * level) / 30, light = level * .62, chroma = .9 * Math.min(light, 1 - light)
+  const channel = (n: number) => { const k = (n + hue) % 12; return Math.round(255 * (light - chroma * Math.max(-1, Math.min(k - 3, 9 - k, 1)))) }
+  return [channel(0), channel(8), channel(4)]
+})
+const LOW_HZ = 40, HIGH_HZ = 12000
+
+/** Scroll the spectrogram left and paint one new column (log frequency up, brightness = level) in a single pixel write. */
+function drawColumn(canvas: HTMLCanvasElement | null, db: (hz: number) => number, cssWidth: number) {
+  if (!canvas) return
+  const ratio = window.devicePixelRatio || 1, width = Math.round(canvas.clientWidth * ratio), height = Math.round(canvas.clientHeight * ratio)
+  if (width < 2 || height < 2) return
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
+  const drawing = canvas.getContext('2d')
+  if (!drawing) return
+  const column = Math.max(1, Math.round(cssWidth * ratio))
+  drawing.setTransform(1, 0, 0, 1, 0, 0)
+  drawing.drawImage(canvas, column, 0, width - column, height, 0, 0, width - column, height)
+  const image = drawing.createImageData(column, height)
+  for (let y = 0; y < height; y++) {
+    const hz = LOW_HZ * (HIGH_HZ / LOW_HZ) ** (1 - y / (height - 1))
+    const [r, g, b] = RAMP[Math.round(Math.max(0, Math.min(1, (db(hz) + 100) / 70)) * 255)]
+    for (let x = 0; x < column; x++) { const at = (y * column + x) * 4; image.data[at] = r; image.data[at + 1] = g; image.data[at + 2] = b; image.data[at + 3] = 255 }
+  }
+  drawing.putImageData(image, width - column, 0)
+}
+
+export type SoundView = 'wave' | 'spectrogram'
+
+/** Live sound graph, waveform or spectrogram: from the granular player's analyser (GS) or the native engine (Comfort/Sport/Deep).
+ * Draws only while the sound is on (active); the overlay unmounts it entirely during an experiment session. */
+export function SoundGraph({ granular, active, view, analyser, onCommand }: {
   granular: boolean
+  active: boolean
+  view: SoundView
   analyser: () => AnalyserNode | null
   onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
 }) {
@@ -120,29 +153,40 @@ export function WaveGraph({ granular, analyser, onCommand }: {
   const getAnalyser = useRef(analyser)
   getAnalyser.current = analyser
   useEffect(() => {
+    if (canvas.current) canvas.current.width = canvas.current.width  // clear: new view, or the sound stopped
+    if (!active) return
     let disposed = false
+    const draw = (wave: ArrayLike<number>, db: (hz: number) => number, stepMs: number) =>
+      view === 'wave' ? drawWave(canvas.current, wave, level.current) : drawColumn(canvas.current, db, stepMs / 25)  // 40 px per second
     if (granular) {
-      const samples = new Float32Array(2048)
-      let frame = 0
+      let samples = new Float32Array(2048), freq = new Float32Array(1024), frame = 0
       const tick = () => {
         if (disposed) return
         const node = getAnalyser.current()
-        if (node) node.getFloatTimeDomainData(samples); else samples.fill(0)
-        drawWave(canvas.current, samples, level.current)
-        frame = window.setTimeout(tick, 50)  // ~20 fps is plenty for a small trace
+        if (node) {
+          if (freq.length !== node.frequencyBinCount) { freq = new Float32Array(node.frequencyBinCount); samples = new Float32Array(node.fftSize) }
+          if (view === 'wave') node.getFloatTimeDomainData(samples); else node.getFloatFrequencyData(freq)
+        } else { samples.fill(0); freq.fill(-140) }
+        const binHz = (node?.context.sampleRate ?? 48000) / (2 * freq.length)
+        draw(samples, hz => freq[Math.round(hz / binHz)] ?? -140, 50)
+        frame = window.setTimeout(tick, 50)  // ~20 fps is plenty for a small graph
       }
       tick()
       return () => { disposed = true; window.clearTimeout(frame) }
     }
     void command.current('debugVisible', { value: true })
     const timer = window.setInterval(() => {
-      void Promise.resolve(command.current('soundDebug')).then(data => {
-        if (!disposed) drawWave(canvas.current, (data as { waveform?: number[] } | undefined)?.waveform ?? [], level.current)
+      void Promise.resolve(command.current('soundDebug')).then(result => {
+        if (disposed) return
+        const data = (result ?? {}) as { waveform?: number[]; frequencies?: number[]; spectrum_db?: number[] }
+        const spectrum = data.spectrum_db ?? [], step = data.frequencies?.[1] ?? 0
+        // The backend spectrum stops at 2 kHz, so the top of the native-engine spectrogram stays dark.
+        draw(data.waveform ?? [], hz => step ? spectrum[Math.round(hz / step)] ?? -140 : -140, 100)
       }).catch(() => {})
     }, 100)
     return () => { disposed = true; window.clearInterval(timer); void command.current('debugVisible', { value: false }) }
-  }, [granular])
-  return <canvas ref={canvas} className="overlay-graph overlay-wave" aria-label="Sound waveform" role="img" />
+  }, [granular, active, view])
+  return <canvas ref={canvas} className="overlay-graph overlay-wave" aria-label={view === 'wave' ? 'Sound waveform' : 'Sound spectrogram: time left to right, frequency upward'} role="img" />
 }
 
 /** Three vertical bars, colour only: throttle (green) and brake (red) from the controller, regen (blue) from the car. */

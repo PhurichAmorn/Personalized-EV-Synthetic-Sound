@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { InputGraph, LoadGraph, VerticalBars, WaveGraph } from './OverlayGraphs'
+import { InputGraph, LoadGraph, SoundGraph, VerticalBars, type SoundView } from './OverlayGraphs'
 import type { State } from './App'
 
 type Props = {
@@ -26,6 +26,10 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
   const cycleLabel = granular ? granularMode : state.soundRecipeSelection[state.soundTheme]
   const [dragError, setDragError] = useState('')
+  // Sound graph view, remembered per machine. Never shown during an experiment session: seeing the sound could bias what the participant rates.
+  const [soundView, setSoundView] = useState<SoundView>(() => { try { return localStorage.getItem('overlay-sound-view') === 'spectrogram' ? 'spectrogram' : 'wave' } catch { return 'wave' } })
+  const chooseView = (view: SoundView) => { setSoundView(view); try { localStorage.setItem('overlay-sound-view', view) } catch { /* not remembered */ } }
+  const session = state.search.active || !!state.sourceDiscovery?.active
   // Personalize: the window grows to fit the session (no scrolling), and returns to its driving size afterwards.
   const card = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -74,7 +78,12 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
         <LoadGraph load={state.motorLoad ?? 0} />
       </div>
     </div>
-    <WaveGraph granular={granular} analyser={analyser} onCommand={onCommand} />
+    {!personalize && !session && <div>
+      <div className="overlay-caption overlay-sound-head">SOUND<span className="overlay-view" role="group" aria-label="Sound graph">
+        {(['wave', 'spectrogram'] as const).map(view => <button type="button" key={view} aria-pressed={soundView === view} onClick={() => chooseView(view)}>{view === 'wave' ? 'Wave' : 'Spectrogram'}</button>)}
+      </span></div>
+      <SoundGraph granular={granular} active={state.running && !state.starting} view={soundView} analyser={analyser} onCommand={onCommand} />
+    </div>}
     {personalize && <section className="overlay-personalize" aria-label="Personalize sound">{personalize}</section>}
     {(error || state.beamngError || dragError) && <p className="beamng-overlay-error" role="alert">{error || state.beamngError || dragError}</p>}
     <footer className={'beamng-overlay-actions' + (personalize ? ' single' : '')}>
