@@ -50,38 +50,43 @@ td { border-top: 1px solid var(--line); padding: 8px; vertical-align: top }
 <main>
   <header style="display:grid;gap:8px">
     <h1>EV Sound Map</h1>
-    <p>Every box holds the safest generated sound of that kind: it passed the guardrail (sharpness, roughness, pulsing) with the most room to spare. Click a key to hear it, then mark any that sound bad.</p>
+    <p>Every box holds the safest generated sound of that kind: it passed the guardrail (sharpness, roughness, pulsing) with the most room to spare. Click a key to hear it on a 22 s simulated drive (launch, climb to 110 km/h, ease off, coast), then mark any that sound bad.</p>
     <div class="stats" id="stats"></div>
   </header>
   <div class="bar">
-    <span class="note">Pitch while playing:</span>
-    <button id="cruise" aria-pressed="false">Cruise</button>
-    <button id="peak" aria-pressed="true">Full pedal</button>
+    <span class="note">22 s simulated drive:</span>
+    <button id="rise" aria-pressed="true">Rising</button>
+    <button id="evolving" aria-pressed="false">Evolving</button>
     <button id="stop">Stop</button>
     <span style="flex:1"></span>
     <button id="copy">Copy marks</button>
   </div>
   <div class="wrap"><table id="grid"></table></div>
-  <section class="detail" id="detail"><p>Pick a key to hear it. Keys: L, M, H = low, mid, high register. The shaded part of a key shows how far it sits inside the guardrail.</p></section>
+  <section class="detail" id="detail"><p>Pick a key to hear it. Keys: L, M, H = low, mid, high register. The shaded part of a key shows how far it sits inside the guardrail. Meters show the worst moment of the drive.</p></section>
 </main>
 <script src="synth.js"></script><!-- out/synth.js, published next to the page with out/library.json -->
 <script>
 const BRIGHT = ['Darkest', 'Dark', 'Middle', 'Bright', 'Brightest'], PITCH = ['L', 'M', 'H'], PITCH_NAME = ['Low', 'Mid', 'High']
 const TEXTURE_NAME = { tone: 'Clean tone', chord: 'Chord', wide: 'Detuned, wide', bell: 'Bell-like', voice: 'Voice-like', whine: 'Whine' }
-const METRICS = [['S', 'Sharpness', 'acum'], ['R', 'Roughness', 'asper'], ['F', 'Pulsing', '']]
-let lib, ctx, current, selected = null, rate = 1.06
+const METRICS = [['S', 'Sharpness', 'acum'], ['R', 'Roughness', 'asper'], ['F', 'Pulsing', ''], ['C', 'Crowding', 'pairs']]
+let lib, ctx, current, selected = null, mode = 'rise'
 const cache = new Map()
 let marks = {}
-try { marks = JSON.parse(localStorage.getItem('marks') || '{}') } catch {}
-const save = () => { try { localStorage.setItem('marks', JSON.stringify(marks)) } catch {} }
+const marksKey = () => `marks:${lib?.created ?? ''}`  // marks belong to one library: a new run puts new sounds in the same boxes
+const save = () => { try { localStorage.setItem(marksKey(), JSON.stringify(marks)) } catch {} }
 
-function buffer(e) {
-  if (!cache.has(e.cell)) {
-    const g = e.genome, plain = { ...Synth.EXTRAS_OFF, ...Object.fromEntries(Object.entries(g).filter(([k]) => !['tone', 'res', 'tremDepth', 'tremRate', 'reverb', 'pump', 'drift', 'seed'].includes(k))), width: 1 }
-    const [l] = Synth.createPlainSource(plain)
-    const b = ctx.createBuffer(1, l.length, 48000); b.copyToChannel(l, 0); cache.set(e.cell, b)
+const FX_KEYS = ['tone', 'res', 'tremDepth', 'tremRate', 'reverb', 'pump', 'drift']
+// The drive through the app's chain (granular player, pedal-following filter, swell), the same render the full-drive check judged.
+function drive(e) {
+  const key = `${e.cell}/${mode}`
+  if (!cache.has(key)) {
+    const g = e.genome, plain = { ...Object.fromEntries(Object.entries(g).filter(([k]) => !FX_KEYS.includes(k) && k !== 'seed')), width: 1 }
+    const fx = { ...Object.fromEntries(FX_KEYS.map(k => [k, g[k]])), follow: 1, size: 2.5 }
+    const { out, gains } = Synth.driveSound(plain, fx, mode), n = out.length / 2
+    const b = ctx.createBuffer(2, n, 48000); b.copyToChannel(out.subarray(0, n), 0); b.copyToChannel(out.subarray(n), 1)
+    cache.set(key, { buffer: b, gains: Float32Array.from(gains) })
   }
-  return cache.get(e.cell)
+  return cache.get(key)
 }
 
 function stop() { if (current) { const c = current; current = null; c.out.gain.setTargetAtTime(0, ctx.currentTime, .05); setTimeout(() => c.nodes.forEach(n => { try { n.stop?.() } catch {} n.disconnect() }), 300) } }
@@ -89,24 +94,17 @@ function stop() { if (current) { const c = current; current = null; c.out.gain.s
 function play(e) {
   ctx ??= new AudioContext({ sampleRate: 48000 })
   ctx.resume(); stop()
-  const g = e.genome, t = ctx.currentTime
-  const src = ctx.createBufferSource(); src.buffer = buffer(e); src.loop = true; src.playbackRate.value = rate
-  const low = ctx.createBiquadFilter(); low.type = 'lowpass'; low.Q.value = g.res
-  low.frequency.value = Math.min(18000, g.tone * 2 ** (rate > 1 ? 1 : -.2))
-  const nodes = [src, low]
-  if (g.drift) { const o = ctx.createOscillator(), d = ctx.createGain(); o.frequency.value = 1 / 14; d.gain.value = 1100; o.connect(d); d.connect(low.detune); o.start(); nodes.push(o, d) }
-  const trem = ctx.createGain(); trem.gain.value = 1 - g.tremDepth / 2; nodes.push(trem)
-  if (g.tremDepth > 0) {
-    const o = ctx.createOscillator(), d = ctx.createGain(); o.frequency.value = g.tremRate
-    if (g.pump) o.setPeriodicWave(ctx.createPeriodicWave(new Float32Array(9), Float32Array.from({ length: 9 }, (_, n) => n ? (n % 2 ? 1 : -1) / n : 0)))
-    d.gain.value = g.tremDepth / 2; o.connect(d); d.connect(trem.gain); o.start(); nodes.push(o, d)
-  }
+  const g = e.genome, d = drive(e), t = ctx.currentTime + .02  // after the render, so the level curve and the buffer start together
+  const src = ctx.createBufferSource(); src.buffer = d.buffer
+  const level = ctx.createGain(); level.gain.setValueCurveAtTime(d.gains, t, d.buffer.duration)  // drive gain: launch, cruise, coast
+  const nodes = [src, level]
+  src.onended = () => { if (current?.src === src) { current = null; render() } }
   const dry = ctx.createGain(), wet = ctx.createGain(), rev = ctx.createConvolver(), out = ctx.createGain()
   const [L, R] = Synth.roomImpulse(48000, 2.5), ir = ctx.createBuffer(2, L.length, 48000); ir.copyToChannel(L, 0); ir.copyToChannel(R, 1); rev.buffer = ir
   dry.gain.value = 1 - g.reverb * .5; wet.gain.value = g.reverb
-  src.connect(low); low.connect(trem); trem.connect(dry); trem.connect(rev); rev.connect(wet); dry.connect(out); wet.connect(out)
-  out.gain.value = 0; out.gain.setTargetAtTime(.8, t, .05); out.connect(ctx.destination); src.start()
-  nodes.push(dry, wet, rev); current = { nodes, out }
+  src.connect(level); level.connect(dry); level.connect(rev); rev.connect(wet); dry.connect(out); wet.connect(out)
+  out.gain.value = 0; out.gain.setTargetAtTime(.8, t, .05); out.connect(ctx.destination); src.start(t)
+  nodes.push(dry, wet, rev); current = { nodes, out, src }
 }
 
 function describe(e) {
@@ -117,10 +115,10 @@ function describe(e) {
 function showDetail(e) {
   const g = e.genome, d = document.getElementById('detail')
   const meters = METRICS.map(([k, label, unit]) => {
-    const v = e.metrics[k], lim = lib.limits[k], max = lim * 1.25
-    return `<div class="m"><span>${label} ${v.toFixed(2)} ${unit} <span style="opacity:.7">/ limit ${lim}</span></span><div class="track"><i style="width:${Math.min(100, v / max * 100)}%"></i><u style="left:${lim / max * 100}%"></u></div></div>`
+    const m = e.drive?.[mode] ?? e.metrics, v = m[k] ?? e.metrics[k], lim = lib.limits[k], max = lim * 1.25
+    return `<div class="m"><span>${label} ${v.toFixed(2)} ${unit} <span style="opacity:.7">/ limit ${lim}${m.at?.[k] !== undefined ? ` · worst at ${m.at[k].toFixed(0)} s` : ''}</span></span><div class="track"><i style="width:${Math.min(100, v / max * 100)}%"></i><u style="left:${lim / max * 100}%"></u></div></div>`
   }).join('')
-  const settings = `root ${g.rootHz.toFixed(0)} Hz · chord ${g.chord.toFixed(2)} (type ${g.chordType}) · brightness ${g.brightness.toFixed(2)} · hollow ${g.hollow.toFixed(2)} · bell ${g.bell.toFixed(2)}${g.bellModes ? ' (glass modes)' : ''} · vowel ${g.vowel.toFixed(2)} · whine ${g.whine.toFixed(2)} × ${g.whineRatio.toFixed(1)} · detune ${g.detune.toFixed(2)} · air ${g.air.toFixed(2)} · filter ${g.tone.toFixed(0)} Hz Q ${g.res.toFixed(1)}${g.drift ? ' drifting' : ''} · ${g.tremDepth > .02 ? (g.pump ? 'pump' : 'swell') + ` ${g.tremDepth.toFixed(2)} at ${g.tremRate.toFixed(2)} Hz · ` : ''}reverb ${g.reverb.toFixed(2)}`
+  const settings = `root ${g.rootHz.toFixed(0)} Hz · chord ${g.chord.toFixed(2)} (type ${g.chordType}) · brightness ${g.brightness.toFixed(2)} · hollow ${g.hollow.toFixed(2)} · bell ${g.bell.toFixed(2)}${g.bellModes ? ' (glass modes)' : ''} · vowel ${g.vowel.toFixed(2)} · whine ${g.whine.toFixed(2)} × ${g.whineRatio.toFixed(1)} · detune ${g.detune.toFixed(2)} · filter ${g.tone.toFixed(0)} Hz Q ${g.res.toFixed(1)}${g.drift ? ' drifting' : ''} · ${g.tremDepth > .02 ? (g.pump ? 'pump' : 'swell') + ` ${g.tremDepth.toFixed(2)} at ${g.tremRate.toFixed(2)} Hz · ` : ''}reverb ${g.reverb.toFixed(2)}`
   const bad = !!marks[e.cell]
   d.innerHTML = `<h2>${describe(e)}</h2>
     <p>${e.from ? `Grown from your sound <b style="color:var(--ink)">${e.from}</b>.` : 'Grown from a random start.'} Found in round ${e.gen}.</p>
@@ -156,15 +154,16 @@ document.getElementById('grid').onclick = ev => {
   const k = ev.target.closest('[data-cell]'); if (!k) return
   const e = lib.elites.find(x => x.cell === k.dataset.cell); selected = e.cell; play(e); render(); showDetail(e)
 }
-for (const [id, r] of [['cruise', .6], ['peak', 1.06]]) document.getElementById(id).onclick = () => {
-  rate = r; document.getElementById('cruise').setAttribute('aria-pressed', r < 1); document.getElementById('peak').setAttribute('aria-pressed', r > 1)
-  const e = lib.elites.find(x => x.cell === selected); if (e && current) play(e)
+for (const id of ['rise', 'evolving']) document.getElementById(id).onclick = () => {
+  mode = id; for (const b of ['rise', 'evolving']) document.getElementById(b).setAttribute('aria-pressed', b === mode)
+  const e = lib.elites.find(x => x.cell === selected); if (e) { showDetail(e); if (current) play(e) }
 }
 document.getElementById('stop').onclick = stop
 document.getElementById('copy').onclick = async ev => {
+  if (!lib.elites.some(e => marks[e.cell] !== undefined)) { ev.target.textContent = 'Nothing marked yet: pick a key, press Mark as bad'; setTimeout(() => ev.target.textContent = 'Copy marks', 2500); return }
   const text = 'Sound map marks\n' + lib.elites.filter(e => marks[e.cell] !== undefined).map(e => `${e.cell} (${describe(e)}): ${marks[e.cell]}`).join('\n')
   try { await navigator.clipboard.writeText(text); ev.target.textContent = 'Copied' } catch { ev.target.textContent = 'Copy failed: select the list below'; document.getElementById('detail').innerHTML = `<pre style="white-space:pre-wrap">${text}</pre>` }
   setTimeout(() => ev.target.textContent = 'Copy marks', 1500)
 }
-fetch('library.json').then(r => r.json()).then(data => { lib = data; render() })
+fetch('library.json').then(r => r.json()).then(data => { lib = data; try { marks = JSON.parse(localStorage.getItem(marksKey()) || '{}') } catch {} render() })
 </script>

@@ -6,13 +6,13 @@ for var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS')
 from multiprocessing import Pool
 import numpy as np
 from mosqito.sq_metrics import sharpness_din_st, roughness_dw
-from score import FS, PITCHES, play, fluctuation, prepare
+from score import FS, PITCHES, play, fluctuation, crowding, prepare
 
-LIMITS = {'S': 1.3, 'R': .3, 'F': .4}  # guardrail: reject above any (checked on the listener's labels)
+LIMITS = {'S': 1.3, 'R': .3, 'F': .4, 'C': 70}  # guardrail: reject above any (checked on the listener's labels; C from the 2026-11-16 map marks)
 # Gene: (low, high, log scale). Search space = the app's synth settings plus the engine effects the guardrail can hear.
 GENES = {'rootHz': (80, 200, 1), 'brightness': (0, 1, 0), 'hollow': (0, 1, 0), 'bell': (0, 1, 0), 'softTop': (600, 6000, 1),
          'chord': (0, 1, 0), 'vowel': (0, 1, 0), 'vowelShape': (0, 1, 0), 'fundamental': (.3, 1, 0), 'whine': (0, 1, 0),
-         'whineRatio': (3, 8, 0), 'detune': (0, 1, 0), 'air': (0, .4, 0),
+         'whineRatio': (3, 8, 0), 'detune': (0, 1, 0),  # no 'air': fixed at 0 like every preset (plainSource.ts); listeners heard it as wind
          'tone': (800, 6000, 1), 'res': (.6, 8, 1), 'tremDepth': (0, .6, 0), 'tremRate': (.1, 2, 1), 'reverb': (0, .6, 0)}
 CHOICES = {'chordType': list(range(8)), 'bellModes': [0, 1], 'pump': [0, 1], 'drift': [0, 1]}
 FX_KEYS = {'tone', 'res', 'tremDepth', 'tremRate', 'reverb', 'pump', 'drift'}
@@ -20,6 +20,7 @@ PITCH_EDGES, BRIGHT_EDGES = [100, 140], [.45, .6, .75, .95]  # Hz; sharpness (ac
 TEXTURES = ['tone', 'chord', 'wide', 'bell', 'voice', 'whine']
 rng = np.random.default_rng(1)
 WORKERS = max(1, os.cpu_count() - 1)
+KEEP = 5  # sounds kept per box: the elite plus 4 runners-up
 
 
 def texture(g):
@@ -72,10 +73,11 @@ def check(job):
     """Guardrail measures, worst of cruising and peak pitch; margin > 0 means it passes."""
     path, fx = job
     loop = np.fromfile(path, dtype=np.float32).astype(float); os.remove(path)
-    worst = {'S': 0, 'R': 0, 'F': 0}
+    partials = json.load(open(path[:-4] + '.json')); os.remove(path[:-4] + '.json')
+    worst = {'S': 0, 'R': 0, 'F': 0, 'C': 0}
     for rate, pedal in PITCHES.values():
         x = play(loop, fx, rate, pedal)
-        m = {'S': float(sharpness_din_st(x, FS)), 'R': float(np.mean(roughness_dw(x[:FS], FS)[0])), 'F': fluctuation(x)}
+        m = {'S': float(sharpness_din_st(x, FS)), 'R': float(np.mean(roughness_dw(x[:FS], FS)[0])), 'F': fluctuation(x), 'C': crowding(partials, fx, rate, pedal)}
         worst = {k: max(worst[k], m[k]) for k in m}
     return worst
 
@@ -109,6 +111,7 @@ if __name__ == '__main__':
     prepare()
     generations, size = int(sys.argv[1]) if len(sys.argv) > 1 else 40, 140
     elites, log, tried, passed = {}, [], 0, 0
+    created = time.strftime('%Y-%m-%d %H:%M')  # identifies this library (the page keeps marks per library)
     with Pool(WORKERS) as pool:
         for gen in range(generations + 1):
             start = time.time()
@@ -123,10 +126,12 @@ if __name__ == '__main__':
                 if margin <= 0: continue
                 passed += 1
                 c = cell(g, m)
-                if c not in elites or margin > elites[c]['margin']:
-                    elites[c] = {'cell': c, 'genome': g, 'metrics': m, 'margin': margin, 'gen': gen, 'from': g.get('seed')}
+                # Elite = safest sound in the box; the next safest are kept as runners-up (fallbacks for the full-drive check).
+                entry = {'cell': c, 'genome': g, 'metrics': m, 'margin': margin, 'gen': gen, 'from': g.get('seed')}
+                ranked = sorted([entry] + ([elites[c], *elites[c]['runners']] if c in elites else []), key=lambda e: -e['margin'])[:KEEP]
+                elites[c] = {**ranked[0], 'runners': [{k: v for k, v in e.items() if k != 'runners'} for e in ranked[1:]]}
             log.append({'gen': gen, 'tried': tried, 'passed': passed, 'filled': len(elites), 'seconds': round(time.time() - start, 1)})
             print(log[-1], flush=True)
-            json.dump({'limits': LIMITS, 'textures': TEXTURES, 'pitchEdges': PITCH_EDGES, 'brightEdges': BRIGHT_EDGES,
+            json.dump({'created': created, 'limits': LIMITS, 'textures': TEXTURES, 'pitchEdges': PITCH_EDGES, 'brightEdges': BRIGHT_EDGES,
                        'log': log, 'elites': sorted(elites.values(), key=lambda e: e['cell'])}, open('library.json', 'w'), indent=1)
     shutil.rmtree('tmp', ignore_errors=True)

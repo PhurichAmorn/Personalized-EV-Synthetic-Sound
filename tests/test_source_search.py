@@ -1,4 +1,6 @@
 import random,unittest
+import numpy as np
+from pathlib import Path
 from experiment.source_search import make_recipe,SourceDiscovery
 
 class SourceSearchTest(unittest.TestCase):
@@ -657,3 +659,31 @@ class TuningDiscoveryTest(unittest.TestCase):
         variants=full.split('export const VARIANTS')[1]
         for fam,ids in TUNING_VARIANTS.items():
             for v in ids:self.assertIn(f"id: '{v}'",variants)
+
+
+class SoundMapDiscoveryTest(unittest.TestCase):
+    def test_session_spreads_opening_follows_taste_and_never_pairs_near_copies(self):
+        from experiment.source_search import SoundMapDiscovery,MAP_OPENING,MAP_NEAR
+        import random as stdrandom
+        d=SoundMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(2)
+        unit=lambda i:d._unit(d.candidates[i]['recipe'])
+        taste=lambda i:-abs(unit(i)[0]-.1)  # likes the lowest pitch
+        cells=set()
+        for n in range(20):
+            self.assertEqual(len(d.pair),2,d.error)
+            for i in d.pair:self.assertEqual(d.candidates[i]['recipe']['kind'],'map');self.assertEqual(d.candidates[i]['recipe']['motion'],'rise')
+            if n<MAP_OPENING:cells|={d.candidates[i]['recipe']['cell'] for i in d.pair}
+            elif not d.rematch_pair:
+                a,b=(unit(i) for i in d.pair);self.assertGreaterEqual(float(np.sqrt(np.mean((a-b)**2))),MAP_NEAR)
+            a,b=d.pair;d.feedback(choice='A' if taste(a)>taste(b) else 'B')
+        self.assertEqual(len(cells),2*MAP_OPENING)  # six different sounds in the opening
+        self.assertEqual((d.stage,d.completed),('done',20))
+        self.assertLess(unit(d.finalists[0])[0],.35)  # the shortlist's top sound is low
+        data=d.export();self.assertEqual(data['policy'],'source-map-v1');self.assertTrue(data['pool']['created'])
+        d.close()
+    def test_map_recipe_matches_the_app_type(self):
+        from experiment.source_search import load_map_pool,map_recipe
+        _,pool=load_map_pool();r=map_recipe(pool[0])
+        self.assertEqual(set(r),{'version','kind','seed','motion','cell','plain','fx'})  # = MapRecipe in desktop/src/levels.ts
+        self.assertIn("kind: 'map'",Path('desktop/src/levels.ts').read_text())
+        self.assertEqual((r['fx']['follow'],r['fx']['size']),(1,2.5))  # as the full-drive check played it

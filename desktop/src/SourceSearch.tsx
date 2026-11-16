@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
-import { describeSound, isLevelRecipe, isTuningRecipe, liveSound, tooSimilar, type LevelRecipe, type TuningRecipe } from './levels'
+import { describeSound, isLiveRecipe, isMapRecipe, isTuningRecipe, liveSound, tooSimilar, type LiveRecipe } from './levels'
 import { plainVoices } from './voiceCache'
-export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LevelRecipe | TuningRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
+export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
 const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
@@ -20,16 +20,18 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [choice, setChoice] = useState<Answer | null>(null)
   const [showMore, setShowMore] = useState(false)  // shortlist #4-5
+  const [search, setSearch] = useState<'tuning' | 'map'>('tuning')  // which search the next session uses (baseline or sound map)
   const heard = useRef(new Set<string>())
   const revision = discovery?.pair.map(c => c.id).join(':')
   // Too-similar pairs: the app measures each new pair and asks the search for another (motion pair excluded: same sound on purpose).
   useEffect(() => {
     const [a, b] = discovery?.pair ?? []
-    if (!discovery?.active || !a || !b || !isTuningRecipe(a.recipe) || !isTuningRecipe(b.recipe) || a.recipe.motion !== b.recipe.motion) return
+    const motionSearch = (r: unknown) => isTuningRecipe(r) || isMapRecipe(r)
+    if (!discovery?.active || !a || !b || !motionSearch(a.recipe) || !motionSearch(b.recipe) || a.recipe.motion !== b.recipe.motion) return
     if (tooSimilar(a.recipe, b.recipe)) void onCommand('sourceDiscoverySkip', { ids: [a.id, b.id] })
   }, [revision])
   // Build both sounds of a new pair (and the shortlist) in the background, so the first switch is instant too.
-  useEffect(() => { for (const c of [...discovery?.pair ?? [], ...discovery?.finalists ?? []]) if (isLevelRecipe(c.recipe) || isTuningRecipe(c.recipe)) void plainVoices(liveSound(c.recipe).plain).catch(() => {}) }, [revision, discovery?.finalists?.length])
+  useEffect(() => { for (const c of [...discovery?.pair ?? [], ...discovery?.finalists ?? []]) if (isLiveRecipe(c.recipe)) void plainVoices(liveSound(c.recipe).plain).catch(() => {}) }, [revision, discovery?.finalists?.length])
   useEffect(() => { auditionSequence.current++; heard.current.clear(); setAudition(null); setReadyAudition(null); setRatings({}); setChoice(null); setShowMore(false) }, [revision, mode])
   useEffect(() => {
     if (!audition || readyAudition !== audition || !playing || hidden || !discovery?.active || (!running || !activity) || heard.current.has(audition)) return
@@ -50,7 +52,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     onStop()
     const vehicle = await onCommand('vehicleStart') as { running?: boolean; starting?: boolean } | null
     if (!vehicle?.running && !vehicle?.starting) return
-    onModeChange('rise'); await onCommand('sourceDiscoveryStart')
+    onModeChange('rise'); await onCommand('sourceDiscoveryStart', { search })
   }
   const feedback = async () => {
     if (!discovery || discovery.pair.length !== 2) return
@@ -72,7 +74,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   useEffect(() => { if (hidden && audition) { onStop(); setAudition(null) } }, [hidden])
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
     <section className="panel p-4 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}{discovery?.active && <button type="button" className="control" onClick={() => setFinishConfirm(true)}>Finish</button>}</div></div>
+      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}{discovery?.active && <button type="button" className="control" onClick={() => setFinishConfirm(true)}>Finish</button>}</div></div>
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {finishConfirm && discovery?.active && <div className="mt-3 space-y-3" role="alert"><p className="text-sm">Finish now? You are at step {discovery.step ?? discovery.completed} of {discovery.totalSteps ?? 20}. The remaining pairs are skipped and the finalists come only from what you have rated so far.</p><div className="flex flex-wrap gap-2"><button type="button" className="control" autoFocus onClick={() => setFinishConfirm(false)}>Keep going</button><button type="button" className="control" onClick={() => { setFinishConfirm(false); onStop(); setAudition(null); void onCommand('sourceDiscoveryFinish') }}>Finish now</button></div></div>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}

@@ -2,14 +2,17 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.source_search import TuningDiscovery
+from experiment.source_search import SoundMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
 
 
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
-        self.source_discovery = TuningDiscovery()  # seven starting sounds + tuning moves; LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery kept as baselines
+        # Per session: 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map).
+        # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
+        self.searches = {'tuning': TuningDiscovery(), 'map': SoundMapDiscovery()}
+        self.source_discovery = self.searches['tuning']
         self.history = SourceHistory(self.source_discovery)
 
     def snapshot(self):
@@ -91,6 +94,9 @@ class DesktopBridge:
             if name == 'sourceDiscoveryStart':
                 if s.active or c.soundSweepActive:raise ValueError('Stop the native experiment or debug sweep first')
                 if discovery.active:raise ValueError('Finish the current source trial before starting another')
+                search = payload.get('search', 'tuning')
+                if search not in self.searches:raise ValueError('Unknown search')
+                discovery = self.source_discovery = self.history.discovery = self.searches[search]
                 discovery.start(payload.get('motion'));self.history.begin()
             elif name == 'sourceDiscoveryHeard':discovery.heard(self._text(payload,'id'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFeedback':discovery.feedback(payload.get('ratings'),payload.get('context',{}),payload.get('choice'))

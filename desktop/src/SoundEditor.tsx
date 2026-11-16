@@ -5,7 +5,7 @@ import SourceSearch from './SourceSearch'
 import SteadySource, { type SourceHandle } from './SteadySource'
 import type { GranularMode } from './granularPlayer'
 import { LabPlayer } from './labEngine'
-import { isLevelRecipe, isTuningRecipe, liveSound } from './levels'
+import { isLiveRecipe, liveSound } from './levels'
 import { plainVoices } from './voiceCache'
 import { simulatedDrive } from './simulatedDrive'
 import type { DiscoveryCandidate } from './SourceSearch'
@@ -32,7 +32,7 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
   const stopLab = () => { lab.stop(); setLabPlaying(false) }
   const stopAll = () => { source.current?.stop(); stopLab() }
   const audition = async (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => {
-    if (!isLevelRecipe(candidate.recipe) && !isTuningRecipe(candidate.recipe)) { stopLab(); return source.current?.audition(candidate.urls, input, candidate.label) ?? false }
+    if (!isLiveRecipe(candidate.recipe)) { stopLab(); return source.current?.audition(candidate.urls, input, candidate.label) ?? false }
     source.current?.stop()
     try {
       const { plain, fx, mode, travel } = liveSound(candidate.recipe)

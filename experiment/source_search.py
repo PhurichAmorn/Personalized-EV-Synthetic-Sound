@@ -945,7 +945,7 @@ class TuningDiscovery(LevelDiscovery):
             for r in rows:
                 a,b=f(r['pair'][0]),f(r['pair'][1]);X.append(a-b);y.append(SHARE[r['choice']])
                 if r['choice'] in ABSOLUTE:X+=[a,b];y+=[ABSOLUTE[r['choice']]]*2
-            self._post=(len(rows),*fit_bayes(X,y,len(TUNING_FEATURE_KEYS)))
+            self._post=(len(rows),*fit_bayes(X,y,len(self.feature_names)))
         return self._post[1],self._post[2]
     def _weights(self):return self._posterior()[0]
     def _sd(self,ident):f=self._features(self.candidates[ident]['recipe']);return float(np.sqrt(f@self._posterior()[1]@f))
@@ -1086,4 +1086,104 @@ class TuningDiscovery(LevelDiscovery):
             'both lose to it; the next pair builds on other sounds). Shortlist of 5 by posterior mean, at least 2 choices each, any two differ in '
             'family or in at least two settings. Pair 20 is a blind tuning check (the best sound vs the same variant untuned; tuning_check in the '
             'export), counted like any other choice. The listener picks, then answers yes/no: happy with this sound in their car.')
+        return data
+
+
+# Sound-map search (phase 1, 2026-11-16): the same A/B session over a pool of generated sounds instead of hand-made families.
+# Pool = tools/sound_map library (MAP-Elites over the app's synth, every sound passed the psychoacoustic guardrail and the full-drive
+# check), frozen in experiment/sound_map_pool.json. Sounds are built and played live in the app (levels.ts liveSound, kind 'map').
+# Phase 2 (not built): grow new sounds around the listener's favourites between pairs.
+from pathlib import Path
+MAP_POLICY='source-map-v1'
+MAP_POOL=Path(__file__).with_name('sound_map_pool.json')
+# Audible features the model learns over, each scaled to 0..1: (name, getter, low, high, log scale).
+MAP_FEATURES=(('pitch',lambda s:s['genome']['rootHz'],80,200,1),('sharpness',lambda s:s['drive']['S'],.3,1.,0),
+    ('chord',lambda s:s['genome']['chord'],0,1,0),('detune',lambda s:s['genome']['detune'],0,1,0),('bell',lambda s:max(s['genome']['bell'],s['genome']['bellModes']),0,1,0),
+    ('vowel',lambda s:s['genome']['vowel'],0,1,0),('whine',lambda s:s['genome']['whine'],0,1,0),('hollow',lambda s:s['genome']['hollow'],0,1,0),
+    ('swell',lambda s:s['genome']['tremDepth'],0,.6,0),('reverb',lambda s:s['genome']['reverb'],0,.6,0),('resonance',lambda s:s['genome']['res'],.6,8,1))
+# Each feature enters as z and z^2 (z = 2x-1 in -1..1), so the model can learn "middle pitch is best", not only "higher is better".
+MAP_FEATURE_NAMES=[f'{n}{p}' for n,*_ in MAP_FEATURES for p in ('','^2')]
+MAP_OPENING=3      # pairs 1-3: six sounds spread as far apart as the pool allows
+MAP_PLAYOFF=2      # pairs 4-5: the opening winners against each other
+MAP_NEAR=.25       # feature distance (0..1 per feature, RMS) under which a challenger counts as a near-copy of the best
+FX_KEYS=('tone','res','tremDepth','tremRate','reverb','pump','drift')
+
+def map_unit(sound):
+    """Feature values of a pool sound, 0..1."""
+    out=[]
+    for _,get,lo,hi,log in MAP_FEATURES:
+        v=min(max(get(sound),lo),hi);out.append(math.log(v/lo)/math.log(hi/lo) if log else (v-lo)/(hi-lo))
+    return np.array(out)
+
+def map_recipe(sound):
+    """Pool sound -> live recipe: plain synth settings plus effects, as the full-drive check played it (levels.SEARCH_FIXED base)."""
+    g={k:v for k,v in sound['genome'].items() if k!='seed'}
+    fx={k:g.pop(k) for k in FX_KEYS};fx.update(follow=1,size=2.5)
+    return {'version':4,'kind':'map','seed':0,'motion':'rise','cell':sound['cell'],'plain':{**g,'width':1},'fx':fx}
+
+def load_map_pool(path=MAP_POOL):
+    data=json.loads(Path(path).read_text())
+    return data,[{**s,'unit':map_unit(s)} for s in data['sounds']]
+
+class SoundMapDiscovery(TuningDiscovery):
+    """20 direct choices over the generated sound map. Opening: six sounds spread across the map; playoff of the opening winners;
+    then the best sound (posterior mean) against a challenger from the pool picked by a Thompson sample of the listener's taste.
+    Same answers, model (Bayesian Bradley-Terry, here over audible features), shortlist and export as TuningDiscovery."""
+    policy=MAP_POLICY
+    feature_names=MAP_FEATURE_NAMES
+    def __init__(self,renderer=None,pool_path=MAP_POOL):
+        super().__init__(renderer);self.pool_path=pool_path;self.pool_meta=None;self.pool=None
+    def _load(self):
+        if self.pool is None:
+            if not Path(self.pool_path).exists():raise ValueError('Sound map pool missing: run tools/sound_map/generate.py and drive.py library first')
+            self.pool_meta,self.pool=load_map_pool(self.pool_path);self.by_cell={s['cell']:s for s in self.pool}
+    def start(self,motion=None):
+        self._load()
+        with self.lock:super().start('rise')  # phase 1: Rising only (the mode the full-drive check gates)
+    def _unit(self,recipe):return self.by_cell[recipe['cell']]['unit']
+    def _features(self,recipe):z=2*self._unit(recipe)-1;return np.ravel(np.column_stack([z,z*z]))
+    def _id(self,recipe):return hashlib.sha256(json.dumps([recipe['plain'],recipe['fx']],sort_keys=True).encode()).hexdigest()[:32]
+    def _label(self,recipe):
+        p,b,t=recipe['cell'].split('-')
+        return f"{('Low','Mid','High')[int(p)]} · {('Darkest','Dark','Middle','Bright','Brightest')[int(b)]} · {t} ({recipe['cell']})"
+    def _distinct(self,a,b):return self.candidates[a]['recipe']['cell']!=self.candidates[b]['recipe']['cell']
+    def _spread(self,count):
+        """Farthest-point sample of the pool in feature space, from a random first sound: very different sounds for the opening."""
+        units=np.array([s['unit'] for s in self.pool]);picked=[self.rng.randrange(len(self.pool))]
+        while len(picked)<count:
+            gap=np.min(np.linalg.norm(units[:,None,:]-units[picked][None,:,:],axis=2),axis=1);picked.append(int(np.argmax(gap)))
+        return [self.pool[i] for i in picked]
+    def _add_sound(self,sound,kind,summary):return self._add(map_recipe(sound),{'kind':kind,'cell':sound['cell'],'from':sound.get('from'),'summary':summary})
+    def _proposals(self):
+        self.check_parent=None;step=self.completed;rows=self._choices()
+        if step==0:self.opening=[self._add_sound(s,'opening',f"Opening: {s['cell']}") for s in self._spread(2*MAP_OPENING)]
+        if step<MAP_OPENING:self.rematch=self.opening[2*step:2*step+2];return []
+        ranked=self._ranked()
+        winners=set()
+        for r in rows[:MAP_OPENING]:winners|={r['winner']} if r['winner'] else set(r['pair']) if r['choice']=='good' else set()
+        winners=[i for i in ranked if i in winners]
+        if step==MAP_OPENING and len(winners)>=2:self.rematch=winners[:2];return []
+        if step==MAP_OPENING+1 and len(winners)>=3:
+            left=[i for i in winners if i not in rows[MAP_OPENING]['pair']]
+            if left:self.rematch=[winners[0] if winners[0]!=left[0] else winners[1],left[0]];return []
+        # Champion vs challenger. After Neither, the champion is the best sound outside the rejected pair.
+        rejected=set(rows[-1]['pair']) if rows and rows[-1]['choice']=='neither' else set()
+        best=next((i for i in ranked if i not in rejected),ranked[0])
+        self._sample();heard={i for r in rows for i in r['pair']};here=self._unit(self.candidates[best]['recipe'])
+        pool=[s for s in self.pool if self._id(map_recipe(s)) not in heard|self.excluded
+              and np.sqrt(np.mean((s['unit']-here)**2))>=MAP_NEAR]  # never a near-copy of the best
+        pool.sort(key=lambda s:-self._sampled(map_recipe(s)))
+        self.check_parent=best
+        return [(map_recipe(s),{'kind':'challenger','cell':s['cell'],'from':s.get('from'),'summary':f"Challenger: {s['cell']} (Thompson sample)"}) for s in pool]
+    def export(self):
+        data=LevelDiscovery.export(self);mean,cov=self._posterior()
+        data.update(motion=self.motion,pool={k:self.pool_meta.get(k) for k in ('created','source','limits')} if self.pool_meta else None)
+        data['preference_model'].update(version='bayes-bt-map-1',feature_sd={n:round(float(v),3) for n,v in zip(self.feature_names,np.sqrt(np.diag(cov)))})
+        data['note']=('Sound-map search (phase 1). Pool: generated sounds from tools/sound_map (MAP-Elites over the app synth; every sound passed the '
+            'guardrail: sharpness, roughness, pulsing, crowding; and the full 22 s Rising drive check). Rising only. Pairs 1-3: six sounds spread as far '
+            'apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners. Pairs 6-20: '
+            'the best sound (posterior mean) against a challenger: the unheard pool sound with the highest Thompson-sampled utility (half spread), never '
+            'within 0.25 feature distance of the best. After Neither, the best is taken from outside the rejected pair. Model: Bayesian Bradley-Terry '
+            f'over {len(MAP_FEATURES)} audible features (pitch, sharpness, chord, detune, bell, vowel, whine, hollow, swell, reverb, resonance), each as z '
+            'and z^2 so a middle value can be best; N(0,1) prior, Laplace approximation. Answers, shortlist and yes/no as the tuning search.')
         return data

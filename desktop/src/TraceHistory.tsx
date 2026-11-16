@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SourceRecipe } from './sourceRecipe'
 import { plainVoices } from './voiceCache'
-import { isLevelRecipe, isTuningRecipe, liveSound, type LevelRecipe, type TuningRecipe } from './levels'
+import { isLiveRecipe, liveSound, type LiveRecipe } from './levels'
 import { LabPlayer } from './labEngine'
 import { simulatedDrive } from './simulatedDrive'
 
@@ -11,7 +11,7 @@ const traceLab = new LabPlayer()
 type Command = <T = unknown>(name: string, payload?: Record<string, unknown>) => Promise<T | null>
 export type HistoryPreview = { session?: string; candidate?: string; status?: 'rendering' | 'ready' | 'error'; url?: string; error?: string }
 type Row = { id: string; created: string; completed: number; final: string | null; finalists: number; done: boolean; starred?: boolean }
-type Saved = { id: string; label: string; recipe: SourceRecipe | LevelRecipe | TuningRecipe; ratings?: number[]; audio_descriptor?: number[] }
+type Saved = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; ratings?: number[]; audio_descriptor?: number[] }
 type Session = {
   id: string; created: string; final: string | null
   // rating_source: 'rating-1-7' (legacy and normal pairs) or 'choice' (parent check). Sessions before 2026-11-10 have no rating_source and are 1-7.
@@ -23,7 +23,7 @@ type Session = {
 const BANDS = ['<100', '100', '180', '300', '500', '800', '1.2k', '1.8k', '2.6k', '4k', '6.5k', '12k+']
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) // the computer's own clock and zone
 const short = (id: string) => id.slice(0, 6)
-const isLive = (recipe: unknown) => isLevelRecipe(recipe) || isTuningRecipe(recipe)  // built and played in the app, not rendered offline
+const isLive = isLiveRecipe  // built and played in the app, not rendered offline
 
 export default function TraceHistory({ command, preview }: { command: Command; preview?: HistoryPreview }) {
   const [rows, setRows] = useState<Row[]>([])
@@ -41,7 +41,7 @@ export default function TraceHistory({ command, preview }: { command: Command; p
   useEffect(() => stopLive, [])
   const expand = (id: string) => { stopLive(); setSound(id); if (!isLive(session!.candidates[id]?.recipe)) void command('historyPreview', { id: session!.id, candidate: id }) }
   const collapse = () => { stopLive(); setSound(null); void command('historyPreviewClear') }
-  const playLive = (id: string, recipe: LevelRecipe | TuningRecipe) => {
+  const playLive = (id: string, recipe: LiveRecipe) => {
     const { plain, fx, mode, travel } = liveSound(recipe)
     void plainVoices(plain).then(voices => traceLab.play(id, voices, fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel)).then(() => setLivePlaying(true))
   }
@@ -97,9 +97,9 @@ export default function TraceHistory({ command, preview }: { command: Command; p
     {detail && sound && <aside className="panel history-detail" aria-label="Sound details">
       <div className="trace-panel-head"><h2 className="text-xl">Sound {short(sound)}</h2><button className="control" onClick={collapse}>Close</button></div>
       <h3>Preview</h3>
-      {isLive(detail.recipe) ? <><button type="button" className="control" onClick={() => livePlaying ? stopLive() : playLive(sound, detail.recipe as LevelRecipe | TuningRecipe)}>{livePlaying ? 'Stop' : '▶ Play on the 22 s drive'}</button>
+      {isLive(detail.recipe) ? <><button type="button" className="control" onClick={() => livePlaying ? stopLive() : playLive(sound, detail.recipe as LiveRecipe)}>{livePlaying ? 'Stop' : '▶ Play on the 22 s drive'}</button>
         <h3>Settings</h3>
-        <dl className="history-params">{[...Object.entries(detail.recipe.base), ...Object.entries(detail.recipe.fx)].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>)}</dl>
+        <dl className="history-params">{[...Object.entries('base' in detail.recipe ? detail.recipe.base : detail.recipe.plain), ...Object.entries(detail.recipe.fx)].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>)}</dl>
       </> : <>
       {preview?.candidate !== sound || preview.status === 'rendering' || !preview.status ? <p className="loading-note text-sm text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Generating sound…</p>
         : preview.status === 'error' ? <p className="text-sm text-red-300" role="alert">{preview.error}</p>

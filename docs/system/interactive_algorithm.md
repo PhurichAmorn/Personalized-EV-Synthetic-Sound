@@ -56,7 +56,29 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Level search (current app default: `source-levels-v1`, `LevelDiscovery`)
+### Sound-map search (phase 1, `source-map-v1`, `SoundMapDiscovery`): selectable per session
+
+Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
+fixed preset set. Personalize sound now has a search selector: *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`, the default; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
+
+- **Pool.** `experiment/sound_map_pool.json`, frozen from `tools/sound_map` (see its README): about 90 sounds of the app's plain synth, grown by
+  MAP-Elites over pitch register x measured sharpness x texture. Every sound passed the rule-based guardrail (MoSQITo sharpness, roughness,
+  pulsing, plus partial crowding) and the full 22 s Rising drive check through the app's chain. Built live in the app (`levels.ts`, kind `map`).
+- **Session.** Rising only. 20 direct choices with the tuning search's answers (Prefer A / B, Both good, Neither). Pairs 1-3: six sounds spread as
+  far apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners.
+  Pairs 6-20: the best sound (posterior mean) against the unheard pool sound with the highest Thompson-sampled utility, never within 0.25 feature
+  distance of the best; the app's too-similar check also applies. Shortlist and yes/no answer as in the tuning search.
+- **Model.** Bayesian Bradley-Terry (as `TuningDiscovery`) over 11 audible features (pitch, sharpness, chord, detune, bell, vowel, whine, hollow,
+  swell, reverb, resonance), each as z and z^2 so a middle value can be preferred.
+- **Simulated listeners (2026-11-16, `tools/benchmark_sound_map.py`, 300 per condition, hidden ideal-point taste, noisy answers).** The shortlist's
+  top sound was in the listener's top 5% of the pool in about 31% of sessions, the same as random challengers (30%, +-5%). Linear-only features,
+  posterior-mean or full-spread sampling, radial-basis features and a nearness bonus were all within that noise. Interpretation (project): with
+  about 90 sounds and 20 pairs, the best-vs-challenger structure and the shortlist do the work; the model should only matter once the pool is
+  large, i.e. with phase 2. So phase 1 tests the pool and the session with listeners, not the model.
+- **Not built (phase 2).** Growing new sounds around the listener's favourites between pairs (mutation + the same guardrail).
+- **Status.** Untested with listeners. The guardrail limits come from one listener's labels.
+
+### Level search (previous default: `source-levels-v1`, `LevelDiscovery`)
 
 Goal unchanged: help a listener with no sound in mind find one they enjoy. A sound is now built from settings instead of a style:
 a simplified base sound (Type: Strings / Choir / Glass, Brightness and Register, 3 settings each) plus six transformation

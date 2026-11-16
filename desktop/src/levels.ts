@@ -41,12 +41,19 @@ export const isLevelRecipe = (recipe: unknown): recipe is LevelRecipe => (recipe
 export type TuningRecipe = { version: 3; kind: 'tuning'; seed: number; motion: Tuning['kind']
   base: Pick<Tuning, 'start' | 'variant' | 'pitch' | 'brightness' | 'character' | 'blend' | 'mix'>; fx: Pick<Tuning, 'movement'> }
 export const isTuningRecipe = (recipe: unknown): recipe is TuningRecipe => (recipe as TuningRecipe | null)?.kind === 'tuning'
+/** Sound-map search (experiment/source_search.py SoundMapDiscovery): a generated sound from tools/sound_map, stored as its synth settings
+ * and effects. Played as the full-drive check played it: levels SEARCH_FIXED effects plus the sound's own. */
+export type MapRecipe = { version: 4; kind: 'map'; seed: number; motion: 'rise' | 'evolving'; cell: string; plain: Partial<PlainParams>; fx: Partial<Fx> }
+export const isMapRecipe = (recipe: unknown): recipe is MapRecipe => (recipe as MapRecipe | null)?.kind === 'map'
+export type LiveRecipe = LevelRecipe | TuningRecipe | MapRecipe
+/** Built and played in the app (no offline render). */
+export const isLiveRecipe = (recipe: unknown): recipe is LiveRecipe => isLevelRecipe(recipe) || isTuningRecipe(recipe) || isMapRecipe(recipe)
 export const COMFORT_CAP_HZ = 260
 const PITCH_CEILING_HZ = 245  // = PITCH_CEILING_HZ in source_search.py: a root above this sits at the comfort cap for most of the drive
 /** Octave-band profile of a sound's partials after its own low-pass: the same measure used to compare starting sounds, from the
  * partial list (no audio build, about a millisecond). */
 const BANDS = [100, 200, 400, 800, 1600, 3200, 6400, Infinity]
-function soundProfile(recipe: LevelRecipe | TuningRecipe) {
+function soundProfile(recipe: LiveRecipe) {
   // Measured where the drive spends most time: a root above PITCH_CEILING_HZ is pulled down to it by the comfort cap, so compare there.
   const { plain, fx } = liveSound(recipe), energy = BANDS.map(() => 0), shift = Math.min(1, PITCH_CEILING_HZ / plain.rootHz)
   for (const { hz, amp } of plainPartials(plain)) energy[BANDS.findIndex(top => hz * shift < top)] += amp * amp / (1 + (hz * shift / fx.tone) ** 4)
@@ -54,14 +61,15 @@ function soundProfile(recipe: LevelRecipe | TuningRecipe) {
   return { bands: energy.map(value => Math.sqrt(value / total)), rootHz: plain.rootHz * shift }
 }
 /** How far apart two sounds are: spectrum 0 (same) .. 1, and pitch gap in semitones. */
-export function pairDistance(a: LevelRecipe | TuningRecipe, b: LevelRecipe | TuningRecipe) {
+export function pairDistance(a: LiveRecipe, b: LiveRecipe) {
   const p = soundProfile(a), q = soundProfile(b)
   return { spectrum: Math.hypot(...p.bands.map((value, i) => value - q.bands[i])) / Math.SQRT2, semitones: Math.abs(12 * Math.log2(q.rootHz / p.rootHz)) }
 }
 // A pair is too similar under 0.25 on the spectrum with less than 5 semitones of pitch gap (2026-11-16 session: 0.11-0.13 pairs sounded the same).
-export const tooSimilar = (a: LevelRecipe | TuningRecipe, b: LevelRecipe | TuningRecipe) => { const d = pairDistance(a, b); return d.spectrum < .25 && d.semitones < 5 }
+export const tooSimilar = (a: LiveRecipe, b: LiveRecipe) => { const d = pairDistance(a, b); return d.spectrum < .25 && d.semitones < 5 }
 /** Plain source, effects and motion for any live-built search sound (level or tuning recipe). */
-export function liveSound(recipe: LevelRecipe | TuningRecipe) {
+export function liveSound(recipe: LiveRecipe) {
+  if (isMapRecipe(recipe)) return { plain: { ...EXTRAS_OFF, air: 0, ...recipe.plain } as PlainParams, fx: { ...SEARCH_FIXED, ...recipe.fx }, mode: recipe.motion, travel: 1 }
   if (!isTuningRecipe(recipe)) return { ...levelSound(recipe), mode: 'rise' as const, travel: 1 }
   const { plain, fx, travel } = tunedSound({ kind: recipe.motion, ...recipe.base, ...recipe.fx }, COMFORT_CAP_HZ)
   return { plain, fx, travel, mode: recipe.motion }
@@ -165,6 +173,7 @@ export const VARIANTS: Record<string, StartingSound[]> = {
 for (const sound of [...STARTING_SOUNDS, ...Object.values(VARIANTS).flat()]) sound.plain.width ??= 1
 /** Plain-words description of a search sound, shown after the session so the listener knows what changed. */
 export function describeSound(recipe: unknown) {
+  if (isMapRecipe(recipe)) return `Generated sound (sound map box ${recipe.cell})`
   if (!isTuningRecipe(recipe)) return ''
   const b = recipe.base, name = (id: string) => findSound(id).name, changes: string[] = []
   if (b.blend) changes.push(`blended halfway with ${name(b.blend)}`)

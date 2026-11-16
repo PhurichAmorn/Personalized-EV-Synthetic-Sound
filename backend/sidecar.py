@@ -207,7 +207,7 @@ class Sidecar:
 
     def close(self):
         self.bridge.history.clear()
-        self.bridge.source_discovery.close()
+        for search in self.bridge.searches.values(): search.close()
         if isinstance(self.input, QSocketNotifier):
             self.input.setEnabled(False)
         self.display.stop()
