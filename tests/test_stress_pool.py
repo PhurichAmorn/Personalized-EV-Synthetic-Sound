@@ -5,9 +5,14 @@ from scipy.io.wavfile import read
 from tools.prepare_gs_baseline import integrated_loudness
 
 
+ROOT=Path('desktop/public/audio/stress-pool-v1')
+
+
+# The pool is local-only (gitignored third-party clips, see ATTRIBUTION.txt), so fresh clones and CI skip this check.
+@unittest.skipUnless((ROOT/'manifest.json').exists(),'stress pool not present (gitignored, local-only)')
 class StressPoolTest(unittest.TestCase):
     def test_published_pool_has_nine_matched_scored_clips(self):
-        root=Path('desktop/public/audio/stress-pool-v1')
+        root=ROOT
         manifest=json.loads((root/'manifest.json').read_text())
         self.assertEqual({clip['id'] for clip in manifest['clips']},{'clean','shrill','ufo','flutter','noise','clicks','distortion','dropouts','high_whistle'})
         self.assertEqual(len(manifest['clips']),9)

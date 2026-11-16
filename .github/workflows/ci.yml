@@ -12,12 +12,12 @@ jobs:
       SDL_AUDIODRIVER: dummy
       SDL_VIDEODRIVER: dummy
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -28,6 +28,9 @@ jobs:
         run: pip install -r requirements.txt
       - name: Build native audio module
         run: python setup.py build_ext --inplace
+      - name: Frontend dependencies (the Python source renderer also runs Node scripts from desktop/)
+        working-directory: desktop
+        run: npm ci
       - name: Python tests
         # Failing tests and their errors also appear as annotations on the run page.
         run: |
@@ -36,9 +39,6 @@ jobs:
           code=${PIPESTATUS[0]}
           grep -E '^(ERROR|FAIL):|^[A-Za-z.]*(Error|Exception)\b' test.log | sort | uniq | head -40 | sed 's/^/::error::/'
           exit $code
-      - name: Frontend dependencies
-        working-directory: desktop
-        run: npm ci
       - name: Frontend build
         working-directory: desktop
         run: npm run build
