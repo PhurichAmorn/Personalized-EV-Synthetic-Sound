@@ -37,3 +37,6 @@ desktop/src-tauri/gen/
 /desktop/public/audio/baseline-v1/
 /desktop/public/audio/roughness-check-v1/
 /desktop/public/audio/stress-pool-v1/
+
+# Sound map generator output (rebuild with tools/sound_map/generate.py)
+tools/sound_map/out/

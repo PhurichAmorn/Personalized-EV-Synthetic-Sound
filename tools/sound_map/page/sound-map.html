@@ -1,0 +1,170 @@
+<title>EV Sound Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a mixing-desk grid. Rows = texture, columns = brightness (measured sharpness), three pitch keys per box. Detail strip below. */
+:root {
+  --bg: #f3f5f6; --panel: #ffffff; --ink: #14202a; --muted: #5d6b76; --line: #d5dde2;
+  --key: #e4ebef; --accent: #0f7c86; --accent-ink: #ffffff; --bad: #c2412d; --empty: #edf1f3;
+  --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1519; --panel: #172026; --ink: #e3eaee; --muted: #8d9ba5; --line: #2a363e;
+  --key: #23303a; --accent: #3fb6bf; --accent-ink: #062226; --bad: #ef6b55; --empty: #131b20; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1519; --panel: #172026; --ink: #e3eaee; --muted: #8d9ba5; --line: #2a363e;
+  --key: #23303a; --accent: #3fb6bf; --accent-ink: #062226; --bad: #ef6b55; --empty: #131b20; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 40px }
+main { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px }
+h1 { font-size: 24px; font-weight: 600; margin: 0; text-wrap: balance }
+p { margin: 0; max-width: 68ch; color: var(--muted) }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 24px; font: 13px var(--mono); color: var(--muted) }
+.stats b { color: var(--ink); font-weight: 500 }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+button { font: inherit; color: var(--ink); background: var(--key); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+.wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px }
+table { border-collapse: collapse; width: 100%; min-width: 640px }
+th { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 10px 8px; text-align: left; white-space: nowrap }
+td { border-top: 1px solid var(--line); padding: 8px; vertical-align: top }
+.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px }
+.k { padding: 0; height: 40px; border-radius: 5px; font: 500 11px var(--mono); position: relative; overflow: hidden }
+.k .fill { position: absolute; inset: auto 0 0 0; background: var(--accent); opacity: .22 }
+.k span { position: relative }
+.k.none { background: var(--empty); border-style: dashed; color: var(--muted); cursor: default }
+.k.bad { border-color: var(--bad); color: var(--bad); border-width: 2px }
+.k.on { outline: 2px solid var(--accent); outline-offset: 1px }
+.detail { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px }
+.detail h2 { margin: 0; font-size: 17px; font-weight: 600 }
+.meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px }
+.m { font: 12px var(--mono); color: var(--muted); display: grid; gap: 4px }
+.m .track { height: 6px; background: var(--key); border-radius: 3px; position: relative }
+.m .track i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px }
+.m .track u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--bad) }
+.settings { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere }
+.note { font-size: 13px }
+@media (prefers-reduced-motion: no-preference) { button { transition: background .12s } }
+</style>
+<main>
+  <header style="display:grid;gap:8px">
+    <h1>EV Sound Map</h1>
+    <p>Every box holds the safest generated sound of that kind: it passed the guardrail (sharpness, roughness, pulsing) with the most room to spare. Click a key to hear it, then mark any that sound bad.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div class="bar">
+    <span class="note">Pitch while playing:</span>
+    <button id="cruise" aria-pressed="false">Cruise</button>
+    <button id="peak" aria-pressed="true">Full pedal</button>
+    <button id="stop">Stop</button>
+    <span style="flex:1"></span>
+    <button id="copy">Copy marks</button>
+  </div>
+  <div class="wrap"><table id="grid"></table></div>
+  <section class="detail" id="detail"><p>Pick a key to hear it. Keys: L, M, H = low, mid, high register. The shaded part of a key shows how far it sits inside the guardrail.</p></section>
+</main>
+<script src="synth.js"></script><!-- out/synth.js, published next to the page with out/library.json -->
+<script>
+const BRIGHT = ['Darkest', 'Dark', 'Middle', 'Bright', 'Brightest'], PITCH = ['L', 'M', 'H'], PITCH_NAME = ['Low', 'Mid', 'High']
+const TEXTURE_NAME = { tone: 'Clean tone', chord: 'Chord', wide: 'Detuned, wide', bell: 'Bell-like', voice: 'Voice-like', whine: 'Whine' }
+const METRICS = [['S', 'Sharpness', 'acum'], ['R', 'Roughness', 'asper'], ['F', 'Pulsing', '']]
+let lib, ctx, current, selected = null, rate = 1.06
+const cache = new Map()
+let marks = {}
+try { marks = JSON.parse(localStorage.getItem('marks') || '{}') } catch {}
+const save = () => { try { localStorage.setItem('marks', JSON.stringify(marks)) } catch {} }
+
+function buffer(e) {
+  if (!cache.has(e.cell)) {
+    const g = e.genome, plain = { ...Synth.EXTRAS_OFF, ...Object.fromEntries(Object.entries(g).filter(([k]) => !['tone', 'res', 'tremDepth', 'tremRate', 'reverb', 'pump', 'drift', 'seed'].includes(k))), width: 1 }
+    const [l] = Synth.createPlainSource(plain)
+    const b = ctx.createBuffer(1, l.length, 48000); b.copyToChannel(l, 0); cache.set(e.cell, b)
+  }
+  return cache.get(e.cell)
+}
+
+function stop() { if (current) { const c = current; current = null; c.out.gain.setTargetAtTime(0, ctx.currentTime, .05); setTimeout(() => c.nodes.forEach(n => { try { n.stop?.() } catch {} n.disconnect() }), 300) } }
+
+function play(e) {
+  ctx ??= new AudioContext({ sampleRate: 48000 })
+  ctx.resume(); stop()
+  const g = e.genome, t = ctx.currentTime
+  const src = ctx.createBufferSource(); src.buffer = buffer(e); src.loop = true; src.playbackRate.value = rate
+  const low = ctx.createBiquadFilter(); low.type = 'lowpass'; low.Q.value = g.res
+  low.frequency.value = Math.min(18000, g.tone * 2 ** (rate > 1 ? 1 : -.2))
+  const nodes = [src, low]
+  if (g.drift) { const o = ctx.createOscillator(), d = ctx.createGain(); o.frequency.value = 1 / 14; d.gain.value = 1100; o.connect(d); d.connect(low.detune); o.start(); nodes.push(o, d) }
+  const trem = ctx.createGain(); trem.gain.value = 1 - g.tremDepth / 2; nodes.push(trem)
+  if (g.tremDepth > 0) {
+    const o = ctx.createOscillator(), d = ctx.createGain(); o.frequency.value = g.tremRate
+    if (g.pump) o.setPeriodicWave(ctx.createPeriodicWave(new Float32Array(9), Float32Array.from({ length: 9 }, (_, n) => n ? (n % 2 ? 1 : -1) / n : 0)))
+    d.gain.value = g.tremDepth / 2; o.connect(d); d.connect(trem.gain); o.start(); nodes.push(o, d)
+  }
+  const dry = ctx.createGain(), wet = ctx.createGain(), rev = ctx.createConvolver(), out = ctx.createGain()
+  const [L, R] = Synth.roomImpulse(48000, 2.5), ir = ctx.createBuffer(2, L.length, 48000); ir.copyToChannel(L, 0); ir.copyToChannel(R, 1); rev.buffer = ir
+  dry.gain.value = 1 - g.reverb * .5; wet.gain.value = g.reverb
+  src.connect(low); low.connect(trem); trem.connect(dry); trem.connect(rev); rev.connect(wet); dry.connect(out); wet.connect(out)
+  out.gain.value = 0; out.gain.setTargetAtTime(.8, t, .05); out.connect(ctx.destination); src.start()
+  nodes.push(dry, wet, rev); current = { nodes, out }
+}
+
+function describe(e) {
+  const [p, b, tex] = e.cell.split('-')
+  return `${PITCH_NAME[+p]} · ${BRIGHT[+b]} · ${TEXTURE_NAME[tex]}`
+}
+
+function showDetail(e) {
+  const g = e.genome, d = document.getElementById('detail')
+  const meters = METRICS.map(([k, label, unit]) => {
+    const v = e.metrics[k], lim = lib.limits[k], max = lim * 1.25
+    return `<div class="m"><span>${label} ${v.toFixed(2)} ${unit} <span style="opacity:.7">/ limit ${lim}</span></span><div class="track"><i style="width:${Math.min(100, v / max * 100)}%"></i><u style="left:${lim / max * 100}%"></u></div></div>`
+  }).join('')
+  const settings = `root ${g.rootHz.toFixed(0)} Hz · chord ${g.chord.toFixed(2)} (type ${g.chordType}) · brightness ${g.brightness.toFixed(2)} · hollow ${g.hollow.toFixed(2)} · bell ${g.bell.toFixed(2)}${g.bellModes ? ' (glass modes)' : ''} · vowel ${g.vowel.toFixed(2)} · whine ${g.whine.toFixed(2)} × ${g.whineRatio.toFixed(1)} · detune ${g.detune.toFixed(2)} · air ${g.air.toFixed(2)} · filter ${g.tone.toFixed(0)} Hz Q ${g.res.toFixed(1)}${g.drift ? ' drifting' : ''} · ${g.tremDepth > .02 ? (g.pump ? 'pump' : 'swell') + ` ${g.tremDepth.toFixed(2)} at ${g.tremRate.toFixed(2)} Hz · ` : ''}reverb ${g.reverb.toFixed(2)}`
+  const bad = !!marks[e.cell]
+  d.innerHTML = `<h2>${describe(e)}</h2>
+    <p>${e.from ? `Grown from your sound <b style="color:var(--ink)">${e.from}</b>.` : 'Grown from a random start.'} Found in round ${e.gen}.</p>
+    <div class="meters">${meters}</div>
+    <div class="settings">${settings}</div>
+    <div class="bar"><button id="markbad" aria-pressed="${bad}">${bad ? 'Marked bad' : 'Mark as bad'}</button>
+    <input id="why" placeholder="Why? (optional)" value="${(marks[e.cell] || '').replace(/"/g, '&quot;')}" style="font:inherit;flex:1;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></div>`
+  document.getElementById('markbad').onclick = () => { if (marks[e.cell] !== undefined) delete marks[e.cell]; else marks[e.cell] = document.getElementById('why').value || 'bad'; save(); render(); showDetail(e) }
+  document.getElementById('why').onchange = ev => { if (marks[e.cell] !== undefined) { marks[e.cell] = ev.target.value || 'bad'; save() } }
+}
+
+function render() {
+  const byCell = Object.fromEntries(lib.elites.map(e => [e.cell, e]))
+  let html = `<tr><th>Texture</th>${BRIGHT.map(b => `<th>${b}</th>`).join('')}</tr>`
+  for (const tex of lib.textures) {
+    html += `<tr><th>${TEXTURE_NAME[tex]}</th>`
+    for (let b = 0; b < 5; b++) {
+      html += '<td><div class="keys">' + PITCH.map((p, i) => {
+        const e = byCell[`${i}-${b}-${tex}`]
+        if (!e) return `<button class="k none" disabled aria-label="empty">·</button>`
+        const cls = ['k', marks[e.cell] !== undefined ? 'bad' : '', selected === e.cell ? 'on' : ''].join(' ')
+        return `<button class="${cls}" data-cell="${e.cell}" aria-label="${describe(e)}"><div class="fill" style="height:${Math.round(e.margin * 100)}%"></div><span>${p}</span></button>`
+      }).join('') + '</div></td>'
+    }
+    html += '</tr>'
+  }
+  document.getElementById('grid').innerHTML = html
+  const last = lib.log.at(-1), n = Object.keys(marks).length
+  document.getElementById('stats').innerHTML = `<span>tried <b>${last.tried.toLocaleString()}</b></span><span>passed guardrail <b>${last.passed.toLocaleString()}</b></span><span>boxes filled <b>${lib.elites.length}</b> / ${3 * 5 * lib.textures.length}</span><span>marked bad <b>${n}</b></span>`
+}
+
+document.getElementById('grid').onclick = ev => {
+  const k = ev.target.closest('[data-cell]'); if (!k) return
+  const e = lib.elites.find(x => x.cell === k.dataset.cell); selected = e.cell; play(e); render(); showDetail(e)
+}
+for (const [id, r] of [['cruise', .6], ['peak', 1.06]]) document.getElementById(id).onclick = () => {
+  rate = r; document.getElementById('cruise').setAttribute('aria-pressed', r < 1); document.getElementById('peak').setAttribute('aria-pressed', r > 1)
+  const e = lib.elites.find(x => x.cell === selected); if (e && current) play(e)
+}
+document.getElementById('stop').onclick = stop
+document.getElementById('copy').onclick = async ev => {
+  const text = 'Sound map marks\n' + lib.elites.filter(e => marks[e.cell] !== undefined).map(e => `${e.cell} (${describe(e)}): ${marks[e.cell]}`).join('\n')
+  try { await navigator.clipboard.writeText(text); ev.target.textContent = 'Copied' } catch { ev.target.textContent = 'Copy failed: select the list below'; document.getElementById('detail').innerHTML = `<pre style="white-space:pre-wrap">${text}</pre>` }
+  setTimeout(() => ev.target.textContent = 'Copy marks', 1500)
+}
+fetch('library.json').then(r => r.json()).then(data => { lib = data; render() })
+</script>

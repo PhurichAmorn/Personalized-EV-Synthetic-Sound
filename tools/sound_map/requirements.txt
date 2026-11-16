@@ -1,0 +1,4 @@
+mosqito==1.2.1
+matplotlib
+numpy
+scipy
