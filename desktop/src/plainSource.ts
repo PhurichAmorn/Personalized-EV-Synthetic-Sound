@@ -18,10 +18,13 @@ export type PlainParams = {
   bellModes: number   // 0 harmonics stretched by Bell .. 1 the six Glass bell modes (1, 2.01, 2.73, 4.17, 5.43, 6.79)
   // Synth extras (2026-11-15, Night drive): analog-style pad.
   detune: number      // 0 one copy per note .. 1 five copies spread +-14 cents (supersaw shimmer)
-  chordType: number   // 0 open (4th below + 5th above) .. 1 minor (minor 3rd + 5th) .. 2 minor 7th (+ minor 7th) .. 3 bleak (5th + octave, Dark ambience): equal-tempered
+  chordType: number   // 0 open (4th below + 5th above) .. 1 minor (minor 3rd + 5th) .. 2 minor 7th (+ minor 7th) .. 3 bleak (5th + octave, Dark ambience) .. 4 major (major 3rd + 5th + octave) .. 5 suspended (2nd + 4th + 5th + octave, Dreamy pad)
+                      //   .. 6 spread major 7th (root, then 5th + octave + major 3rd + major 7th an octave up: a gap above the root) .. 7 stacked fifths (5th, octave, 12th, two octaves; no 3rd). Equal-tempered.
   lowDetune: number   // 0 low partials stay clean .. 1 detune them too: slow breathing beats on purpose (Dark ambience, 2026-11-15)
+  lowCut: number      // Hz, 0 = off: partials below fade out (24 dB/octave), for sounds with no bass (Bright major, 2026-11-16)
+  width: number       // 0 same sound in both ears .. 1 wide: the right ear is a few cents sharp (above 200 Hz), so the sound slowly moves between the ears
 }
-export const EXTRAS_OFF = { vowel: 0, vowelShape: .5, fundamental: 1, whine: 0, whineRatio: 8.75, bellModes: 0, detune: 0, chordType: 0, lowDetune: 0 }
+export const EXTRAS_OFF = { vowel: 0, vowelShape: .5, fundamental: 1, whine: 0, whineRatio: 8.75, bellModes: 0, detune: 0, chordType: 0, lowDetune: 0, lowCut: 0, width: 0 }
 export const EXTRA_KEYS = Object.keys(EXTRAS_OFF) as (keyof typeof EXTRAS_OFF)[]
 export const PLAIN_RANGES: Record<keyof PlainParams, { min: number; max: number; step: number; label: string; low: string; high: string }> = {
   rootHz: { min: 40, max: 350, step: 1, label: 'Register', low: 'Deep', high: 'High' },
@@ -38,7 +41,9 @@ export const PLAIN_RANGES: Record<keyof PlainParams, { min: number; max: number;
   whineRatio: { min: 3, max: 12, step: .05, label: 'Whine pitch', low: '3 × note', high: '12 × note' },
   bellModes: { min: 0, max: 1, step: 1, label: 'Bell type', low: 'Stretched', high: 'Glass modes' },
   detune: { min: 0, max: 1, step: .01, label: 'Detune (supersaw)', low: 'One copy', high: '±14 cents' },
-  chordType: { min: 0, max: 3, step: 1, label: 'Chord type', low: 'Open', high: 'Bleak' },
+  chordType: { min: 0, max: 7, step: 1, label: 'Chord type', low: 'Open', high: 'Stacked fifths' },
+  width: { min: 0, max: 1, step: .05, label: 'Stereo width', low: 'Same both ears', high: 'Wide' },
+  lowCut: { min: 0, max: 600, step: 10, label: 'Low cut', low: 'Off', high: '600 Hz' },
   lowDetune: { min: 0, max: 1, step: 1, label: 'Detune low end', low: 'Clean', high: 'Breathing' },
 }
 export const PLAIN_DEFAULT: PlainParams = { rootHz: 175, brightness: .45, hollow: .2, bell: 0, air: 0, softTop: 1800, chord: .8, ...EXTRAS_OFF }
@@ -76,6 +81,10 @@ export function plainPartials(p: PlainParams, ceiling = 9000) {
   // [stem, multiple, level]. Minor chords are equal-tempered (as a synth plays them): no exact common repeat, so no low pulse.
   const semi = (n: number) => 2 ** (n / 12)
   const notes = p.chordType < .5 ? [[0, 1, 1], [1, .75, .8 * chord * low], [2, 1.5, .5 * chord]]
+    : p.chordType >= 6.5 ? [[0, 1, 1], [1, semi(7), .55 * chord], [2, 2, .5 * chord], [1, 2 * semi(7), .4 * chord], [2, 4, .3 * chord]]
+    : p.chordType >= 5.5 ? [[0, 1, 1], [2, 2 * semi(7), .5 * chord], [1, 2 * semi(4), .45 * chord], [2, 4, .4 * chord], [1, 2 * semi(11), .35 * chord]]
+    : p.chordType >= 4.5 ? [[0, 1, 1], [1, semi(2), .5 * chord], [1, semi(5), .35 * chord], [2, semi(7), .6 * chord], [2, 2, .45 * chord]]
+    : p.chordType >= 3.5 ? [[0, 1, 1], [1, semi(4), .6 * chord], [2, semi(7), .5 * chord], [2, 2, .4 * chord]]
     : p.chordType >= 2.5 ? [[0, 1, 1], [1, semi(7), .6 * chord], [2, 2, .45 * chord]]
     : [[0, 1, 1], [1, semi(3), .6 * chord], [2, semi(7), .5 * chord], ...(p.chordType >= 1.5 ? [[1, semi(10), .4 * chord]] : [])]
   // Detune: five copies of every partial spread in cents (uneven, as in a supersaw). Partials under CLEAN_BELOW stay as one
@@ -93,7 +102,7 @@ export function plainPartials(p: PlainParams, ceiling = 9000) {
       const ratio = p.bellModes >= .5 ? GLASS_MODES[n - 1] : n * Math.sqrt(1 + stretch * n * n)
       const hz = grid(rootHz * multiple * ratio * cents)
       if (hz > ceiling) break
-      voice.push({ hz, amp: gain * weight * n ** -slope * Math.exp(-fade * (n - 1)) * (n % 2 ? 1 : 1 - .97 * hollow) * (n === 1 ? p.fundamental : 1) * vowel(hz) / (1 + (hz / softTop) ** 4) })
+      voice.push({ hz, amp: gain * weight * n ** -slope * Math.exp(-fade * (n - 1)) * (n % 2 ? 1 : 1 - .97 * hollow) * (n === 1 ? p.fundamental : 1) * vowel(hz) / (1 + (hz / softTop) ** 4) / (p.lowCut ? 1 + (p.lowCut / hz) ** 4 : 1) })
     }
     if (index === 0 && p.whine > 0) {
       const total = voice.reduce((sum, partial) => sum + partial.amp, 0)
@@ -109,17 +118,26 @@ export function plainPartials(p: PlainParams, ceiling = 9000) {
 }
 
 /** Three stereo stems: main note (with any air), 4th below, 5th above (silent when chord is 0). Same gain for all.
- * Each stem gets its own granular player, as the original player does per layer. Channels are identical: width is an effect.
+ * Each stem gets its own granular player, as the original player does per layer. Channels are identical unless params.width > 0 (then the right ear is a second render, a few cents sharp).
  * Exactly in-tune chord notes repeat together at rootHz/4: at low registers that pulsed (rootHz 110 at drive rest: 32% loudness
  * pulse at 14.5 Hz, measured 2026-11-14), so plainPartials fades the 4th-below note out under 160 Hz. */
 export function createPlainVoices(params: PlainParams, rate = PLAIN_RATE): Float32Array[][] {
-  const frames = rate * 5, voices = [0, 1, 2].map(() => new Float64Array(frames))
-  for (const { hz, amp, phase, voice } of plainPartials(params, Math.min(9000, rate * .45))) {
-    if (amp < 1e-4) continue  // below -80 dB: inaudible, and skipping keeps the build fast
+  const frames = rate * 5, voices = [0, 1, 2].map(() => new Float64Array(frames)), width = params.width ?? 0
+  const right = width > 0 ? [0, 1, 2].map(() => new Float64Array(frames)) : voices  // wide: the right ear is its own render
+  let seed = 3
+  const render = (tone: Float64Array, hz: number, amp: number, phase: number) => {
     // Rotating phasor instead of Math.sin per sample (about 5x faster); drift over 5 s is far below audibility.
-    const step = 2 * Math.PI * hz / rate, c = Math.cos(step), d = Math.sin(step), tone = voices[voice]
+    const step = 2 * Math.PI * hz / rate, c = Math.cos(step), d = Math.sin(step)
     let sine = Math.sin(phase), cosine = Math.cos(phase)
     for (let i = 0; i < frames; i++) { tone[i] += amp * sine; const next = sine * c + cosine * d; cosine = cosine * c - sine * d; sine = next }
+  }
+  for (const { hz, amp, phase, voice } of plainPartials(params, Math.min(9000, rate * .45))) {
+    if (amp < 1e-4) continue  // below -80 dB: inaudible, and skipping keeps the build fast
+    render(voices[voice], hz, amp, phase)
+    // Width, as wide synth pads do it: the right ear plays each partial slightly sharp (up to 8 cents at width 1, at least one 0.2 Hz grid step,
+    // so the loop stays seamless), so the two ears drift in and out of phase every few seconds and the sound spreads. A phase offset alone
+    // (first try) was not audible. Under 200 Hz the right ear stays the same, so the bass stays centred and does not beat in mono.
+    if (width > 0) render(right[voice], hz < 200 ? hz : hz + Math.max(.2, Math.round(hz * (2 ** (width * 8 / 1200) - 1) * 5) / 5), amp, phase + (hz < 200 ? 0 : width * Math.PI * (((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 31) - 1)))
   }
   const rms = (data: Float64Array) => Math.sqrt(data.reduce((sum, value) => sum + value * value, 0) / data.length) || 1
   if (params.air > 0) {
@@ -134,12 +152,13 @@ export function createPlainVoices(params: PlainParams, rate = PLAIN_RATE): Float
     }
     const scale = .6 * params.air * rms(voices[0]) / rms(band)
     for (let i = 0; i < frames; i++) voices[0][i] += band[i] * scale
+    if (right !== voices) for (let i = 0; i < frames; i++) right[0][i] += band[i] * scale
   }
   const mix = voices[0].map((value, i) => value + voices[1][i] + voices[2][i])
   let peak = 0
   for (const value of mix) peak = Math.max(peak, Math.abs(value))
   const gain = Math.min(.13 / rms(mix), .7 / (peak || 1))
-  return voices.map(tone => { const out = Float32Array.from(tone, value => value * gain); return [out, out.slice()] })
+  return voices.map((tone, k) => { const out = Float32Array.from(tone, value => value * gain); return [out, right === voices ? out.slice() : Float32Array.from(right[k], value => value * gain)] })
 }
 
 /** All voices mixed into one stereo loop (for analysis and tests). */

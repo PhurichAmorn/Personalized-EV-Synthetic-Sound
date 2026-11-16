@@ -534,7 +534,7 @@ class TuningDiscoveryTest(unittest.TestCase):
             ra,rb=(d.candidates[i]['recipe'] for i in d.pair)
             for r in (ra,rb):
                 self.assertEqual(r['motion'],motion)
-                self.assertNotEqual(r['base']['start'],r['base']['blend'])
+                self.assertIsNone(r['base']['blend'])
                 self.assertEqual(r['base']['mix'],1/2)
                 if r['base']['start']=='pure':self.assertEqual(r['base']['character'],0)
             d.feedback(choice=answer(ra,rb))
@@ -559,23 +559,51 @@ class TuningDiscoveryTest(unittest.TestCase):
             self.assertTrue(all(motion(i)=='evolving' for i in d.pair));d.feedback(choice='A')
         self.assertTrue(all(motion(i)=='evolving' for i in d.finalists));self.assertEqual(d.export()['motion'],'evolving')
         d.close()
-    def test_opening_playoff_then_big_changes_first(self):
-        from experiment.source_search import TuningDiscovery,TUNING_OPENING,TUNING_BIG_PAIRS
+    def test_opening_playoff_variants_runner_up_then_pitch_first(self):
+        from experiment.source_search import TuningDiscovery,TUNING_OPENING,TUNING_BIG_PAIRS,TUNING_VARIANTS
         d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
-        start=lambda i:d.candidates[i]['recipe']['base']['start']
+        base=lambda i:d.candidates[i]['recipe']['base']
         winners=[]
         for n in range(len(TUNING_OPENING)):
-            self.assertEqual({start(i) for i in d.pair},set(TUNING_OPENING[n]))
+            self.assertEqual({base(i)['start'] for i in d.pair},set(TUNING_OPENING[n]))
             winners.append(d.pair[0]);d.feedback(choice='A')
-        self.assertEqual(set(d.pair)<=set(winners),True);first=list(d.pair)
-        d.feedback(choice='A');self.assertTrue(set(d.pair)<=set(winners));self.assertIn(first[0],d.pair)  # pair 5: pair-4 winner vs the third winner
+        self.assertTrue(set(d.pair)<=set(winners));first=list(d.pair)
+        d.feedback(choice='A');self.assertTrue(set(d.pair)<=set(winners));self.assertIn(first[0],d.pair)
+        d.feedback(choice='A')
+        fam=d.family;self.assertEqual({base(i)['start'] for i in d.pair},{fam})  # pair 6: face vs variant 1
+        self.assertIn(TUNING_VARIANTS[fam][0],{base(i)['variant'] for i in d.pair});d.feedback(choice='A')
+        self.assertIn(TUNING_VARIANTS[fam][1],{base(i)['variant'] for i in d.pair});d.feedback(choice='A')
+        self.assertEqual(len({base(i)['start'] for i in d.pair}),2)  # runner-up check: another family
         d.feedback(choice='A')
         while d.completed<TUNING_BIG_PAIRS:
             for i in d.pair:
                 o=d.candidates[i].get('origin',{})
-                if o.get('kind')=='tuned':self.assertIn(o['control'],('blend','pitch'))
+                if o.get('kind')=='tuned':self.assertEqual(o['control'],'pitch')
+            d.feedback(choice='A')
+        while d.active:
+            for i in d.pair:self.assertIsNone(base(i)['blend'])
             d.feedback(choice='A')
         d.close()
+    def test_tuning_and_challengers_share_the_budget(self):
+        from experiment.source_search import TuningDiscovery
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
+        kind=lambda i:d.candidates[i].get('origin',{}).get('kind')
+        while d.completed<8:d.feedback(choice='A')
+        challengers=tuning=0
+        best=d._ranked()[0]
+        while d.completed<19:
+            if d.rematch_pair:challengers+=1;self.assertIn(best,d.pair)  # challenger: an unchanged sound against the best
+            else:self.assertIn(d.check_parent,d.pair);tuning+=1;best=d.check_parent  # best vs a change of it
+            d.feedback(choice='A' if d.pair[0]==best else 'B')  # the best always wins: it settles, so challengers take over
+        self.assertGreaterEqual(challengers,5);self.assertGreaterEqual(tuning,2);d.close()
+    def test_last_pair_is_a_blind_tuning_check(self):
+        from experiment.source_search import TuningDiscovery
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
+        base=lambda i:d.candidates[i]['recipe']['base'];tuned=lambda i:any(base(i)[k] for k in ('pitch','brightness','character'))
+        while d.completed<19:d.feedback(choice='A' if tuned(d.pair[0]) else 'B' if tuned(d.pair[1]) else 'A')  # a listener who likes changes
+        a,b=d.pair;self.assertEqual(base(a).get('variant'),base(b).get('variant'));self.assertNotEqual(tuned(a),tuned(b))
+        d.feedback(choice='A');check=d.export()['tuning_check']
+        self.assertEqual(check['result'],'tuned' if tuned(a) else 'untuned');d.close()
     def test_neither_lowers_both_and_moves_away(self):
         from experiment.source_search import TuningDiscovery
         d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
@@ -587,15 +615,17 @@ class TuningDiscoveryTest(unittest.TestCase):
         with self.assertRaises(ValueError):d.feedback(choice='equal')
         d.close()
     def test_pitch_floor_and_skip_similar(self):
-        from experiment.source_search import TuningDiscovery,tuning_root,PITCH_FLOOR_HZ,TUNING_ROOTS
+        from experiment.source_search import TuningDiscovery,tuning_root,PITCH_FLOOR_HZ,PITCH_CEILING_HZ,TUNING_ROOTS
         d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
         for _ in range(20):
             for i in d.pair:
                 b=d.candidates[i]['recipe']['base']
                 if b['pitch'] or b['blend']:self.assertGreaterEqual(tuning_root(b),min(PITCH_FLOOR_HZ,TUNING_ROOTS[b['start']])-1e-6)  # never below the floor, or below its own start
+                if b['pitch'] or b['blend']:self.assertLessEqual(tuning_root(b),max(PITCH_CEILING_HZ,TUNING_ROOTS[b['start']])+1e-6)  # never above the ceiling, or above its own start
             d.feedback(choice='A' if d.candidates[d.pair[0]]['recipe']['base']['pitch']<0 else 'B')  # a listener who always wants lower
         d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
-        for _ in range(6):d.feedback(choice='A')
+        for _ in range(9):d.feedback(choice='A')  # past the opening, playoff, variant round and runner-up check
+        while d.rematch_pair:d.feedback(choice='A')  # challenger pairs are never skipped; wait for a tuning pair
         old=list(d.pair);d.skip_similar(old)
         heard={i for row in d.history for i in row['pair']}
         self.assertTrue(all(i in heard or i not in old for i in d.pair))
@@ -621,4 +651,9 @@ class TuningDiscoveryTest(unittest.TestCase):
         text=Path('desktop/src/levels.ts').read_text().split('export const STARTING_SOUNDS')[1].split('\n]\n')[0]
         self.assertEqual(tuple(re.findall(r"\{ id: '(\w+)', name:",text)),TUNING_STARTS)
         from experiment.source_search import TUNING_ROOTS
-        self.assertEqual({k:int(v) for k,v in re.findall(r"\{ id: '(\w+)', name:.*?rootHz: (\d+)",text)},TUNING_ROOTS)
+        full=Path('desktop/src/levels.ts').read_text();roots={k:int(v) for k,v in re.findall(r"\{ id: '([\w-]+)', name:.*?rootHz: (\d+)",full)}
+        self.assertEqual({k:roots[k] for k in TUNING_ROOTS},TUNING_ROOTS)
+        from experiment.source_search import TUNING_VARIANTS
+        variants=full.split('export const VARIANTS')[1]
+        for fam,ids in TUNING_VARIANTS.items():
+            for v in ids:self.assertIn(f"id: '{v}'",variants)

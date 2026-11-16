@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
-import { isLevelRecipe, isTuningRecipe, liveSound, tooSimilar, type LevelRecipe, type TuningRecipe } from './levels'
+import { describeSound, isLevelRecipe, isTuningRecipe, liveSound, tooSimilar, type LevelRecipe, type TuningRecipe } from './levels'
 import { plainVoices } from './voiceCache'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LevelRecipe | TuningRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
@@ -112,6 +112,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       <div className="thanks-check" aria-hidden="true">✓</div>
       <h3 className="text-lg">Saved · thank you!</h3>
       <p className="mt-1 text-sm text-neutral-300">Your final sound is #{discovery.finalists.findIndex(c => c.id === discovery.final) + 1} of your ranked sounds. This session is saved in Sound trace.</p>
+      <p className="mt-2 text-sm">{describeSound(discovery.finalists.find(c => c.id === discovery.final)?.recipe)}</p>
       <button type="button" className="control mt-4" onClick={() => { const c = discovery.finalists!.find(c => c.id === discovery.final); if (c) void listen(c) }}>Play your final sound</button>
     </section> : <section className="panel p-4 source-search-favourites" aria-label="Ranked finalists">
       <h3 className="text-lg">Your top three · choose your final sound</h3>
@@ -119,6 +120,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       <div className="podium">{[1, 0, 2].filter(rank => discovery.finalists![rank]).map(rank => { const candidate = discovery.finalists![rank]; return <div className={'podium-place place-' + (rank + 1)} key={candidate.id}>
         <div className="podium-card">
           <button type="button" className={'control' + (audition === candidate.id ? ' selected' : '')} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}>▶ Play</button>
+          <small className="podium-describe">{describeSound(candidate.recipe)}</small>
           <small>{candidate.games ? `won ${candidate.wins} of ${candidate.games} choices` : 'not compared yet'}</small>
           <button type="button" className="control podium-choose" onClick={() => setPendingFinal(candidate.id)}>Choose this sound</button>
         </div>
@@ -127,7 +129,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       {discovery.finalists.length > 3 && (showMore ? <div className="mt-4 space-y-2">{discovery.finalists.slice(3).map((candidate, index) => <div className="source-favourite-row" key={candidate.id}>
         <b>#{index + 4}</b>
         <button type="button" className={'control' + (audition === candidate.id ? ' selected' : '')} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}>▶ Play</button>
-        <small className="text-neutral-400">{candidate.games ? `won ${candidate.wins} of ${candidate.games} choices` : 'not compared yet'}</small>
+        <small className="text-neutral-400">{describeSound(candidate.recipe)} · {candidate.games ? `won ${candidate.wins} of ${candidate.games} choices` : 'not compared yet'}</small>
         <button type="button" className="control" onClick={() => setPendingFinal(candidate.id)}>Choose this sound</button>
       </div>)}</div> : <button type="button" className="control mt-4" onClick={() => setShowMore(true)}>Show more ({discovery.finalists.length - 3})</button>)}
     </section>)}

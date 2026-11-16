@@ -5,7 +5,7 @@ import { RECIPE_DEFAULT_CONTROLS } from './sourceRecipe'
 import { GranularPlayer, type GranularMode } from './granularPlayer'
 import { smoothParameter } from './audioAutomation'
 import { drivingSoundTargets, type SoundResponse } from './drivingSoundMapping'
-import { BLEND_MIX, NO_BRIGHTNESS, CANDIDATE_SOUNDS, CHARACTER, FAIR_FX, PITCH_STEP, STARTING_SOUNDS, SYNTH_TRIES, TUNING_DEFAULT, tunedSound, type Tuning } from './levels'
+import { NO_BRIGHTNESS, CANDIDATE_SOUNDS, VARIANTS, CHARACTER, FAIR_FX, PITCH_STEP, STARTING_SOUNDS, SYNTH_TRIES, TUNING_DEFAULT, tunedSound, type Tuning } from './levels'
 import { applyFx, buildRig, clamp, driveRig, FX_DEFAULT, FX_OFF, granularWorklet, manualInput, type Fx, type Motion } from './labEngine'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from './simulatedDrive'
 
@@ -92,6 +92,14 @@ function analyse(channel: Float32Array): Analysis {
 }
 
 export default function SoundLab({ onStart, stopToken }: { onStart: () => void; stopToken: number }) {
+  // The header sticks to the top; the right-hand graphs stick just below it, so the header never covers them.
+  const labRoot = useRef<HTMLElement>(null), labHead = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const head = labHead.current, root = labRoot.current
+    if (!head || !root) return
+    const observer = new ResizeObserver(() => root.style.setProperty('--lab-head-h', `${head.offsetHeight}px`))
+    observer.observe(head); return () => observer.disconnect()
+  }, [])
   const [plain, setPlain] = useState<PlainParams>(PLAIN_DEFAULT)
   const [style, setStyle] = useState<SourceFamily>('bowed')
   const [active, setActive] = useState<'A' | 'B'>('A')
@@ -211,42 +219,47 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
   useEffect(() => { if (playSoon) { setPlaySoon(false); void play() } }, [playSoon])
   // Starting sounds: each its own full design; "Same effects" plays every base sound through one transformation.
   const [typeOn, setTypeOn] = useState<string | null>(null)
+  const [group, setGroup] = useState<string | null>(null)  // null = starting sounds, else a family's variants (source tree level 2)
+  const cards = group ? VARIANTS[group] : CANDIDATE_SOUNDS
+  const [wide, setWide] = useState(true)  // stereo width for sounds played from 04 / 05: on is the default for every sound; off to compare
   const [ownFx, setOwnFx] = useState(true)
   const [typeVotes, setTypeVotes] = useState<Record<string, { vote?: string; note?: string; similar?: string[]; better?: string[] }>>({})
   const [tryOn, setTryOn] = useState('asis')
   const playType = (id: string, own = ownFx, variant = tryOn) => {
-    const sound = CANDIDATE_SOUNDS.find(item => item.id === id)!, add = SYNTH_TRIES.find(item => item.id === variant)!
+    const sound = cards.find(item => item.id === id)!, add = SYNTH_TRIES.find(item => item.id === variant)!
     remember(`Starting sound: ${sound.name}`)
-    setPlain({ ...plainMatch({}), ...sound.plain, ...add.plain(sound.plain) }); setFx({ ...(own ? sound.fx : FAIR_FX), ...add.fx }); setBypass(false); setActive('A'); setTryOn(variant)
+    setPlain({ ...plainMatch({}), ...sound.plain, ...add.plain(sound.plain), width: wide ? 1 : 0 }); setFx({ ...(own ? sound.fx : FAIR_FX), ...add.fx }); setBypass(false); setActive('A'); setTryOn(variant)
     setMotion(m => ({ ...m, mode: 'rise', travel: 1, response: 'exponential', input: 'drive' }))
     setTypeOn(id); if (!rig.current) setPlaySoon(true)
   }
   // Change test (05): before / after for each tuning change on one starting sound; the listener marks how big the change sounds.
+  // Only the sounds whose changes were never checked by ear: the two newest family faces and every variant (2026-11-16).
+  const TEST_SOUNDS = Object.entries(VARIANTS).flatMap(([family, list]) => list.filter(sound => sound.id !== family || family === 'warm' || family === 'synth').map(sound => ({ id: sound.id, name: sound.name, family })))
   const [testStart, setTestStart] = useState('warm')
-  const [blendWith, setBlendWith] = useState('sparkle')
+  const testFamily = TEST_SOUNDS.find(sound => sound.id === testStart)?.family ?? testStart
   const [testOn, setTestOn] = useState<string | null>(null)
   const [changeVotes, setChangeVotes] = useState<Record<string, { label: string; vote: string }>>({})
-  const soundName = (id: string) => STARTING_SOUNDS.find(sound => sound.id === id)!.name
-  const other = blendWith === testStart ? STARTING_SOUNDS.find(sound => sound.id !== testStart)!.id : blendWith
-  const fraction = (mix: number) => ({ [1 / 3]: '⅓', [1 / 2]: '½', [2 / 3]: '⅔' })[mix]
   const changeRows: [string, string, Partial<Tuning>][] = [
     ['pitch-1', `Pitch −${PITCH_STEP} semitones`, { pitch: -1 }], ['pitch+1', `Pitch +${PITCH_STEP} semitones`, { pitch: 1 }],
-    ...([[-1, 'Darker'], [1, 'Brighter (capped at 3.5 kHz)']] as const).filter(([side]) => NO_BRIGHTNESS[testStart] !== side).map(([side, label]) => [`bright${side > 0 ? '+' : '-'}1`, label, { brightness: side }] as [string, string, Partial<Tuning>]),
-    ...(CHARACTER[testStart].less ? [['char-1', `Less ${CHARACTER[testStart].label}`, { character: -1 }] as [string, string, Partial<Tuning>]] : []),
-    ...(CHARACTER[testStart].more ? [['char+1', `More ${CHARACTER[testStart].label}`, { character: 1 }] as [string, string, Partial<Tuning>]] : []),
-    ...BLEND_MIX.map(mix => [`blend-${other}-${mix.toFixed(2)}`, `Blend ${fraction(mix)} with ${soundName(other)}`, { blend: other, mix }] as [string, string, Partial<Tuning>]),
+    ...([[-1, 'Darker'], [1, 'Brighter (capped at 3.5 kHz)']] as const).filter(([side]) => NO_BRIGHTNESS[testFamily] !== side).map(([side, label]) => [`bright${side > 0 ? '+' : '-'}1`, label, { brightness: side }] as [string, string, Partial<Tuning>]),
+    ...(CHARACTER[testFamily].less ? [['char-1', `Less ${CHARACTER[testFamily].label}`, { character: -1 }] as [string, string, Partial<Tuning>]] : []),
+    ...(CHARACTER[testFamily].more ? [['char+1', `More ${CHARACTER[testFamily].label}`, { character: 1 }] as [string, string, Partial<Tuning>]] : []),
   ]
   const playTuned = (patch: Partial<Tuning>, key: string) => {
-    const t: Tuning = { ...TUNING_DEFAULT, start: testStart, ...patch }, sound = tunedSound(t, 260)
-    setTypeOn(null); setBefore(null); setPlain(sound.plain); setFx(sound.fx); setBypass(false); setActive('A')
+    const t: Tuning = { ...TUNING_DEFAULT, start: testFamily, variant: testStart, ...patch }, sound = tunedSound(t, 260)
+    setTypeOn(null); setBefore(null); setPlain({ ...sound.plain, width: wide ? 1 : 0 }); setFx(sound.fx); setBypass(false); setActive('A')
     setMotion(m => ({ ...m, mode: t.kind, travel: sound.travel, response: 'exponential', input: 'drive' }))
     setTestOn(key); if (!rig.current) setPlaySoon(true)
   }
-  const copyChanges = () => share('Change test results', STARTING_SOUNDS.map(sound => {
+  const copyChanges = () => share('Change test results', TEST_SOUNDS.map(sound => {
     const rows = Object.entries(changeVotes).filter(([key]) => key.startsWith(sound.id + '|'))
     return rows.length ? `${sound.name}\n` + rows.map(([, { label, vote }]) => `  ${label}: ${vote}`).join('\n') : ''
   }).filter(Boolean).join('\n') || 'No changes marked yet')
-  const copyTypes = () => share('Starting sound test results', `Effects: ${ownFx ? 'own' : 'same for all'}\n` + CANDIDATE_SOUNDS.map(t => `${t.name}: ${typeVotes[t.id]?.vote ?? 'not tried'}${typeVotes[t.id]?.similar?.length ? ' · too similar to ' + typeVotes[t.id]!.similar!.join(', ') : ''}${typeVotes[t.id]?.better?.length ? ' · better with ' + typeVotes[t.id]!.better!.join(', ') : ''}${typeVotes[t.id]?.note ? ' · ' + typeVotes[t.id]!.note : ''}`).join('\n'))
+  // One copy for every sound set (starting sounds and each family's variants); only sounds that were marked are listed.
+  const voteLine = (t: { id: string; name: string }) => { const v = typeVotes[t.id]; return `${t.name}: ${v?.vote ?? 'not marked'}${v?.similar?.length ? ' · too similar to ' + v.similar.join(', ') : ''}${v?.better?.length ? ' · better with ' + v.better.join(', ') : ''}${v?.note ? ' · ' + v.note : ''}` }
+  const copyTypes = () => share('Sound test results', [`Effects: ${ownFx ? 'own' : 'same for all'}`,
+    ...[['Starting sounds', CANDIDATE_SOUNDS] as const, ...Object.entries(VARIANTS).map(([family, list]) => [`${list[0].name} variants`, list] as const)]
+      .map(([title, list]) => { const marked = list.filter(t => typeVotes[t.id]); return marked.length ? `${title}\n` + marked.map(t => '  ' + voteLine(t)).join('\n') : '' }).filter(Boolean)].join('\n'))
   const pickStyle = (family: SourceFamily) => {
     const match = STYLE_MATCH[family]
     remember(STYLES.find(item => item.id === family)?.label ?? family)
@@ -259,8 +272,8 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
   const copy = () => share('Settings', JSON.stringify(settings, null, 2))
   const current = analysis[active]
 
-  return <section className="lab" aria-labelledby="lab-title">
-    <header className="lab-head">
+  return <section className="lab" aria-labelledby="lab-title" ref={labRoot}>
+    <header className="lab-head" ref={labHead}>
       <div><small>EV SOUND LAB · BENCH</small><h2 id="lab-title">Source + transformation</h2></div>
       <div className="lab-transport">
         <button type="button" className="lab-play" aria-pressed={playing} onClick={() => void play()}>{playing ? '■ Stop' : '▶ Play'}</button>
@@ -278,9 +291,10 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
       <textarea readOnly value={shared.text} rows={Math.min(12, shared.text.split('\n').length + 1)} onFocus={event => event.currentTarget.select()} /></div>}
     {before && <p className="lab-changed-banner" role="status">{changedCount} setting{changedCount === 1 ? '' : 's'} changed by <b>{before.label}</b> · marked "was" below <button type="button" onClick={() => setBefore(null)}>Clear marks</button></p>}
 
+    <div className="lab-split">
     <div className="lab-grid">
       <section className="lab-panel" aria-labelledby="lab-source">
-        <h3 id="lab-source"><span>01</span>Source <small>steady 5 s loop · no effects</small></h3>
+        <h3 id="lab-source">Source <small>steady 5 s loop · no effects</small></h3>
         <p className="lab-label">A · Plain source · starting points</p>
         <div className="lab-chips">{PLAIN_PRESETS.map(preset => <button key={preset.name} type="button" aria-pressed={JSON.stringify(preset.params) === JSON.stringify(plain)} onClick={() => { remember(preset.name); setPlain(preset.params); setActive('A') }}>{preset.name}</button>)}</div>
         {(['core', 'extra'] as const).map(part => <div key={part}>{part === 'extra' && <p className="lab-label">Extras · off by default · to reach Choir, Electric, Jet, Glass</p>}
@@ -292,16 +306,10 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
           <p className="lab-label">Built into this style · no slider</p>
           <ul>{match.extras.map(item => <li key={item}>{item}</li>)}</ul>
         </div>}
-        <SourceGraphs a={analysis.A} b={analysis.B} active={active} />
-        {current && <dl className="lab-stats">
-          <div><dt>Brightness (centroid)</dt><dd>{fmt(current.centroid, 'Hz')}</dd></div>
-          <div><dt>Crest factor</dt><dd>{fmt(current.crest, 'dB')}</dd></div>
-          <div><dt>Root</dt><dd>{active === 'A' ? fmt(plain.rootHz, 'Hz') : 'style'}</dd></div>
-        </dl>}
       </section>
 
       <section className="lab-panel" aria-labelledby="lab-motion">
-        <h3 id="lab-motion"><span>02</span>Motion <small>granular player · driving map</small></h3>
+        <h3 id="lab-motion">Motion <small>granular player · driving map</small></h3>
         <div className="lab-seg lab-seg-wide" role="group" aria-label="Player mode">{MODES.map(([mode, label]) => <button key={mode} type="button" aria-pressed={motion.mode === mode} onClick={() => setMotion(m => ({ ...m, mode }))}>{label}</button>)}</div>
         <div className="lab-seg lab-seg-wide" role="group" aria-label="Driving input">
           <button type="button" disabled={motion.mode === 'source'} aria-pressed={motion.input === 'drive'} onClick={() => setMotion(m => ({ ...m, input: 'drive' }))}>22 s drive (loops)</button>
@@ -311,11 +319,10 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
         {motion.input === 'manual' && motion.mode !== 'source' && <Slider range={{ key: 'pedal', label: 'Pedal (level, tone follow)', min: 0, max: 1, step: .01, low: 'Lifted', high: 'Floored' }} value={motion.pedal} onChange={pedal => setMotion(m => ({ ...m, pedal }))} />}
         <Slider range={{ key: 'travel', label: 'Pitch travel', min: .5, max: 2.5, step: .05, unit: '×', low: 'Narrow', high: 'Wide climb' }} value={motion.travel} was={before?.travel} onChange={travel => setMotion(m => ({ ...m, travel }))} />
         <label className="lab-select">Pedal response<select value={motion.response} onChange={event => setMotion(m => ({ ...m, response: event.target.value as SoundResponse }))}><option value="exponential">Exponential</option><option value="linear">Linear</option><option value="logarithmic">Logarithmic</option></select></label>
-        <DriveChart motion={motion} time={playing ? time : null} />
       </section>
 
       <section className="lab-panel" aria-labelledby="lab-fx">
-        <h3 id="lab-fx"><span>03</span>Transformation <small>after the player · live</small></h3>
+        <h3 id="lab-fx">Transformation <small>after the player · live</small></h3>
         {FX_RANGES.map(({ group, items }) => <fieldset key={group} disabled={bypass}><legend>{group}</legend>
           {items.map(range => <Slider key={range.key} range={range} value={fx[range.key as keyof Fx] as number} was={before?.fx[range.key as keyof Fx]} onChange={value => setFx(f => ({ ...f, [range.key]: value }))} />)}
         </fieldset>)}
@@ -323,29 +330,35 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
       </section>
 
       <section className="lab-panel lab-panel-wide" aria-labelledby="lab-tests">
-        <h3 id="lab-tests"><span>04</span>Experiments</h3>
+        <h3 id="lab-tests">Experiments</h3>
         <p className="lab-label">Starting sounds · the six the search uses · each a full design (base + effects)</p>
         <div className="lab-seg" role="group" aria-label="Effects">
           <button type="button" aria-pressed={ownFx} onClick={() => { setOwnFx(true); if (typeOn) playType(typeOn, true) }}>Own effects</button>
           <button type="button" aria-pressed={!ownFx} onClick={() => { setOwnFx(false); if (typeOn) playType(typeOn, false) }}>Same effects for all (base only differs)</button>
         </div>
-        <div className="lab-tests">{CANDIDATE_SOUNDS.map(type => <article key={type.id} className={typeOn === type.id ? 'lab-test-active' : ''}>
+        <div className="lab-seg" role="group" aria-label="Sound set">
+          <button type="button" aria-pressed={!group} onClick={() => { setGroup(null); setTypeOn(null) }}>Starting sounds</button>
+          {Object.keys(VARIANTS).map(family => <button key={family} type="button" aria-pressed={group === family} onClick={() => { setGroup(family); setTypeOn(null) }}>{VARIANTS[family][0].name} variants</button>)}
+        </div>
+        <div className="lab-seg" role="group" aria-label="Stereo width"><span className="lab-note">Stereo width:</span>
+          <button type="button" aria-pressed={wide} onClick={() => setWide(true)}>On (default)</button><button type="button" aria-pressed={!wide} onClick={() => setWide(false)}>Off (to compare)</button>
+          <span className="lab-note">press ▶ Play again after switching · headphones</span></div>
+        <div className="lab-tests">{cards.map(type => <article key={type.id} className={typeOn === type.id ? 'lab-test-active' : ''}>
           <h4>{type.name}</h4>
           <p className="lab-note">{type.character}</p>
           <p className="lab-listen">{type.settings}</p>
           <button type="button" aria-pressed={typeOn === type.id} onClick={() => playType(type.id, ownFx, 'asis')}>▶ Play on the drive</button>
           <div className="lab-chips">{['Keep', 'Maybe', 'Drop'].map(vote => <button key={vote} type="button" aria-pressed={typeVotes[type.id]?.vote === vote} onClick={() => setTypeVotes(v => ({ ...v, [type.id]: { ...v[type.id], vote } }))}>{vote}</button>)}</div>
-          <div className="lab-chips"><span className="lab-note">Too similar to:</span>{CANDIDATE_SOUNDS.filter(other => other.id !== type.id).map(other => { const list = typeVotes[type.id]?.similar ?? [], on = list.includes(other.name)
+          <div className="lab-chips"><span className="lab-note">Too similar to:</span>{cards.filter(other => other.id !== type.id).map(other => { const list = typeVotes[type.id]?.similar ?? [], on = list.includes(other.name)
             return <button key={other.id} type="button" aria-pressed={on} onClick={() => setTypeVotes(v => ({ ...v, [type.id]: { ...v[type.id], similar: on ? list.filter(n => n !== other.name) : [...list, other.name] } }))}>{other.name}</button> })}</div>
           <input className="lab-input" placeholder="Note (optional)" value={typeVotes[type.id]?.note ?? ''} onChange={event => setTypeVotes(v => ({ ...v, [type.id]: { ...v[type.id], note: event.target.value } }))} />
         </article>)}</div>
-        <button type="button" onClick={copyTypes}>Copy starting sound results</button>
+        <button type="button" onClick={copyTypes}>Copy results (all sound sets)</button>
       </section>
 
       <section className="lab-panel lab-panel-wide" aria-labelledby="lab-changes">
-        <h3 id="lab-changes"><span>05</span>Change test <small>is each tuning change big enough to hear? · play Before, then After, on the 22 s drive</small></h3>
-        <div className="lab-chips"><span className="lab-note">Starting sound:</span>{STARTING_SOUNDS.map(sound => <button key={sound.id} type="button" aria-pressed={testStart === sound.id} onClick={() => { setTestStart(sound.id); setTestOn(null) }}>{sound.name}</button>)}</div>
-        <div className="lab-chips"><span className="lab-note">Blend with:</span>{STARTING_SOUNDS.filter(sound => sound.id !== testStart).map(sound => <button key={sound.id} type="button" aria-pressed={other === sound.id} onClick={() => setBlendWith(sound.id)}>{sound.name}</button>)}</div>
+        <h3 id="lab-changes">Change test <small>can you hear each change, and does the sound still sound good? · play Before, then After, on the 22 s drive</small></h3>
+        <div className="lab-chips"><span className="lab-note">Sound (only those not tested yet):</span>{TEST_SOUNDS.map(sound => <button key={sound.id} type="button" aria-pressed={testStart === sound.id} onClick={() => { setTestStart(sound.id); setTestOn(null) }}>{sound.name}</button>)}</div>
         <div className="lab-changes">
           {changeRows.map(([id, label, patch]) => { const key = `${testStart}|${id}`, vote = changeVotes[key]?.vote
             return <div key={key} className={'lab-change' + (testOn?.startsWith(key) ? ' lab-test-active' : '')}>
@@ -354,17 +367,33 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
                 <button type="button" aria-pressed={testOn === key + '|before'} onClick={() => playTuned({}, key + '|before')}>▶ Before</button>
                 <button type="button" aria-pressed={testOn === key + '|after'} onClick={() => playTuned(patch, key + '|after')}>▶ After</button>
               </div>
-              <div className="lab-chips">{["Can't hear", 'Small', 'Clear'].map(option => <button key={option} type="button" aria-pressed={vote === option}
+              <div className="lab-chips">{["Can't hear", 'Small', 'Clear · good', 'Clear · loses its character', 'Clear · unpleasant'].map(option => <button key={option} type="button" aria-pressed={vote === option}
                 onClick={() => setChangeVotes(v => ({ ...v, [key]: { label, vote: option } }))}>{option}</button>)}</div>
             </div> })}
         </div>
         <button type="button" onClick={copyChanges}>Copy change test results</button>
       </section>
 
-      <section className="lab-panel lab-panel-wide" aria-labelledby="lab-scope">
-        <h3 id="lab-scope"><span>06</span>Scope <small>live output</small></h3>
-        <Scope analyser={analyser} active={playing} />
+    </div>
+    <aside className="lab-right" aria-label="Scopes and graphs">
+      <section className="lab-panel" aria-labelledby="lab-scope">
+        <h3 id="lab-scope">Scope <small>live output</small></h3>
+        {(['spectrogram', 'spectrum', 'waveform'] as const).map(view => <Scope key={view} analyser={analyser} active={playing} view={view} />)}
       </section>
+      <section className="lab-panel" aria-labelledby="lab-shape">
+        <h3 id="lab-shape">Sound shape <small>spectrum and waveform of the source (A solid, B faint)</small></h3>
+        <SourceGraphs a={analysis.A} b={analysis.B} active={active} />
+        {current && <dl className="lab-stats">
+          <div><dt>Brightness (centroid)</dt><dd>{fmt(current.centroid, 'Hz')}</dd></div>
+          <div><dt>Crest factor</dt><dd>{fmt(current.crest, 'dB')}</dd></div>
+          <div><dt>Root</dt><dd>{active === 'A' ? fmt(plain.rootHz, 'Hz') : 'style'}</dd></div>
+        </dl>}
+      </section>
+      <section className="lab-panel" aria-labelledby="lab-drivechart">
+        <h3 id="lab-drivechart">Drive <small>pitch and level over the 22 s drive</small></h3>
+        <DriveChart motion={motion} time={playing ? time : null} />
+      </section>
+    </aside>
     </div>
   </section>
 }
@@ -428,9 +457,9 @@ function DriveChart({ motion, time }: { motion: Motion; time: number | null }) {
   </figure>
 }
 
-function Scope({ analyser, active }: { analyser: RefObject<AnalyserNode | null>; active: boolean }) {
+/** One live view of the output; Sound Lab shows all three at once (spectrogram, spectrum, waveform), each with its own draw loop. */
+function Scope({ analyser, active, view }: { analyser: RefObject<AnalyserNode | null>; active: boolean; view: 'spectrum' | 'spectrogram' | 'waveform' }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const [view, setView] = useState<'spectrum' | 'spectrogram' | 'waveform'>('spectrogram')
   const live = useRef(active)
   live.current = active
   const wake = useRef(() => {})
@@ -447,14 +476,14 @@ function Scope({ analyser, active }: { analyser: RefObject<AnalyserNode | null>;
       wake.current()
     })
     observer.observe(element)
-    const css = getComputedStyle(element), ink = css.getPropertyValue('--fg').trim() || '#f2f2f2', muted = css.getPropertyValue('--muted').trim() || '#9a9a9a'
+    const css = getComputedStyle(element), ink = css.getPropertyValue('--fg').trim() || '#f2f2f2'
     const render = () => {
       const node = analyser.current, on = live.current && !!node
-      // Idle: draw one "idle" frame, then stop until playback wakes the loop again.
-      frame = on ? requestAnimationFrame(render) : 0
-      if (on) { node!.getFloatFrequencyData(freq); node!.getFloatTimeDomainData(samples) } else { freq.fill(-140); samples.fill(0) }
-      const rate = node?.context.sampleRate ?? 48000, binHz = rate / 4096
-      const yOf = (hz: number) => height - logX(hz) * height
+      // Not playing: draw nothing (the last picture stays) and stop until playback wakes the loop again.
+      if (!on) { frame = 0; return }
+      frame = requestAnimationFrame(render)
+      node!.getFloatFrequencyData(freq); node!.getFloatTimeDomainData(samples)
+      const binHz = node!.context.sampleRate / 4096
       if (view === 'spectrogram') {
         // Scroll left 2 px, paint the new column: log frequency up, brightness = level.
         draw.drawImage(element, 2 * (window.devicePixelRatio || 1), 0, element.width - 2 * (window.devicePixelRatio || 1), element.height, 0, 0, width - 2, height)
@@ -479,22 +508,14 @@ function Scope({ analyser, active }: { analyser: RefObject<AnalyserNode | null>;
         }
         draw.stroke()
       }
-      // Readouts: level and brightness of what is playing now.
-      let energy = 0, weighted = 0, total = 0
-      for (const value of samples) energy += value * value
-      for (let k = 1; k < freq.length; k++) { const power = 10 ** (freq[k] / 10); weighted += power * k * binHz; total += power }
-      draw.fillStyle = 'rgba(16,16,16,.8)'; draw.fillRect(width - 196, 4, 192, 20)
-      draw.fillStyle = muted; draw.font = '11px "IBM Plex Mono", monospace'
-      draw.fillText(on ? `${(10 * Math.log10(energy / samples.length + 1e-12)).toFixed(1)} dBFS · ${total ? Math.round(weighted / total) : 0} Hz centroid` : 'idle', width - 190, 18)
-      if (view !== 'waveform') { draw.fillStyle = muted; for (const hz of [100, 1000, 10000]) draw.fillText(hz >= 1000 ? hz / 1000 + 'k' : String(hz), view === 'spectrum' ? logX(hz) * width + 3 : 4, view === 'spectrum' ? height - 4 : yOf(hz) - 3) }
     }
     wake.current = () => { if (!frame) frame = requestAnimationFrame(render) }
     wake.current()
     return () => { cancelAnimationFrame(frame); frame = 0; wake.current = () => {}; observer.disconnect() }
   }, [view, analyser])
   useEffect(() => { if (active) wake.current() }, [active])
-  return <div className="lab-scope">
-    <div className="lab-seg" role="group" aria-label="Scope view">{(['spectrogram', 'spectrum', 'waveform'] as const).map(item => <button key={item} type="button" aria-pressed={view === item} onClick={() => setView(item)}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
+  return <figure className={'lab-scope lab-scope-' + view}>
+    <figcaption>{view[0].toUpperCase() + view.slice(1)}</figcaption>
     <canvas ref={canvas} role="img" aria-label={`Live ${view}`} />
-  </div>
+  </figure>
 }

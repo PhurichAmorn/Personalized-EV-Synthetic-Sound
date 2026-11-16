@@ -510,6 +510,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .podium { display: flex; align-items: flex-end; justify-content: center; gap: 12px; margin-top: 18px; }
 .podium-place { display: flex; flex: 1 1 0; flex-direction: column; align-items: stretch; max-width: 190px; min-width: 0; }
 .podium-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #484848; border-bottom: 0; border-radius: 12px 12px 0 0; background: #262626; text-align: center; }
+.podium-describe { color: #e5e5e5; font-size: 12px; line-height: 1.35; }
 .podium-card small { color: #b8b8b8; font-size: 11px; }
 .podium-choose { font-size: 12px; }
 .podium-step { display: grid; place-items: center; border: 1px solid #484848; background: linear-gradient(#383838, #242424); }
@@ -540,11 +541,14 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .lab button[aria-pressed="true"] { background: #3a3a3a; }
 .lab-volume { display: flex; align-items: center; gap: 6px; color: var(--muted); font: 11px var(--font-mono); } .lab-volume input { width: 90px; }
 .lab-error { color: #ffa8a8; }
-.lab-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-top: 16px; }
+.lab-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 16px; align-items: start; }
+.lab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; padding-top: 16px; }
+/* Right side: scopes and graphs stay in view while the settings on the left scroll. */
+.lab-right { position: sticky; top: calc(var(--lab-head-h, 72px) + 8px); display: grid; gap: 12px; padding-top: 16px; max-height: calc(100vh - var(--lab-head-h, 72px) - 16px); overflow-y: auto; }
+@media (max-width: 1100px) { .lab-split { grid-template-columns: 1fr; } .lab-right { position: static; max-height: none; } }
 .lab-panel { min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .lab-panel-wide { grid-column: 1 / -1; }
 .lab h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font: 600 15px var(--font-display); letter-spacing: .04em; text-transform: uppercase; }
-.lab h3 span { color: var(--muted); font: 11px var(--font-mono); }
 .lab h3 small { margin-left: auto; color: var(--muted); font: 10px var(--font-mono); text-transform: none; letter-spacing: 0; }
 .lab-label { margin: 12px 0 6px; color: var(--muted); font: 10px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
 .lab-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; } .lab-chips button { min-height: 28px !important; padding: 3px 10px !important; font-size: 12px; }
@@ -573,7 +577,16 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .lab-stats div { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; }
 .lab-stats dt { color: var(--muted); font-size: 10px; } .lab-stats dd { margin: 0; font: 13px var(--font-mono); }
 .lab-note { color: var(--muted); font-size: 12px; }
-.lab-scope { display: grid; gap: 8px; } .lab-scope canvas { width: 100%; height: 220px; border-radius: 4px; background: #101010; }
+.lab-scope { display: grid; gap: 2px; margin: 0 0 6px; } .lab-scope canvas { width: 100%; height: 110px; border-radius: 4px; background: #101010; }
+.lab-scope figcaption { color: var(--muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.lab-scope-spectrum canvas { height: 80px; } .lab-scope-waveform canvas { height: 64px; }
+/* Right side compact: every graph fits one screen without scrolling. */
+.lab-right .lab-panel { padding: 8px 10px; }
+.lab-right .lab-panel h3 { margin: 0 0 6px; font-size: 13px; }
+.lab-right .lab-graphs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lab-right figure { margin: 0; }
+.lab-right svg { display: block; width: 100%; height: auto; max-height: 96px; }
+.lab-right .lab-stats { margin-top: 6px; gap: 6px; } .lab-right .lab-stats div { padding: 3px 6px; }
 @media (max-width: 1100px) { .lab-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 720px) { .lab { padding: 16px; } .lab-grid { grid-template-columns: 1fr; } }
 

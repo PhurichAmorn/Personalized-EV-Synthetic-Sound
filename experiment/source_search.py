@@ -865,19 +865,27 @@ class LevelDiscovery(StyleDiscovery):
 # Tuning search (2026-11-15): the seven starting sounds plus the agreed tuning moves (desktop/src/levels.ts tunedSound).
 # The listener picks Rising or Evolving first; Space Large and the 260 Hz comfort cap stay fixed. Sounds are built live in the app.
 TUNING_POLICY='source-tuning-v1'
-TUNING_STARTS=('warm','voice','sparkle','pure','whine','dark')  # = STARTING_SOUNDS ids in levels.ts (six kept after the starting sound test)
-TUNING_NAMES={'warm':'Warm pad','voice':'Voice','sparkle':'Sparkle','pure':'Pure tone','whine':'Electric whine','dark':'Dark ambience'}
-TUNING_OPENING=(('sparkle','pure'),('dark','voice'),('warm','whine'))  # most different first: 0.94, 0.86, 0.75 apart (octave-band spectrum)
+TUNING_STARTS=('warm','voice','sparkle','synth','whine','dark')  # = STARTING_SOUNDS ids in levels.ts ('warm' = Cinematic pad family; Synth replaced Pure tone 2026-11-16)
+TUNING_NAMES={'warm':'Cinematic pad','voice':'Voice','sparkle':'Sparkle','synth':'Synth','whine':'Electric whine','dark':'Dark ambience'}
+TUNING_OPENING=(('sparkle','warm'),('voice','whine'),('synth','dark'))  # most different pairing: 0.58, 0.76, 0.71 apart (octave-band spectrum, capped pitch)
 TUNING_MOTION_SOUND='warm'  # pair 1: this sound Rising vs Evolving; the choice sets the motion for the session
 TUNING_PLAYOFF=2  # pairs 5-6: the opening winners against each other, so the search follows one branch
-TUNING_BIG_PAIRS=12  # until pair 12 only big changes (blend, pitch); brightness and character after
+# Source tree level 2 (2026-11-16): each family's hand-made variants (= VARIANTS in levels.ts). After the family playoff the face meets its
+# two variants, then the best of them meets the best sound of another family (runner-up check), then fine tuning.
+TUNING_VARIANTS={'warm':('warm-angelic','warm-dreamy'),'voice':('voice-aah','voice-deep'),'sparkle':('sparkle-chimes','sparkle-crystal'),
+    'synth':('synth-dark','synth-lead'),'whine':('whine-clear','whine-turbine'),'dark':('dark-ghost','dark-gong')}
+TUNING_VARIANT_NAMES={'warm-angelic':'Angelic','warm-dreamy':'Dreamy pad','voice-aah':'Bright aah','voice-deep':'Deep ooh','sparkle-chimes':'Low chimes',
+    'sparkle-crystal':'Crystal','synth-dark':'Dark synth','synth-lead':'Bright lead','whine-clear':'Clear whine','whine-turbine':'Turbine','dark-ghost':'Ghost choir','dark-gong':'Gong'}
+TUNING_BIG_PAIRS=11  # fine tuning: pitch changes first (biggest), brightness and character from about pair 12
 # 2nd version: Borrow, Climb and Movement dropped (too small to hear in the change test). = Tuning in levels.ts
-TUNING_SOURCE={'pitch':(-1,0,1),'brightness':(-1,0,1),'character':(-1,0,1),'blend':(None,)+TUNING_STARTS}  # pitch step = 8 semitones (4 sounded small); one blend (1/2)
+TUNING_SOURCE={'pitch':(-1,0,1),'brightness':(-1,0,1),'character':(-1,0,1)}  # pitch step = 8 semitones (4 sounded small). Blend dropped 2026-11-16: the variants do its job, more clearly
 # Change test (2026-11-15): sides that sounded small are not offered for that starting sound (= CHARACTER in levels.ts).
-TUNING_LIMITS={'character':{'warm':(-1,0),'pure':(0,),'whine':(-1,0),'dark':(0,1),'sparkle':(0,1)},'brightness':{'pure':(0,1),'sparkle':(-1,0)}}
+TUNING_LIMITS={'character':{'warm':(-1,0),'whine':(-1,0),'dark':(0,1),'sparkle':(0,1)},'brightness':{'sparkle':(-1,0)}}
+# Change test 2026-11-16, Cinematic pad and Angelic: every change clear; 'less chord' loses their character but is not unpleasant, so kept
+# (only 'unpleasant' changes are removed). Synth and the other variants not change-tested yet.
 TUNING_FX={}  # Movement dropped after the change test (wobble/pulse small, pump not heard); recipes keep fx.movement 'still'
 TUNING_MOVES={**{('base',k):v for k,v in TUNING_SOURCE.items()},**{('fx',k):v for k,v in TUNING_FX.items()}}
-TUNING_CONTROLS={('base','start'):TUNING_STARTS,**TUNING_MOVES}
+TUNING_CONTROLS={('base','start'):TUNING_STARTS,('base','variant'):TUNING_STARTS+tuple(v for vs in TUNING_VARIANTS.values() for v in vs),**TUNING_MOVES}  # variant = the face id for a family's own sound
 # Model features: one-hot per setting, but Character is per starting sound (Warm pad 'less chord' and Dark ambience 'more ghost voice'
 # are different changes; one shared feature mixed them up in the 2026-11-16 session).
 TUNING_FEATURE_KEYS=[(part,key,level) for (part,key),levels in TUNING_CONTROLS.items() if key!='character' for level in levels]+[('start','character',(s,l)) for s in TUNING_STARTS for l in (-1,1)]
@@ -885,15 +893,20 @@ TUNING_FEATURE_NAMES=[f'character {s} {l:+d}' if key=='character' else f'{key}={
 # 1: pitch floor. Roots of the starting sounds (= rootHz in levels.ts STARTING_SOUNDS). Very low notes barely play on laptop speakers and
 # most headphones: Dark ambience at 48 Hz made darker / more ghost voice sound the same (pairs 16, 20 on 2026-11-16). 80 Hz keeps
 # Warm pad -8 semitones (83 Hz, the listener's final pick that session) and blocks Dark ambience 48 Hz and Electric whine 62 Hz.
-TUNING_ROOTS={'warm':131,'voice':147,'sparkle':233,'pure':196,'whine':98,'dark':76}
+TUNING_ROOTS={'warm':98,'voice':147,'sparkle':233,'synth':175,'whine':98,'dark':76,  # faces, then variants (= rootHz in levels.ts)
+    'warm-angelic':147,'warm-dreamy':147,'voice-aah':147,'voice-deep':110,'sparkle-chimes':147,'sparkle-crystal':185,'synth-dark':110,'synth-lead':196,
+    'whine-clear':98,'whine-turbine':110,'dark-ghost':98,'dark-gong':87}
 PITCH_FLOOR_HZ=80
+# Pitch ceiling: the drive's top note is about 1 semitone above the root and the comfort cap stops it at 260 Hz, so a root above
+# about 245 Hz is pinned at the cap for most of the drive. Sparkle +8 (370 Hz) sounded like plain Sparkle (2026-11-16, pairs 7-10).
+PITCH_CEILING_HZ=200  # 245 at first; Angelic +8 (233 Hz) still sounded too high (2026-11-16), so pitch-up stops at 200 Hz
 PITCH_STEP_SEMITONES=8
 def tuning_root(base):
-    root=TUNING_ROOTS[base['start']]
-    if base['blend']:root*=(TUNING_ROOTS[base['blend']]/root)**base.get('mix',1/2)
+    root=TUNING_ROOTS[base.get('variant') or base['start']]
+    if base.get('blend'):root*=(TUNING_ROOTS[base['blend']]/root)**base.get('mix',1/2)
     return root*2**(PITCH_STEP_SEMITONES*base['pitch']/12)
-def tuning_recipe(motion,start):
-    return {'version':3,'kind':'tuning','seed':0,'motion':motion,'base':{'start':start,'pitch':0,'brightness':0,'character':0,'blend':None,'mix':1/2},'fx':{'movement':'still'}}
+def tuning_recipe(motion,start,variant=None):
+    return {'version':3,'kind':'tuning','seed':0,'motion':motion,'base':{'start':start,'variant':variant or start,'pitch':0,'brightness':0,'character':0,'blend':None,'mix':1/2},'fx':{'movement':'still'}}
 
 class TuningDiscovery(LevelDiscovery):
     """20 direct choices over tuned starting sounds. Answers: Prefer A, Prefer B, Both good, Neither.
@@ -914,10 +927,11 @@ class TuningDiscovery(LevelDiscovery):
     bayes=True  # False = the earlier hand-made rules (bonus for unheard settings, momentum), kept as a baseline
     def _features(self,recipe):
         b=recipe['base']
-        return np.array([float((b['start'],b['character'])==level) if key=='character' else float(recipe[part][key]==level) for part,key,level in TUNING_FEATURE_KEYS])
+        get=lambda part,key:b.get('variant',b['start']) if key=='variant' else recipe[part].get(key)  # sessions before the tree have no variant
+        return np.array([float((b['start'],b['character'])==level) if key=='character' else float(get(part,key)==level) for part,key,level in TUNING_FEATURE_KEYS])
     def _id(self,recipe):return hashlib.sha256(json.dumps([recipe['motion'],recipe['base'],recipe['fx']],sort_keys=True).encode()).hexdigest()[:32]
     def _label(self,recipe):
-        b,f=recipe['base'],recipe['fx'];parts=[TUNING_NAMES[b['start']]]
+        b,f=recipe['base'],recipe['fx'];v=b.get('variant',b['start']);parts=[TUNING_VARIANT_NAMES.get(v,TUNING_NAMES.get(v,v))]
         for key in ('pitch','brightness','character'):
             if b[key]:parts.append(f'{key} {b[key]:+d}')
         if b['blend']:parts.append(f"blend {TUNING_NAMES[b['blend']]}")
@@ -959,15 +973,16 @@ class TuningDiscovery(LevelDiscovery):
     def _finalist_summary(self,ident,strength):
         return {**super()._finalist_summary(ident,strength),'utility':round(self._utility(ident),3),'sd':round(self._sd(ident),3)}
     def _allowed(self,recipe,part,key,level):
-        if key=='blend' and level==recipe['base']['start']:return False
+        if key in ('blend','variant','start'):return False  # never changed by a tuning move
         if key in ('pitch','blend'):  # pitch floor: never move a sound lower once it is under the floor (Dark ambience may start at 76 Hz)
-            root=tuning_root({**recipe['base'],key:level})
-            if root<PITCH_FLOOR_HZ and root<tuning_root(recipe['base'])-1e-6:return False
+            root=tuning_root({**recipe['base'],key:level});now=tuning_root(recipe['base'])
+            if root<PITCH_FLOOR_HZ and root<now-1e-6:return False
+            if root>PITCH_CEILING_HZ and root>now+1e-6:return False  # pitch ceiling: never higher once above it
         return level in TUNING_LIMITS.get(key,{}).get(recipe['base']['start'],(level,))
     def start(self,motion=None):
         """motion None: pair 1 is the same sound Rising vs Evolving and the listener's choice sets it (Both good / Neither keep Rising)."""
         if motion not in (None,'rise','evolving'):raise ValueError('Choose Rising or Evolving')
-        with self.lock:self.motion=motion or 'rise';self.motion_pairs=0 if motion else 1;super().start()
+        with self.lock:self.motion=motion or 'rise';self.motion_pairs=0 if motion else 1;self.family=None;self.tuning_check=None;super().start()
     def _proposals(self):
         self.check_parent=None;mp=self.motion_pairs;step=self.completed-mp;rows=self._choices()
         if mp and self.completed==0:
@@ -988,19 +1003,47 @@ class TuningDiscovery(LevelDiscovery):
         if step==opening+1 and len(winners)>=3:
             left=[i for i in winners if i not in rows[mp+opening]['pair']]
             if left:self.rematch=[next(i for i in winners if i!=left[0]),left[0]];return []
+        # Variant round: the winning family's face against its two variants (the face may be heard again).
+        family=self.candidates[ranked[0]]['recipe']['base']['start'] if ranked else TUNING_STARTS[0]
+        if step==opening+2 or not getattr(self,'family',None):self.family=family  # chosen once, at the variant round
+        variant=lambda v:(tuning_recipe(self.motion,self.family,v),{'kind':'variant','summary':f'Variant: {TUNING_VARIANT_NAMES[v]} ({TUNING_NAMES[self.family]})'})
+        own=lambda:[i for i in ranked if self.candidates[i]['recipe']['base']['start']==self.family]
+        vs=TUNING_VARIANTS[self.family]
+        if step==opening+2:self.rematch=[own()[0] if own() else self._add(*variant(self.family)),self._add(*variant(vs[0]))];return []
+        if step==opening+3:self.rematch=[own()[0],self._add(*variant(vs[1]))];return []
+        # Runner-up check: the best of this family against the best sound of another family, so the listener can still switch.
+        if step==opening+4:
+            other=next((i for i in ranked if self.candidates[i]['recipe']['base']['start']!=self.family),None)
+            if other and own():self.rematch=[own()[0],other];return []
+        # Last pair (pair 20): blind tuning check. The current best against the same variant untuned (or, if the best is untuned, against its
+        # best tuned version). It looks like any other pair and counts like any other choice, so the shortlist built after it agrees with it.
+        if self.completed==STYLE_PAIRS-1 and ranked:
+            top=ranked[0];b=self.candidates[top]['recipe']['base'];tuned=lambda i:any(self.candidates[i]['recipe']['base'][k] for k in ('pitch','brightness','character'))
+            same=lambda i:self.candidates[i]['recipe']['base'].get('variant')==b.get('variant')
+            if tuned(top):plain=self._add(tuning_recipe(self.motion,b['start'],b.get('variant')),{'kind':'check','summary':'Tuning check: the same variant untuned'});pair=[top,plain]
+            else:pair=[next((i for i in ranked if same(i) and tuned(i)),None),top]
+            if pair[0] and pair[1] and pair[0]!=pair[1]:
+                self.tuning_check={'tuned':pair[0],'untuned':pair[1]};self.rematch=pair;return []
         if self.bayes:self._sample()  # parents stay the posterior-mean best; the sample orders their changes
         # After Neither, build on other sounds: the next pair moves away instead of fine-tuning a line the listener rejected.
         last=self._choices()[-1];rejected=set(last['pair']) if last['choice']=='neither' else set()
         open_ranked=[i for i in ranked if not self._settled(i) and i not in rejected] or [i for i in ranked if i not in rejected] or ranked
         start_of=lambda i:self.candidates[i]['recipe']['base']['start']
-        best=open_ranked[0];second=next((i for i in open_ranked[1:] if start_of(i)!=start_of(best)),open_ranked[1] if len(open_ranked)>1 else best)
-        big=step<TUNING_BIG_PAIRS  # coarse to fine: blend and pitch first
-        moves=lambda i:[m for m in self._neighbours(i) if not big or m[1]['control'] in ('blend','pitch')]
-        # Fallback tail: changes of the next-ranked sounds, for when every one-setting change of the top two was already heard.
-        fallback=[m for i in open_ranked if i not in (best,second) for m in moves(i)]
-        if step%2==0 and not rejected:self.check_parent=best;return moves(best)+fallback
-        a,b=moves(best),moves(second)
-        return [x for pair in zip(a,b) for x in pair]+a[len(b):]+b[len(a):]+fallback
+        best=next((i for i in ranked if i not in rejected),ranked[0])  # the champion; a settled champion stays (challengers face it)
+        # Tuning pairs are always the best sound against one change of it: a change that spoils the sound just loses to it. (Before, odd pairs
+        # put a change of the best against a change of another family, so rejecting a bad change looked like preferring that family.)
+        # Challenger pairs share the same budget adaptively (2026-11-16, listener: tuning re-confirmed one sound for ~10 pairs): once the best
+        # has beaten its own changes twice (settled), every pair is a challenger; before that, tuning and challenger take turns.
+        tuning_step=step-opening-5
+        if self._settled(best) or tuning_step%2==1:
+            challenger=self._challenger(best)
+            if challenger:self.rematch=[best,challenger];return []
+        big=step<TUNING_BIG_PAIRS  # coarse to fine: pitch first
+        moves=lambda i:[m for m in self._neighbours(i) if not big or m[1]['control']=='pitch']
+        # Fallback tail: changes of the next-ranked sounds, for when every one-setting change of the best was already heard.
+        fallback=[m for i in open_ranked if i!=best for m in moves(i)]
+        if not rejected:self.check_parent=best
+        return moves(best)+fallback
     def skip_similar(self,ids):
         """The app measured the two sounds of the pair as too close: drop the new one(s) and pick another pair. Opening and playoff pairs are kept."""
         with self.lock:
@@ -1009,23 +1052,38 @@ class TuningDiscovery(LevelDiscovery):
             heard={i for row in self.history for i in row['pair']};new=[i for i in self.pair if i not in heard]
             self.diversity_skips.append({'pair':list(self.pair),'dropped':new,'reason':'App measured the pair as too similar'})
             self.excluded|=set(new);self._prepare()
+    def _challenger(self,best):
+        """An untried sound to put against the best: every family face and variant, unchanged, in the session's motion. One Thompson sample
+        of the listener's taste picks it, so sounds never heard (widest uncertainty) get their turn without being random. Never a sound that
+        already met the best."""
+        self._sample();met={i for r in self._choices() if best in r['pair'] for i in r['pair']}
+        pool=[tuning_recipe(self.motion,fam,v) for fam,vs in TUNING_VARIANTS.items() for v in (fam,)+vs]
+        pool=[r for r in pool if self._id(r) not in met and self._id(r)!=best and self._id(r) not in self.excluded]
+        if not pool:return None
+        r=max(pool,key=self._sampled);v=r['base']['variant']
+        return self._add(r,{'kind':'challenger','summary':f"Challenger: {TUNING_VARIANT_NAMES.get(v,TUNING_NAMES.get(v,v))}"})
     def _prepare(self):
         self.rematch=None;super()._prepare();self.rematch_pair=bool(self.rematch)
         if self.rematch:self.error='';pair=list(self.rematch);self.rng.shuffle(pair);self.pair=pair;self.pair_mode='choice'
     def export(self):
         data=super().export();data['motion']=self.motion
+        check=getattr(self,'tuning_check',None);last=self.history[-1] if self.history else None
+        if check and last and set(last['pair'])=={check['tuned'],check['untuned']}:
+            data['tuning_check']={**check,'choice':last['choice'],'result':'tuned' if last['winner']==check['tuned'] else 'untuned' if last['winner']==check['untuned'] else last['choice']}
         if self.bayes:
             mean,cov=self._posterior()
             data['preference_model'].update(version='bayes-bt-1',feature_sd={n:round(float(v),3) for n,v in zip(self.feature_names,np.sqrt(np.diag(cov)))})
-        data['note']=('Tuning search: pair 1 plays Warm pad Rising vs Evolving and the choice sets the motion (Both good / Neither keep Rising); '
-            'only the source is tuned. Pairs 2-4: the six starting sounds in their most different pairs (Sparkle vs Pure tone, Dark ambience vs Voice, '
-            'Warm pad vs Electric whine). Pairs 5-6: the opening winners against each other. Then one-setting changes: until pair 13 only blend (halfway '
-            'with another starting sound) and pitch (+-8 semitones, never lower once under 80 Hz); after that also brightness and character. Changes '
-            'that sounded small in the change test are not offered (TUNING_LIMITS); the app skips pairs it measures as too similar. '
-            'Preference model: Bayesian Bradley-Terry over 31 settings (one-hot; character per starting sound), N(0,1) prior, Laplace approximation, '
-            'refitted after every choice. Answers: Prefer A / B; Both good (tie, both beat a neutral sound); Neither (tie, both lose to it; the next pair '
-            'builds on other sounds). Pair choice: Thompson sampling: one taste drawn from the posterior ranks the parents and their changes; even pairs '
-            'test the best sound against a change of it, odd pairs a change of the best against a change of the best other starting sound (sample spread 0.5). '
-            'Shortlist of 5 by posterior mean, at least 2 choices each, '
-            'and any two differ in starting sound or in at least two settings. The listener picks, then answers yes/no: happy with this sound in their car.')
+        data['note']=('Tuning search with a source tree. Pair 1: Cinematic pad Rising vs Evolving sets the motion (Both good / Neither keep Rising). '
+            'Pairs 2-4: the six family faces in their most different pairs (Sparkle vs Cinematic pad, Voice vs Electric whine, Synth vs Dark ambience). '
+            'Pairs 5-6: playoff between the opening winners: the winner is the family. Pairs 7-8: the family face against its two hand-made variants. '
+            'Pair 9: the best of the family against the best sound of another family (runner-up check). Pairs 10-19: tuning pairs (the best sound against one change of it: pitch +-8 semitones first, '
+            'then brightness and character; never below 80 Hz, pitch-up only up to 200 Hz) and challenger pairs (the best against an untried family '
+            'face or variant, unchanged, picked by a Thompson sample). They take turns; once the best has beaten its own changes twice, every pair '
+            'is a challenger, so tuning lasts only while it finds something. '
+            'Changes that sounded small in the change test are not offered; the app skips pairs it measures as too similar. Each sound keeps its own '
+            'effects. Preference model: Bayesian Bradley-Terry over one-hot settings (family, variant, pitch, brightness, character per family), '
+            'N(0,1) prior, Laplace approximation; parents by posterior mean, changes ordered by a Thompson sample (half spread). Answers: Prefer A / B; Both good (tie, both beat a neutral sound); Neither (tie, '
+            'both lose to it; the next pair builds on other sounds). Shortlist of 5 by posterior mean, at least 2 choices each, any two differ in '
+            'family or in at least two settings. Pair 20 is a blind tuning check (the best sound vs the same variant untuned; tuning_check in the '
+            'export), counted like any other choice. The listener picks, then answers yes/no: happy with this sound in their car.')
         return data
