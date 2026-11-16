@@ -28,16 +28,34 @@ class SourceHistory:
         for path in self.root.glob('*.json'):
             try:d=json.loads(path.read_text());rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists'])})
             except (OSError,ValueError,KeyError):continue
-        return sorted(rows,key=lambda row:row['created'],reverse=True)
+        starred=self.starred()
+        for row in rows:row['starred']=row['id'] in starred
+        return sorted(sorted(rows,key=lambda row:row['created'],reverse=True),key=lambda row:not row['starred'])  # starred first, newest first within each group
+    def starred(self):
+        """Sessions the researcher marked to keep: one id per line in starred.txt, apart from the session records so starring never rewrites them."""
+        try:return set(ID.findall((self.root/'starred.txt').read_text()))
+        except OSError:return set()
+    def star(self,ident,on):
+        if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
+        ids=self.starred()
+        if on:ids.add(ident)
+        else:ids.discard(ident)
+        self.root.mkdir(parents=True,exist_ok=True)
+        temp=self.root/'starred.tmp';temp.write_text(''.join(f'{i}\n' for i in sorted(ids)));temp.replace(self.root/'starred.txt')
+        return on
     def get(self,ident):return self._read(ident)
     def delete(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
         (self.root/f'{ident}.json').unlink(missing_ok=True)
+        if ident in self.starred():self.star(ident,False)
         return True
     def render(self,ident,candidate):
         """Start rendering one saved sound in the background; the result appears in snapshot()['historyPreview']. Nothing is kept: clear() removes it."""
         recipe=self._read(ident)['candidates'][candidate]['recipe']
         self.clear()
+        if recipe.get('kind')=='levels':  # built live in the app; TraceHistory plays it itself
+            with self.lock:self.preview={'session':ident,'candidate':candidate,'status':'error','error':'This sound plays live in the app.'}
+            return
         with self.lock:self.token+=1;token=self.token;self.preview={'session':ident,'candidate':candidate,'status':'rendering'}
         def work():
             try:result=self.discovery.renderer(recipe);state={'status':'ready','url':result['traces']['rise'],'key':result['id']}

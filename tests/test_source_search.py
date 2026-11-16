@@ -487,3 +487,138 @@ class StyleDiscoveryTest(unittest.TestCase):
                 for key,(old,new) in changes.items():self.assertTrue(STYLE_RANGES[key][0]<=new<=STYLE_RANGES[key][1])
         child,changes=tune_style(rng,style_recipe('vocal'),'deep',1)
         self.assertLess(child['layers'][0]['shape']['rootRatio'],1.);self.assertNotEqual(child['seed'],0)
+
+
+class LevelDiscoveryTest(unittest.TestCase):
+    def run_session(self,taste,seed=1):
+        from experiment.source_search import LevelDiscovery
+        import random as stdrandom
+        d=LevelDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(seed)
+        seen=set()
+        for _ in range(20):
+            self.assertEqual(len(d.pair),2,d.error)
+            a,b=d.pair;ra,rb=d.candidates[a]['recipe'],d.candidates[b]['recipe']
+            # one-change pairs never put two changes of the same sound side by side; new sounds are never repeats
+            pa,pb=(d.candidates[i].get('origin',{}).get('parent') for i in d.pair)
+            self.assertFalse(pa and pa==pb)
+            for i in d.pair:
+                if i in seen:self.assertEqual(i,d.check_parent,'only the returning best sound may repeat')
+            seen.update(d.pair)
+            ta,tb=taste(ra),taste(rb);d.feedback(choice='A' if ta>tb else 'B' if tb>ta else 'equal')
+        return d
+    def test_session_follows_taste_and_ends_with_shortlist(self):
+        d=self.run_session(lambda r:2*(r['base']['type']=='glass')+(r['fx']['chorus']==0)+(r['base']['register']==1))
+        self.assertEqual((d.stage,d.completed),('done',20))
+        top=d.candidates[d.finalists[0]]['recipe']
+        self.assertEqual(top['base']['type'],'glass')
+        w=d.export()['preference_model']['feature_weights']
+        self.assertGreater(w['type=glass'],max(w['type=strings'],w['type=choir']))
+        d.close()
+    def test_level_counts_match_the_app(self):
+        import re
+        from pathlib import Path
+        from experiment.source_search import LEVEL_FX
+        text=Path('desktop/src/levels.ts').read_text()
+        for key,levels in LEVEL_FX.items():
+            values=re.search(rf'{key}: \[([^\]]*)\]',text).group(1).split(',')
+            self.assertEqual(len(values),len(levels),key)
+
+
+class TuningDiscoveryTest(unittest.TestCase):
+    def run_session(self,answer,motion='rise',seed=1):
+        from experiment.source_search import TuningDiscovery
+        import random as stdrandom
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start(motion);d.rng=stdrandom.Random(seed)
+        for _ in range(20):
+            self.assertEqual(len(d.pair),2,d.error)
+            ra,rb=(d.candidates[i]['recipe'] for i in d.pair)
+            for r in (ra,rb):
+                self.assertEqual(r['motion'],motion)
+                self.assertNotEqual(r['base']['start'],r['base']['blend'])
+                self.assertEqual(r['base']['mix'],1/2)
+                if r['base']['start']=='pure':self.assertEqual(r['base']['character'],0)
+            d.feedback(choice=answer(ra,rb))
+        return d
+    def test_session_follows_taste_and_ends_with_yes_no(self):
+        taste=lambda r:2*(r['base']['start']=='dark')+(r['base']['pitch']>0)
+        d=self.run_session(lambda a,b:'A' if taste(a)>taste(b) else 'B' if taste(b)>taste(a) else 'good',motion='evolving')
+        self.assertEqual((d.stage,d.completed),('done',20))
+        self.assertEqual(d.candidates[d.finalists[0]]['recipe']['base']['start'],'dark')
+        with self.assertRaises(ValueError):d.accept(True)  # no final sound yet
+        d.finish(d.finalists[0]);d.accept(False)
+        data=d.export();self.assertEqual((data['final_acceptable'],data['motion']),(False,'evolving'))
+        d.close()
+    def test_first_pair_chooses_rising_or_evolving(self):
+        from experiment.source_search import TuningDiscovery
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start()
+        motion=lambda i:d.candidates[i]['recipe']['motion']
+        self.assertEqual(sorted(motion(i) for i in d.pair),['evolving','rise'])
+        d.feedback(choice='A' if motion(d.pair[0])=='evolving' else 'B')
+        self.assertEqual(d.motion,'evolving')
+        for _ in range(19):
+            self.assertTrue(all(motion(i)=='evolving' for i in d.pair));d.feedback(choice='A')
+        self.assertTrue(all(motion(i)=='evolving' for i in d.finalists));self.assertEqual(d.export()['motion'],'evolving')
+        d.close()
+    def test_opening_playoff_then_big_changes_first(self):
+        from experiment.source_search import TuningDiscovery,TUNING_OPENING,TUNING_BIG_PAIRS
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
+        start=lambda i:d.candidates[i]['recipe']['base']['start']
+        winners=[]
+        for n in range(len(TUNING_OPENING)):
+            self.assertEqual({start(i) for i in d.pair},set(TUNING_OPENING[n]))
+            winners.append(d.pair[0]);d.feedback(choice='A')
+        self.assertEqual(set(d.pair)<=set(winners),True);first=list(d.pair)
+        d.feedback(choice='A');self.assertTrue(set(d.pair)<=set(winners));self.assertIn(first[0],d.pair)  # pair 5: pair-4 winner vs the third winner
+        d.feedback(choice='A')
+        while d.completed<TUNING_BIG_PAIRS:
+            for i in d.pair:
+                o=d.candidates[i].get('origin',{})
+                if o.get('kind')=='tuned':self.assertIn(o['control'],('blend','pitch'))
+            d.feedback(choice='A')
+        d.close()
+    def test_neither_lowers_both_and_moves_away(self):
+        from experiment.source_search import TuningDiscovery
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
+        for _ in range(6):d.feedback(choice='A')
+        rejected=list(d.pair);d.feedback(choice='neither')
+        self.assertTrue(all(d._utility(i)<0 for i in rejected))
+        self.assertIsNone(d.check_parent)
+        self.assertFalse(any(d.candidates[i].get('origin',{}).get('parent') in rejected for i in d.pair))
+        with self.assertRaises(ValueError):d.feedback(choice='equal')
+        d.close()
+    def test_pitch_floor_and_skip_similar(self):
+        from experiment.source_search import TuningDiscovery,tuning_root,PITCH_FLOOR_HZ,TUNING_ROOTS
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
+        for _ in range(20):
+            for i in d.pair:
+                b=d.candidates[i]['recipe']['base']
+                if b['pitch'] or b['blend']:self.assertGreaterEqual(tuning_root(b),min(PITCH_FLOOR_HZ,TUNING_ROOTS[b['start']])-1e-6)  # never below the floor, or below its own start
+            d.feedback(choice='A' if d.candidates[d.pair[0]]['recipe']['base']['pitch']<0 else 'B')  # a listener who always wants lower
+        d=TuningDiscovery(renderer=lambda recipe:None);d.start('rise')
+        for _ in range(6):d.feedback(choice='A')
+        old=list(d.pair);d.skip_similar(old)
+        heard={i for row in d.history for i in row['pair']}
+        self.assertTrue(all(i in heard or i not in old for i in d.pair))
+        self.assertEqual(d.diversity_skips[-1]['pair'],old)
+        d.close()
+    def test_bayesian_model_is_sure_only_where_it_has_evidence(self):
+        import numpy as np
+        from experiment.source_search import fit_bayes
+        X=[[1,0,0]]*12;y=[1]*10+[0]*2  # setting 0 heard 12 times, mostly winning; settings 1-2 never
+        w,cov=fit_bayes(X,y,3);sd=np.sqrt(np.diag(cov))
+        self.assertGreater(w[0],.5);self.assertLess(sd[0],.6);self.assertAlmostEqual(sd[1],1.,places=6)
+    def test_shortlist_is_varied(self):
+        from experiment.source_search import TuningDiscovery
+        d=self.run_session(lambda a,b:'A' if a['base']['start']=='dark' else 'B')
+        bases=[d.candidates[i]['recipe']['base'] for i in d.finalists]
+        for i,a in enumerate(bases):
+            for b in bases[:i]:self.assertTrue(a['start']!=b['start'] or sum(a[k]!=b[k] for k in a)>=2)
+        self.assertIn('sd',d.export()['finalists'][0]);d.close()
+    def test_moves_and_starts_match_the_app(self):
+        import re
+        from pathlib import Path
+        from experiment.source_search import TUNING_STARTS
+        text=Path('desktop/src/levels.ts').read_text().split('export const STARTING_SOUNDS')[1].split('\n]\n')[0]
+        self.assertEqual(tuple(re.findall(r"\{ id: '(\w+)', name:",text)),TUNING_STARTS)
+        from experiment.source_search import TUNING_ROOTS
+        self.assertEqual({k:int(v) for k,v in re.findall(r"\{ id: '(\w+)', name:.*?rootHz: (\d+)",text)},TUNING_ROOTS)

@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
-export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
-export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; quarantined: number; checkpoint: boolean }
+import { isLevelRecipe, isTuningRecipe, liveSound, tooSimilar, type LevelRecipe, type TuningRecipe } from './levels'
+import { plainVoices } from './voiceCache'
+export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LevelRecipe | TuningRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
+export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
+// Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
+const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
+type Answer = typeof ANSWERS[number][0]
 type Command = (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
 export default function SourceSearch({ hidden, discovery, onCommand, onContext, onAudition, onStop, playing, running, activity, mode, onModeChange }: { hidden: boolean; discovery?: SourceDiscoveryState; onCommand: Command; onContext: () => Record<string, unknown>; onAudition: (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => Promise<boolean | string>; onStop: () => void; playing: boolean; running: boolean; activity: boolean; mode: GranularMode; onModeChange: (mode: GranularMode) => void }) {
   const [audition, setAudition] = useState<string | null>(null)
@@ -13,10 +18,18 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [pendingFinal, setPendingFinal] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [ratings, setRatings] = useState<Record<string, number>>({})
-  const [choice, setChoice] = useState<'A' | 'B' | 'equal' | null>(null)
+  const [choice, setChoice] = useState<Answer | null>(null)
   const [showMore, setShowMore] = useState(false)  // shortlist #4-5
   const heard = useRef(new Set<string>())
   const revision = discovery?.pair.map(c => c.id).join(':')
+  // Too-similar pairs: the app measures each new pair and asks the search for another (motion pair excluded: same sound on purpose).
+  useEffect(() => {
+    const [a, b] = discovery?.pair ?? []
+    if (!discovery?.active || !a || !b || !isTuningRecipe(a.recipe) || !isTuningRecipe(b.recipe) || a.recipe.motion !== b.recipe.motion) return
+    if (tooSimilar(a.recipe, b.recipe)) void onCommand('sourceDiscoverySkip', { ids: [a.id, b.id] })
+  }, [revision])
+  // Build both sounds of a new pair (and the shortlist) in the background, so the first switch is instant too.
+  useEffect(() => { for (const c of [...discovery?.pair ?? [], ...discovery?.finalists ?? []]) if (isLevelRecipe(c.recipe) || isTuningRecipe(c.recipe)) void plainVoices(liveSound(c.recipe).plain).catch(() => {}) }, [revision, discovery?.finalists?.length])
   useEffect(() => { auditionSequence.current++; heard.current.clear(); setAudition(null); setReadyAudition(null); setRatings({}); setChoice(null); setShowMore(false) }, [revision, mode])
   useEffect(() => {
     if (!audition || readyAudition !== audition || !playing || hidden || !discovery?.active || (!running || !activity) || heard.current.has(audition)) return
@@ -32,6 +45,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     try { const ready = await onAudition(candidate, 'driving'); if (token === auditionSequence.current) { if (ready === true) setReadyAudition(candidate.id); else setError(typeof ready === 'string' ? `Candidate audio failed: ${ready}` : 'Candidate audio could not start. Try replaying it.') } }
     catch (problem) { if (token === auditionSequence.current) setError(problem instanceof Error ? problem.message : 'Audition failed.') }
   }
+  // Pair 1 asks Rising vs Evolving (same sound), so the session starts with one button.
   const begin = async () => {
     onStop()
     const vehicle = await onCommand('vehicleStart') as { running?: boolean; starting?: boolean } | null
@@ -58,11 +72,11 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   useEffect(() => { if (hidden && audition) { onStop(); setAudition(null) } }, [hidden])
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
     <section className="panel p-4 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={begin}>{discovery.completed ? 'New session' : 'Start session'}</button>}{discovery?.active && <button type="button" className="control" onClick={() => setFinishConfirm(true)}>Finish</button>}</div></div>
+      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}{discovery?.active && <button type="button" className="control" onClick={() => setFinishConfirm(true)}>Finish</button>}</div></div>
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {finishConfirm && discovery?.active && <div className="mt-3 space-y-3" role="alert"><p className="text-sm">Finish now? You are at step {discovery.step ?? discovery.completed} of {discovery.totalSteps ?? 20}. The remaining pairs are skipped and the finalists come only from what you have rated so far.</p><div className="flex flex-wrap gap-2"><button type="button" className="control" autoFocus onClick={() => setFinishConfirm(false)}>Keep going</button><button type="button" className="control" onClick={() => { setFinishConfirm(false); onStop(); setAudition(null); void onCommand('sourceDiscoveryFinish') }}>Finish now</button></div></div>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
-      {discovery && !discovery.active ? <p className="mt-3 text-sm text-neutral-300" role="status">{discovery.finalists?.length ? `Session complete · ${discovery.step ?? discovery.completed} comparisons.${discovery.final ? '' : ' Choose your final sound from your top four below.'}` : discovery.completed ? `Session finished after ${discovery.completed} comparisons.` : 'Start a session to compare sources.'}</p> : discovery?.active ? <>
+      {discovery && !discovery.active ? <p className="mt-3 text-sm text-neutral-300" role="status">{discovery.finalists?.length ? `Session complete · ${discovery.step ?? discovery.completed} comparisons.${discovery.final ? '' : ' Choose your final sound from your shortlist below.'}` : discovery.completed ? `Session finished after ${discovery.completed} comparisons.` : 'Start a session to compare sources.'}</p> : discovery?.active ? <>
         {discovery.busy && <p className="loading-note mt-3 text-xs text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Preparing and checking the next pair…</p>}
         {final && <p className="mt-3 text-sm text-neutral-300" role="status">Final round: your four finalists, compared head to head. Pick the one you prefer.</p>}
         {!discovery.busy && <>
@@ -83,13 +97,18 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
             <details className="text-xs text-neutral-400"><summary>Source recipe</summary><pre className="source-recipe-json">{JSON.stringify(candidate.recipe, null, 2)}</pre></details>
           </div>)}
         </div>
-        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{(['A', 'equal', 'B'] as const).map(value => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending} onClick={() => setChoice(value)}>{value === 'equal' ? 'Like both equally' : `Prefer ${value}`}</button>)}<button type="button" className="control" disabled={!choice || pending} onClick={() => void submitChoice()}>Save choice · next</button></div>
+        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending} onClick={() => setChoice(value)}>{label}</button>)}<button type="button" className="control" disabled={!choice || pending} onClick={() => void submitChoice()}>Save choice · next</button></div>
         : <div className="source-search-preferences"><button type="button" className="control" disabled={!ready} onClick={() => void feedback()}>Next</button></div>}
         </>}
         {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>Retry preparation</button></p>}
       </> : null}
     </section>
-    {!discovery?.active && !!discovery?.finalists?.length && (discovery.final ? <section className="panel p-6 source-search-thanks" aria-label="Final sound saved" role="status">
+    {!discovery?.active && !!discovery?.finalists?.length && (discovery.final && discovery.acceptable == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
+      <h3 className="text-lg">One last question</h3>
+      <p className="mt-1 text-sm text-neutral-300">Would you be happy with this sound in your car?</p>
+      <div className="mt-4 flex flex-wrap justify-center gap-2"><button type="button" className="control" onClick={() => { const c = discovery.finalists!.find(c => c.id === discovery.final); if (c) void listen(c) }}>▶ Play it again</button>
+        {([[true, 'Yes'], [false, 'No']] as const).map(([answer, label]) => <button key={label} type="button" className="control" onClick={() => { onStop(); setAudition(null); void onCommand('sourceDiscoveryAccept', { answer }) }}>{label}</button>)}</div>
+    </section> : discovery.final ? <section className="panel p-6 source-search-thanks" aria-label="Final sound saved" role="status">
       <div className="thanks-check" aria-hidden="true">✓</div>
       <h3 className="text-lg">Saved · thank you!</h3>
       <p className="mt-1 text-sm text-neutral-300">Your final sound is #{discovery.finalists.findIndex(c => c.id === discovery.final) + 1} of your ranked sounds. This session is saved in Sound trace.</p>

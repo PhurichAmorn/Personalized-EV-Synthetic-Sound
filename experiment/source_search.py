@@ -96,7 +96,7 @@ class SourceDiscovery:
     max_attempts=8  # renders tried per pair before giving up
     def __init__(self,renderer=None):
         self.renderer=renderer or SourceRenderer();self.executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='source-discovery')
-        self.lock=threading.RLock();self.epoch=0;self.active=False;self.busy=False;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.final=None;self.rng=random.Random();self.completed=0;self.selected=None;self.auditions=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating'
+        self.lock=threading.RLock();self.epoch=0;self.active=False;self.busy=False;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.final=None;self.rng=random.Random();self.completed=0;self.selected=None;self.auditions=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating';self.acceptable=None
     def close(self):
         self.epoch+=1
         if hasattr(self.renderer,'close'):self.renderer.close()
@@ -106,11 +106,11 @@ class SourceDiscovery:
             def public(ident):
                 c=self.candidates[ident]
                 return {k:c[k] for k in ['id','label','recipe','urls','traces'] if k in c}
-            return {'active':self.active,'busy':self.busy,'error':self.error,'completed':self.completed,'pair':[public(x) for x in self.pair],'heard':list(self.tried),'selected':self.selected,'final':self.final,'finalists':[dict(public(x),**self._finalist_summary(x,strength)) for x,strength in self._bt_order()],'stage':self.stage,'step':self.completed+len(self.playoff_history),'totalSteps':TOTAL_STEPS,'playoffDone':len(self.playoff_history),'playoffTotal':PLAYOFF_PAIRS,'quarantined':len(self.quarantine),'policy':self.policy,'checkpoint':self.stage!='discovery','pairMode':self.pair_mode,'maxComparisons':MAX_COMPARISONS}
+            return {'active':self.active,'busy':self.busy,'error':self.error,'completed':self.completed,'pair':[public(x) for x in self.pair],'heard':list(self.tried),'selected':self.selected,'final':self.final,'finalists':[dict(public(x),**self._finalist_summary(x,strength)) for x,strength in self._bt_order()],'stage':self.stage,'step':self.completed+len(self.playoff_history),'totalSteps':TOTAL_STEPS,'playoffDone':len(self.playoff_history),'playoffTotal':PLAYOFF_PAIRS,'quarantined':len(self.quarantine),'policy':self.policy,'checkpoint':self.stage!='discovery','pairMode':self.pair_mode,'maxComparisons':MAX_COMPARISONS,'acceptable':self.acceptable}
     def start(self):
         with self.lock:
             if self.busy:raise ValueError('Wait for source preparation to finish')
-            self.epoch+=1;self.active=True;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.completed=0;self.final=None;self.selected=None;self.auditions=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating'
+            self.epoch+=1;self.active=True;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.completed=0;self.final=None;self.selected=None;self.auditions=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating';self.acceptable=None
             self.seed=random.SystemRandom().randrange(2**31);self.rng=random.Random(self.seed)
             self._prepare()
     def _proposals(self):
@@ -342,8 +342,14 @@ class SourceDiscovery:
             if self.active and self.stage=='discovery' and self.history:self._rank_finalists()
             self.active=False;self.pair=[];self.playoff_queue=[];self.stage='done' if self.finalists else self.stage;self.final=ident;self.epoch+=1;self.busy=False
             if hasattr(self.renderer,'cancel'):self.renderer.cancel()
+    def accept(self,answer):
+        """Final absolute check: would the listener be happy with the chosen sound in their car (yes/no)."""
+        with self.lock:
+            if not self.final:raise ValueError('Choose your final sound first')
+            if not isinstance(answer,bool):raise ValueError('Answer yes or no')
+            self.acceptable=answer
     def export(self):
-        with self.lock:return deepcopy({'format':'ev-source-discovery-v3','policy':self.policy,'seed':getattr(self,'seed',None),'history':self.history,'auditions':self.auditions,'final':self.final,'finalists':[dict(id=ident,**self._finalist_summary(ident,strength)) for ident,strength in self._bt_order()],'playoff_history':self.playoff_history,'preference_model':preference_summary(self.candidates),'candidates':self.candidates,'quarantine':self.quarantine,'diversity_skips':self.diversity_skips,'note':'14 rated pairs pick 4 diverse finalists by 1–7 rating shrunk toward neutral 4 (prior weight 2). A 6-pair round-robin final round orders them by Bradley-Terry strength; ratings enter only as one virtual game per finalist. Final choice stays explicit. Later candidate proposals use a regularized model of foundation family, layer mix, and layer count, with an exploration bonus. Explicit export only; no automatic participant record.'})
+        with self.lock:return deepcopy({'format':'ev-source-discovery-v3','policy':self.policy,'seed':getattr(self,'seed',None),'history':self.history,'auditions':self.auditions,'final':self.final,'final_acceptable':self.acceptable,'finalists':[dict(id=ident,**self._finalist_summary(ident,strength)) for ident,strength in self._bt_order()],'playoff_history':self.playoff_history,'preference_model':preference_summary(self.candidates),'candidates':self.candidates,'quarantine':self.quarantine,'diversity_skips':self.diversity_skips,'note':'14 rated pairs pick 4 diverse finalists by 1–7 rating shrunk toward neutral 4 (prior weight 2). A 6-pair round-robin final round orders them by Bradley-Terry strength; ratings enter only as one virtual game per finalist. Final choice stays explicit. Later candidate proposals use a regularized model of foundation family, layer mix, and layer count, with an exploration bonus. Explicit export only; no automatic participant record.'})
 
 
 # Open pool search: no families. Parameters are scaled to [0, 1] (log scale for frequencies) so mutation and the GP treat them alike.
@@ -551,19 +557,23 @@ def tune_style(rng,recipe,group,direction,step=STYLE_STEP):
         if abs(new-old)>1e-9:where[key]=round(new,4);changes[key]=[round(old,4),round(new,4)]
     return (child,changes) if changes else (recipe,{})
 
+SHARE={'A':1.,'B':0.,'equal':.5,'good':.5,'neither':.5}  # win share of the first sound; Both good / Neither say nothing about which is better
+ABSOLUTE={'good':1.,'neither':0.}  # ...but they do say both are better / worse than a neutral sound
 def bt_strengths(items,rows):
     """Bradley-Terry strengths (MM, Hunter 2004) from choice rows; equal = half a win each. Every item also plays one
     virtual even game against a neutral item of strength 1, so unplayed or unbeaten items stay finite."""
     index={ident:i for i,ident in enumerate(items)};n=len(items)
     if not n:return {}
-    wins=np.zeros((n,n))
+    wins=np.zeros((n,n));neutral_wins=np.full(n,.5);neutral_games=np.ones(n)
     for row in rows:
         a,b=row['pair']
         if a not in index or b not in index:continue
-        share={'A':1.,'B':0.,'equal':.5}[row['choice']]
+        share=SHARE[row['choice']]
         wins[index[a],index[b]]+=share;wins[index[b],index[a]]+=1-share
-    games=wins+wins.T;total=wins.sum(1)+.5;strength=np.ones(n)
-    for _ in range(200):strength=total/((games/(strength[:,None]+strength[None,:])).sum(1)+1/(strength+1))
+        if row['choice'] in ABSOLUTE:  # Both good: each beats the neutral item; Neither: each loses to it
+            for i in (index[a],index[b]):neutral_games[i]+=1;neutral_wins[i]+=ABSOLUTE[row['choice']]
+    games=wins+wins.T;total=wins.sum(1)+neutral_wins;strength=np.ones(n)
+    for _ in range(200):strength=total/((games/(strength[:,None]+strength[None,:])).sum(1)+neutral_games/(strength+1))
     return {ident:float(strength[index[ident]]) for ident in items}
 
 FEATURE_L2=1.  # ridge strength of the preference model: with few choices, effects stay small until evidence builds up
@@ -582,6 +592,17 @@ def style_features(candidates,ident):
     style,steps=lineage(candidates,ident)
     return np.array([1. if style==s else 0. for s in STYLES]+[float(steps[g]) for g in STYLE_GROUPS])
 
+def fit_bayes(X,y,n,prior_var=1/FEATURE_L2):
+    """Bayesian Bradley-Terry: logistic regression on feature differences with a N(0, prior_var) prior on every weight, Laplace
+    approximation. Mean = the MAP weights (same as fit_preference with l2 = 1/prior_var); covariance = inverse Hessian at the MAP,
+    so the model knows how sure it is about each setting (unheard settings keep the prior spread)."""
+    X=np.array(X,dtype=float).reshape(-1,n);y=np.array(y,dtype=float);w=np.zeros(n);l2=1/prior_var
+    for _ in range(25):
+        p=1/(1+np.exp(-X@w));g=X.T@(p-y)+l2*w;H=(X*(p*(1-p))[:,None]).T@X+l2*np.eye(n)
+        w-=np.linalg.solve(H,g)
+    p=1/(1+np.exp(-X@w));H=(X*(p*(1-p))[:,None]).T@X+l2*np.eye(n)
+    return w,np.linalg.inv(H)
+
 def fit_preference(diffs,targets,l2=FEATURE_L2):
     """Bradley-Terry over features (logistic regression on feature differences, ridge l2), fitted by Newton steps.
     targets: 1 = first sound chosen, 0 = second, 0.5 = liked equally."""
@@ -597,6 +618,7 @@ class StyleDiscovery(SourceDiscovery):
     policy=STYLE_POLICY
     distinct_families=False
     always_choice=True
+    answers=('A','B','equal')
     max_attempts=20  # after several steps in one direction many tunings resemble recent sounds; try more before giving up
     def _origin_for(self,recipe):return self.origins.get((recipe['seed'],recipe['layers'][0]['method']))
     def _note(self,recipe,origin):self.origins[(recipe['seed'],recipe['layers'][0]['method'])]=origin
@@ -698,13 +720,13 @@ class StyleDiscovery(SourceDiscovery):
             if len(self.finalists)==SHORTLIST:break
     def _finalist_summary(self,ident,strength):
         rows=[row for row in self._choices() if ident in row['pair']]
-        wins=sum(1. if row['winner']==ident else .5 if row['winner'] is None else 0. for row in rows)
+        wins=sum(1. if row['winner']==ident else .5 if row['choice'] in ('equal','good') else 0. for row in rows)
         return {'strength':strength,'wins':wins,'games':len(rows),'score':self._score(ident),'ratingCount':0}
     def _origin_text(self,pair):
         before={i for row in self.history for i in row['pair']}
         return {i:(f"Returning: {self.candidates[i].get('origin',{}).get('summary','')}" if i in before else self.candidates[i].get('origin',{}).get('summary','')) for i in pair}
     def _choice_feedback(self,choice,context):
-        if choice not in ('A','B','equal'):raise ValueError('Choose Prefer A, Like both equally, or Prefer B')
+        if choice not in self.answers:raise ValueError('Choose one of: '+', '.join(self.answers))
         if not isinstance(context,(dict,type(None))):raise ValueError('Invalid audition context')
         if context and (context.get('input') not in ('live','simulated') or context.get('style') not in ('steady','rise','evolving')):raise ValueError('Invalid audition context')
         pair=self.pair.copy();winner={'A':pair[0],'B':pair[1]}.get(choice)
@@ -726,4 +748,284 @@ class StyleDiscovery(SourceDiscovery):
                                   'direction_scores':sorted(({'group':g,'direction':d,'score':round(v,3),'results':n} for (g,d),(v,n) in self.direction_scores().items()),key=lambda x:-x['score']),
                                   'style_ranking':sorted(({'style':s,'name':STYLES[s],'strength':round(v,3)} for s,v in styles.items()),key=lambda x:-x['strength']),
                                   'note':'Bradley-Terry over discovery choices; equal = half a win; each item has one virtual even game vs a neutral item. Style ranking uses only choices between different styles.'}
+        return data
+
+
+# Level search (2026-11-14): simplified base sound (Type x Brightness x Register) plus transformation effects, every control at
+# 2-3 fixed settings. Sounds are built and played live in the app (desktop/src/levels.ts, labEngine.ts): no offline render.
+# Every sound differs from its parent by one whole setting, so the audio near-copy gate is not needed.
+import hashlib,json
+LEVEL_POLICY='source-levels-v1'
+LEVEL_BASE={'type':('strings','choir','glass'),'brightness':(-1,0,1),'register':(-1,0,1)}
+LEVEL_FX={'chorus':(0,1,2),'reverb':(0,1,2),'vibrato':(0,1,2),'follow':(0,1),'body':(0,1),'tremolo':(0,1)}  # = LEVEL_VALUES in levels.ts
+LEVEL_CONTROLS={**{('base',k):v for k,v in LEVEL_BASE.items()},**{('fx',k):v for k,v in LEVEL_FX.items()}}
+LEVEL_NEUTRAL_FX={'chorus':1,'reverb':1,'vibrato':1,'follow':1,'body':0,'tremolo':0}  # close to the blind-tested mimic effects
+LEVEL_NAMES={'type':{'strings':'Strings','choir':'Choir','glass':'Glass'},'brightness':{-1:'darker',0:'normal',1:'brighter'},'register':{-1:'deep',0:'middle',1:'high'}}
+BASE_PAIRS=6  # pairs 1-6 look for the base sound (effects neutral); later pairs mostly change effects
+BASE_MOVE_PENALTY=.5  # after BASE_PAIRS, base changes still happen, but effect changes come first unless the model favours a base change
+
+def level_recipe(base,fx):return {'version':2,'kind':'levels','seed':0,'base':dict(base),'fx':dict(fx)}
+def level_id(recipe):return hashlib.sha256(json.dumps([recipe['base'],recipe['fx']],sort_keys=True).encode()).hexdigest()[:32]
+def level_label(recipe):
+    b,f=recipe['base'],recipe['fx']
+    return f"{LEVEL_NAMES['type'][b['type']]} · {LEVEL_NAMES['brightness'][b['brightness']]} · {LEVEL_NAMES['register'][b['register']]} · "+' '.join(f'{k} {v}' for k,v in f.items())
+def level_features(recipe):
+    """One-hot of every control's setting: the model learns a value per setting (24 features)."""
+    return np.array([1. if recipe[part][key]==level else 0. for (part,key),levels in LEVEL_CONTROLS.items() for level in levels])
+LEVEL_FEATURE_NAMES=[f'{key}={level}' for (part,key),levels in LEVEL_CONTROLS.items() for level in levels]
+
+class LevelDiscovery(StyleDiscovery):
+    """20 direct choices over level sounds; Bradley-Terry over settings; shortlist at the end (shared with StyleDiscovery)."""
+    policy=LEVEL_POLICY
+    controls=LEVEL_CONTROLS  # every (part, key) the model learns
+    moves=LEVEL_CONTROLS     # the ones a one-setting change may touch
+    feature_names=LEVEL_FEATURE_NAMES
+    def _features(self,recipe):return level_features(recipe)
+    def _id(self,recipe):return level_id(recipe)
+    def _label(self,recipe):return level_label(recipe)
+    def _weights(self):
+        rows=self._choices()
+        if getattr(self,'_cache',(None,))[0]!=len(rows):
+            f=lambda i:self._features(self.candidates[i]['recipe']);X,y=[],[]
+            for r in rows:
+                a,b=f(r['pair'][0]),f(r['pair'][1]);X.append(a-b);y.append(SHARE[r['choice']])
+                if r['choice'] in ABSOLUTE:X+=[a,b];y+=[ABSOLUTE[r['choice']]]*2  # vs a neutral sound (utility 0)
+            self._cache=(len(rows),fit_preference(X,y))
+        return self._cache[1]
+    def _predict(self,recipe):return float(self._features(recipe)@self._weights())
+    def _utility(self,ident):return self._predict(self.candidates[ident]['recipe'])
+    def _add(self,recipe,origin):
+        ident=self._id(recipe)
+        if ident not in self.candidates:self.candidates[ident]={'id':ident,'label':self._label(recipe),'recipe':recipe,'urls':[],'traces':{},'origin':origin}
+        return ident
+    def _allowed(self,recipe,part,key,level):return True
+    def _neighbours(self,parent,base_penalty=0.):
+        """Every one-setting change of a sound, best first: learned value + bonus for settings not heard yet + momentum."""
+        recipe=self.candidates[parent]['recipe'];heard={i for row in self.history for i in row['pair']}
+        heard_settings={(k,self.candidates[i]['recipe'][p][k]) for i in heard for (p,k) in self.moves}
+        origin=self.candidates[parent].get('origin',{})
+        beat_parent=origin.get('kind')=='tuned' and any(r['winner']==parent and origin['parent'] in r['pair'] for r in self._choices())
+        out=[]
+        number=lambda v:isinstance(v,(int,float))
+        for (part,key),levels in self.moves.items():
+            for level in levels:
+                if level==recipe[part][key] or not self._allowed(recipe,part,key,level):continue
+                child=deepcopy(recipe);child[part][key]=level
+                momentum=beat_parent and origin.get('control')==key and number(level) and number(recipe[part][key]) and (level>recipe[part][key])==(origin['to']>origin['from'])
+                gain=self._predict(child)-self._predict(recipe)
+                value=gain+(UNTRIED if (key,level) not in heard_settings else 0)+(MOMENTUM if momentum else 0)-(base_penalty if part=='base' else 0)+self.rng.random()*.01
+                reason='repeats the change that just won' if momentum else f'learned gain {gain:+.2f}' if self._choices() else 'not tried yet'
+                out.append((value,child,{'kind':'tuned','parent':parent,'part':part,'control':key,'from':recipe[part][key],'to':level,'reason':reason,
+                    'summary':f"{self.candidates[parent]['label'].split(' · ')[0]} from {parent[:6]}: {key} {recipe[part][key]} → {level} ({reason})"}))
+        out.sort(key=lambda x:-x[0])
+        return [(child,origin) for _,child,origin in out]
+    def _proposals(self):
+        self.check_parent=None;fx=LEVEL_NEUTRAL_FX;mid={'brightness':0,'register':0}
+        start=lambda t:(level_recipe({'type':t,**mid},fx),{'kind':'base','summary':f"Starting sound: {LEVEL_NAMES['type'][t]}"})
+        if self.completed==0:return [start('strings'),start('choir')]
+        ranked=self._ranked()
+        if self.completed==1:self.check_parent=ranked[0];return [start('glass')]
+        open_ranked=[i for i in ranked if not self._settled(i)] or ranked
+        best=open_ranked[0];best_type=self.candidates[best]['recipe']['base']['type']
+        second=next((i for i in open_ranked[1:] if self.candidates[i]['recipe']['base']['type']!=best_type),open_ranked[1] if len(open_ranked)>1 else best)
+        penalty=0. if self.completed<BASE_PAIRS else BASE_MOVE_PENALTY
+        if self.completed<BASE_PAIRS:  # base phase: change only the base sound
+            moves=lambda i:[m for m in self._neighbours(i) if m[1]['part']=='base']
+        else:moves=lambda i:self._neighbours(i,penalty)
+        if self.completed%2==0:self.check_parent=best;return moves(best)
+        a,b=moves(best),moves(second)
+        return [x for pair in zip(a,b) for x in pair]+a[len(b):]+b[len(a):]
+    def _prepare(self):
+        """Pick a pair from the proposals at once: no rendering. Never a sound already heard (except the returning parent),
+        never two changes of the same sound side by side."""
+        self.busy=False;self.error='';self.tried.clear();self.selected=None
+        proposals=self._proposals();heard={i for row in self.history for i in row['pair']}
+        pair=[self.check_parent] if self.check_parent else []
+        for recipe,origin in proposals:
+            ident=self._id(recipe)
+            if ident in pair or ident in heard or ident in self.excluded:continue
+            parent=origin.get('parent')
+            if parent and any(self.candidates[i].get('origin',{}).get('parent')==parent for i in pair):continue
+            pair.append(self._add(recipe,origin))
+            if len(pair)==2:break
+        if len(pair)<2:self.error='Could not form a new pair: every nearby sound was already heard. Finish to see your shortlist.';self.pair=[];return
+        self.rng.shuffle(pair);self.pair=pair;self.pair_mode='choice'
+    def direction_scores(self):return {}
+    def export(self):
+        data=SourceDiscovery.export(self);weights=self._weights();strengths=self._strengths()
+        data['note']=('Level search: a sound is Type x Brightness x Register (simplified base) plus six effects (chorus, reverb, vibrato, pedal tone, body, tremolo) '
+            'at 2-3 settings each; values in desktop/src/levels.ts. Pairs 1-2 compare the three types; pairs 3-6 change one base setting; later pairs change one '
+            'setting (effects first). Even pairs: best sound vs a one-setting change of it; odd pairs: changes of the best and of the best of another type. '
+            'Bradley-Terry over one-hot settings (ridge 1), fitted to every choice; a sound that beat its own changes twice is left alone. Shortlist at the end.')
+        data['preference_model']={'version':'bt-levels-1','candidate_strengths':strengths,'feature_weights':{n:round(float(v),3) for n,v in zip(self.feature_names,weights)},
+            'utilities':{i:round(self._utility(i),3) for i in strengths}}
+        return data
+
+
+# Tuning search (2026-11-15): the seven starting sounds plus the agreed tuning moves (desktop/src/levels.ts tunedSound).
+# The listener picks Rising or Evolving first; Space Large and the 260 Hz comfort cap stay fixed. Sounds are built live in the app.
+TUNING_POLICY='source-tuning-v1'
+TUNING_STARTS=('warm','voice','sparkle','pure','whine','dark')  # = STARTING_SOUNDS ids in levels.ts (six kept after the starting sound test)
+TUNING_NAMES={'warm':'Warm pad','voice':'Voice','sparkle':'Sparkle','pure':'Pure tone','whine':'Electric whine','dark':'Dark ambience'}
+TUNING_OPENING=(('sparkle','pure'),('dark','voice'),('warm','whine'))  # most different first: 0.94, 0.86, 0.75 apart (octave-band spectrum)
+TUNING_MOTION_SOUND='warm'  # pair 1: this sound Rising vs Evolving; the choice sets the motion for the session
+TUNING_PLAYOFF=2  # pairs 5-6: the opening winners against each other, so the search follows one branch
+TUNING_BIG_PAIRS=12  # until pair 12 only big changes (blend, pitch); brightness and character after
+# 2nd version: Borrow, Climb and Movement dropped (too small to hear in the change test). = Tuning in levels.ts
+TUNING_SOURCE={'pitch':(-1,0,1),'brightness':(-1,0,1),'character':(-1,0,1),'blend':(None,)+TUNING_STARTS}  # pitch step = 8 semitones (4 sounded small); one blend (1/2)
+# Change test (2026-11-15): sides that sounded small are not offered for that starting sound (= CHARACTER in levels.ts).
+TUNING_LIMITS={'character':{'warm':(-1,0),'pure':(0,),'whine':(-1,0),'dark':(0,1),'sparkle':(0,1)},'brightness':{'pure':(0,1),'sparkle':(-1,0)}}
+TUNING_FX={}  # Movement dropped after the change test (wobble/pulse small, pump not heard); recipes keep fx.movement 'still'
+TUNING_MOVES={**{('base',k):v for k,v in TUNING_SOURCE.items()},**{('fx',k):v for k,v in TUNING_FX.items()}}
+TUNING_CONTROLS={('base','start'):TUNING_STARTS,**TUNING_MOVES}
+# Model features: one-hot per setting, but Character is per starting sound (Warm pad 'less chord' and Dark ambience 'more ghost voice'
+# are different changes; one shared feature mixed them up in the 2026-11-16 session).
+TUNING_FEATURE_KEYS=[(part,key,level) for (part,key),levels in TUNING_CONTROLS.items() if key!='character' for level in levels]+[('start','character',(s,l)) for s in TUNING_STARTS for l in (-1,1)]
+TUNING_FEATURE_NAMES=[f'character {s} {l:+d}' if key=='character' else f'{key}={level}' for part,key,level in TUNING_FEATURE_KEYS for s,l in [level if key=='character' else (0,0)]]
+# 1: pitch floor. Roots of the starting sounds (= rootHz in levels.ts STARTING_SOUNDS). Very low notes barely play on laptop speakers and
+# most headphones: Dark ambience at 48 Hz made darker / more ghost voice sound the same (pairs 16, 20 on 2026-11-16). 80 Hz keeps
+# Warm pad -8 semitones (83 Hz, the listener's final pick that session) and blocks Dark ambience 48 Hz and Electric whine 62 Hz.
+TUNING_ROOTS={'warm':131,'voice':147,'sparkle':233,'pure':196,'whine':98,'dark':76}
+PITCH_FLOOR_HZ=80
+PITCH_STEP_SEMITONES=8
+def tuning_root(base):
+    root=TUNING_ROOTS[base['start']]
+    if base['blend']:root*=(TUNING_ROOTS[base['blend']]/root)**base.get('mix',1/2)
+    return root*2**(PITCH_STEP_SEMITONES*base['pitch']/12)
+def tuning_recipe(motion,start):
+    return {'version':3,'kind':'tuning','seed':0,'motion':motion,'base':{'start':start,'pitch':0,'brightness':0,'character':0,'blend':None,'mix':1/2},'fx':{'movement':'still'}}
+
+class TuningDiscovery(LevelDiscovery):
+    """20 direct choices over tuned starting sounds. Answers: Prefer A, Prefer B, Both good, Neither.
+    Same machinery as LevelDiscovery: one-setting changes, parent checks, Bradley-Terry over one-hot settings, shortlist.
+    Both good / Neither also count as a win / loss against a neutral sound, so the model learns absolute good and bad."""
+    policy=TUNING_POLICY
+    answers=('A','B','good','neither')
+    controls=TUNING_CONTROLS
+    moves=TUNING_MOVES
+    feature_names=TUNING_FEATURE_NAMES
+    motion='rise'
+    motion_pairs=0  # 1 when the session opens with the Rising vs Evolving pair
+    # Simulated listeners (600 per variant, hidden linear taste, noisy answers, 2026-11-16): share of sessions whose picked sound is in the
+    # listener's top 5% (+-2%). Parents by posterior mean, changes ordered by a Thompson sample: half spread 85%, full 81%. Parents by the
+    # sample too: half 78%, full 61% (too much wandering for 20 pairs). Old rules 82-83%, posterior mean only 84-86%. Finalist duels in the
+    # last 3 pairs: 73%, removed. Half spread kept: tied with the best, and still explores when real listeners are noisier than the simulation.
+    explore=.5  # Thompson sample spread (1 = full posterior, 0 = posterior mean)
+    bayes=True  # False = the earlier hand-made rules (bonus for unheard settings, momentum), kept as a baseline
+    def _features(self,recipe):
+        b=recipe['base']
+        return np.array([float((b['start'],b['character'])==level) if key=='character' else float(recipe[part][key]==level) for part,key,level in TUNING_FEATURE_KEYS])
+    def _id(self,recipe):return hashlib.sha256(json.dumps([recipe['motion'],recipe['base'],recipe['fx']],sort_keys=True).encode()).hexdigest()[:32]
+    def _label(self,recipe):
+        b,f=recipe['base'],recipe['fx'];parts=[TUNING_NAMES[b['start']]]
+        for key in ('pitch','brightness','character'):
+            if b[key]:parts.append(f'{key} {b[key]:+d}')
+        if b['blend']:parts.append(f"blend {TUNING_NAMES[b['blend']]}")
+        if f['movement']!='still':parts.append(f['movement'])
+        return ' · '.join(parts)
+    def _posterior(self):
+        """Mean and covariance of the setting weights (fit_bayes), refitted after every choice."""
+        rows=self._choices()
+        if getattr(self,'_post',(None,))[0]!=len(rows):
+            f=lambda i:self._features(self.candidates[i]['recipe']);X,y=[],[]
+            for r in rows:
+                a,b=f(r['pair'][0]),f(r['pair'][1]);X.append(a-b);y.append(SHARE[r['choice']])
+                if r['choice'] in ABSOLUTE:X+=[a,b];y+=[ABSOLUTE[r['choice']]]*2
+            self._post=(len(rows),*fit_bayes(X,y,len(TUNING_FEATURE_KEYS)))
+        return self._post[1],self._post[2]
+    def _weights(self):return self._posterior()[0]
+    def _sd(self,ident):f=self._features(self.candidates[ident]['recipe']);return float(np.sqrt(f@self._posterior()[1]@f))
+    def _sample(self):
+        """Thompson sampling: one plausible taste drawn from the posterior; this pair is built for it. Exploration comes from
+        uncertainty (settings rarely heard have a wide spread) instead of fixed bonuses."""
+        mean,cov=self._posterior();rng=np.random.default_rng(self.rng.randrange(2**32))
+        self._w_sample=rng.multivariate_normal(mean,cov*self.explore**2,method='cholesky') if self.explore else mean
+    def _sampled(self,recipe):return float(self._features(recipe)@self._w_sample)
+    def _neighbours(self,parent,base_penalty=0.):
+        out=super()._neighbours(parent,base_penalty)
+        if not self.bayes:return out
+        for _,origin in out:origin['reason']='Thompson sample';origin['summary']=origin['summary'].rsplit(' (',1)[0]+' (Thompson sample)'
+        return sorted(out,key=lambda m:-self._sampled(m[0]))
+    def _ranked(self):return [i for i in super()._ranked() if self.candidates[i]['recipe']['motion']==self.motion]  # the motion not chosen drops out
+    def _distinct(self,a,b):
+        """Shortlist rule: two finalists must differ in starting sound or in at least two settings."""
+        ba,bb=self.candidates[a]['recipe']['base'],self.candidates[b]['recipe']['base']
+        return ba['start']!=bb['start'] or sum(ba[k]!=bb[k] for k in ba)>=2
+    def _rank_finalists(self):
+        ranked=self._ranked();eligible=[i for i in ranked if self._games(i)>=SHORTLIST_MIN_GAMES];self.finalists=[]
+        for ident in eligible+[i for i in ranked if i not in eligible]:
+            if all(self._distinct(ident,j) for j in self.finalists):self.finalists.append(ident)
+            if len(self.finalists)==SHORTLIST:break
+    def _finalist_summary(self,ident,strength):
+        return {**super()._finalist_summary(ident,strength),'utility':round(self._utility(ident),3),'sd':round(self._sd(ident),3)}
+    def _allowed(self,recipe,part,key,level):
+        if key=='blend' and level==recipe['base']['start']:return False
+        if key in ('pitch','blend'):  # pitch floor: never move a sound lower once it is under the floor (Dark ambience may start at 76 Hz)
+            root=tuning_root({**recipe['base'],key:level})
+            if root<PITCH_FLOOR_HZ and root<tuning_root(recipe['base'])-1e-6:return False
+        return level in TUNING_LIMITS.get(key,{}).get(recipe['base']['start'],(level,))
+    def start(self,motion=None):
+        """motion None: pair 1 is the same sound Rising vs Evolving and the listener's choice sets it (Both good / Neither keep Rising)."""
+        if motion not in (None,'rise','evolving'):raise ValueError('Choose Rising or Evolving')
+        with self.lock:self.motion=motion or 'rise';self.motion_pairs=0 if motion else 1;super().start()
+    def _proposals(self):
+        self.check_parent=None;mp=self.motion_pairs;step=self.completed-mp;rows=self._choices()
+        if mp and self.completed==0:
+            names={'rise':'Rising','evolving':'Evolving'}
+            self.rematch=[self._add(tuning_recipe(m,TUNING_MOTION_SOUND),{'kind':'motion','motion':m,'summary':f'Motion: {names[m]} ({TUNING_NAMES[TUNING_MOTION_SOUND]})'}) for m in ('rise','evolving')]
+            return []
+        if mp and self.completed==1:
+            winner=rows[0]['winner'];self.motion=self.candidates[winner]['recipe']['motion'] if winner else 'rise'
+        start=lambda name:(tuning_recipe(self.motion,name),{'kind':'base','summary':f'Starting sound: {TUNING_NAMES[name]}'})
+        opening=len(TUNING_OPENING)
+        if step<opening:self.rematch=[self._add(*start(name)) for name in TUNING_OPENING[step]];return []  # may repeat the motion pair's sound
+        ranked=self._ranked()  # mean ranking for the playoff
+        # Next two pairs: playoff between the opening winners (Both good: both go through; Neither: both out).
+        winners=set()
+        for r in rows[mp:mp+opening]:winners|={r['winner']} if r['winner'] else set(r['pair']) if r['choice']=='good' else set()
+        winners=[i for i in ranked if i in winners]
+        if step==opening and len(winners)>=2:self.rematch=winners[:2];return []
+        if step==opening+1 and len(winners)>=3:
+            left=[i for i in winners if i not in rows[mp+opening]['pair']]
+            if left:self.rematch=[next(i for i in winners if i!=left[0]),left[0]];return []
+        if self.bayes:self._sample()  # parents stay the posterior-mean best; the sample orders their changes
+        # After Neither, build on other sounds: the next pair moves away instead of fine-tuning a line the listener rejected.
+        last=self._choices()[-1];rejected=set(last['pair']) if last['choice']=='neither' else set()
+        open_ranked=[i for i in ranked if not self._settled(i) and i not in rejected] or [i for i in ranked if i not in rejected] or ranked
+        start_of=lambda i:self.candidates[i]['recipe']['base']['start']
+        best=open_ranked[0];second=next((i for i in open_ranked[1:] if start_of(i)!=start_of(best)),open_ranked[1] if len(open_ranked)>1 else best)
+        big=step<TUNING_BIG_PAIRS  # coarse to fine: blend and pitch first
+        moves=lambda i:[m for m in self._neighbours(i) if not big or m[1]['control'] in ('blend','pitch')]
+        # Fallback tail: changes of the next-ranked sounds, for when every one-setting change of the top two was already heard.
+        fallback=[m for i in open_ranked if i not in (best,second) for m in moves(i)]
+        if step%2==0 and not rejected:self.check_parent=best;return moves(best)+fallback
+        a,b=moves(best),moves(second)
+        return [x for pair in zip(a,b) for x in pair]+a[len(b):]+b[len(a):]+fallback
+    def skip_similar(self,ids):
+        """The app measured the two sounds of the pair as too close: drop the new one(s) and pick another pair. Opening and playoff pairs are kept."""
+        with self.lock:
+            if not self.active or sorted(ids or [])!=sorted(self.pair):raise ValueError('Pair changed; nothing to skip')
+            if self.rematch_pair:return
+            heard={i for row in self.history for i in row['pair']};new=[i for i in self.pair if i not in heard]
+            self.diversity_skips.append({'pair':list(self.pair),'dropped':new,'reason':'App measured the pair as too similar'})
+            self.excluded|=set(new);self._prepare()
+    def _prepare(self):
+        self.rematch=None;super()._prepare();self.rematch_pair=bool(self.rematch)
+        if self.rematch:self.error='';pair=list(self.rematch);self.rng.shuffle(pair);self.pair=pair;self.pair_mode='choice'
+    def export(self):
+        data=super().export();data['motion']=self.motion
+        if self.bayes:
+            mean,cov=self._posterior()
+            data['preference_model'].update(version='bayes-bt-1',feature_sd={n:round(float(v),3) for n,v in zip(self.feature_names,np.sqrt(np.diag(cov)))})
+        data['note']=('Tuning search: pair 1 plays Warm pad Rising vs Evolving and the choice sets the motion (Both good / Neither keep Rising); '
+            'only the source is tuned. Pairs 2-4: the six starting sounds in their most different pairs (Sparkle vs Pure tone, Dark ambience vs Voice, '
+            'Warm pad vs Electric whine). Pairs 5-6: the opening winners against each other. Then one-setting changes: until pair 13 only blend (halfway '
+            'with another starting sound) and pitch (+-8 semitones, never lower once under 80 Hz); after that also brightness and character. Changes '
+            'that sounded small in the change test are not offered (TUNING_LIMITS); the app skips pairs it measures as too similar. '
+            'Preference model: Bayesian Bradley-Terry over 31 settings (one-hot; character per starting sound), N(0,1) prior, Laplace approximation, '
+            'refitted after every choice. Answers: Prefer A / B; Both good (tie, both beat a neutral sound); Neither (tie, both lose to it; the next pair '
+            'builds on other sounds). Pair choice: Thompson sampling: one taste drawn from the posterior ranks the parents and their changes; even pairs '
+            'test the best sound against a change of it, odd pairs a change of the best against a change of the best other starting sound (sample spread 0.5). '
+            'Shortlist of 5 by posterior mean, at least 2 choices each, '
+            'and any two differ in starting sound or in at least two settings. The listener picks, then answers yes/no: happy with this sound in their car.')
         return data

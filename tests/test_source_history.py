@@ -38,10 +38,20 @@ class SourceHistoryTest(unittest.TestCase):
         self.assertEqual(self.history.preview['url'], '/a.wav')
         self.history.clear()
         self.assertEqual(self.history.preview, {})
+        before = (self.history.root / f"{row['id']}.json").read_text()
+        self.assertTrue(self.history.star(row['id'], True))
+        self.assertTrue(self.history.listing()[0]['starred'])
+        self.assertEqual((self.history.root / f"{row['id']}.json").read_text(), before)  # session record untouched
+        self.assertFalse(self.history.star(row['id'], False))
+        self.assertFalse(self.history.listing()[0]['starred'])
+        self.history.star(row['id'], True)
         self.assertTrue(self.history.delete(row['id']))
         self.assertEqual(self.history.listing(), [])
+        self.assertEqual(self.history.starred(), set())  # deleting drops its star
         with self.assertRaises(ValueError):
             self.history.get('../etc/passwd')
+        with self.assertRaises(ValueError):
+            self.history.star('../etc/passwd', True)
 
 
 if __name__ == '__main__':

@@ -34,13 +34,13 @@ export default function OverlayHost({ state, error, page, onCommand, onPersonali
   // The HUD never takes keyboard focus from the game, except on the Personalize page where typing is needed.
   useEffect(() => { void window.__TAURI__?.core.invoke('set_overlay_focusable', { focusable: page === 'search' }) }, [page])
   return <>
-    {page === 'dashboard'
-      ? <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onStartStop={() => void startStop()} analyser={() => sound.current?.analyser() ?? null}
+    {/* One card for both pages: Personalize keeps the live graphs and adds the session below them. */}
+    <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onStartStop={() => void startStop()} analyser={() => sound.current?.analyser() ?? null}
           granular={granularSelected} granularMode={granularMode}
           onGranular={() => { setGranularSelected(true); sound.current?.start(true) }}
           onGranularCycle={() => { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }}
-          onTheme={name => { setGranularSelected(false); sound.current?.stop(); void onCommand('theme', { name }) }} />
-      : <div className="overlay-personalization">{searchPanel}<button className="control overlay-return" onClick={onLeave}>Back to driving</button></div>}
+          onTheme={name => { setGranularSelected(false); sound.current?.stop(); void onCommand('theme', { name }) }}
+          personalize={page === 'search' ? searchPanel : undefined} onLeave={onLeave} />
     <SoundEditor onAudioError={setAudioError} personalizeOpen={page === 'search'} onSourceSelected={() => setGranularSelected(true)} granularMode={granularMode} onModeChange={setGranularMode} ref={sound} active state={state} onCommand={onCommand} embedded />
   </>
 }

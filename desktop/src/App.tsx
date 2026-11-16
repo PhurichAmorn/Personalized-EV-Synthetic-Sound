@@ -131,7 +131,6 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
   const [sessions, setSessions] = useState<SavedSession[]>([])
   const [favoriteChoiceOpen, setFavoriteChoiceOpen] = useState(false)
   const [closeRequested, setCloseRequested] = useState(false)
-  const [leaveConfirm, setLeaveConfirm] = useState(false)
   const [soundLabStart, setSoundLabStart] = useState(false)
   const back = useRef<() => void>(() => {})
 
@@ -156,7 +155,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
           queueState(message.data as State)
         }
         if (message.event === 'error') setError(String(message.data))
-        if (message.event === 'close-request' && !overlay) setCloseRequested(true)
+        if (message.event === 'close-request') setCloseRequested(true)
         if (message.event === 'navigate') {
           if (overlay) return
           if (message.data === 'back') {
@@ -174,11 +173,12 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     return () => { disposed = true; cancelAnimationFrame(frame); disconnect(); client.current = null }
   }, [overlay])
 
-  const sourceTrialPresent = !!(state?.sourceDiscovery?.active || state?.sourceDiscovery?.completed || state?.sourceDiscovery?.pair.length)
+  // Only a running discovery has unsaved work (the current pair); a finished one is already autosaved to Sound trace.
+  const sourceTrialPresent = !!state?.sourceDiscovery?.active
+  // Dashboard and BeamNG overlay both guard closing while a session runs (only one of the two windows exists).
   useEffect(() => {
-    if (overlay) return
     void window.__TAURI__?.core.invoke('set_close_guard', { active: !!state?.search.active || sourceTrialPresent })
-  }, [overlay, state?.search.active, sourceTrialPresent])
+  }, [state?.search.active, sourceTrialPresent])
 
   async function closeWithSearch(discard: boolean) {
     if (sourceTrialPresent && !state?.search.active) {
@@ -232,11 +232,11 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
         } else navigate(action)
         return
       }
-      const key = event.key.toLowerCase()
+      const key = (event.code === 'KeyW' ? 'w' : event.code === 'KeyS' ? 's' : event.key.toLowerCase())  // physical key: works in any keyboard layout
       if (key === 'w' || key === 's') { event.preventDefault(); keys.current.add(key); update() }
     }
     const up = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase()
+      const key = (event.code === 'KeyW' ? 'w' : event.code === 'KeyS' ? 's' : event.key.toLowerCase())  // physical key: works in any keyboard layout
       if (keys.current.delete(key)) { event.preventDefault(); update() }
     }
     const blur = () => {
@@ -282,16 +282,16 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
     if (target === 'trace') return openTrace()
     setSoundLabStart(target === 'soundlab'); setPage('dashboard')
   }
-  // Leaving the lab mid-session keeps it in memory, but ask first so it is never left by accident.
-  const leaveLab = () => { if (state?.sourceDiscovery?.active) setLeaveConfirm(true); else setPage('dashboard') }
+  // Leaving pauses a running session (kept in memory, ratings included): Personalize resumes it, so no warning is needed.
+  const leaveLab = () => setPage('dashboard')
   back.current = () => {
-    if (leaveConfirm) setLeaveConfirm(false)
-    else if (favoriteChoiceOpen) setFavoriteChoiceOpen(false)
+    if (favoriteChoiceOpen) setFavoriteChoiceOpen(false)
     else if (closeRequested) setCloseRequested(false)
     else if (page === 'search') leaveLab()
     else if (page !== 'dashboard') setPage('dashboard')
   }
-  const personalizationActive = !!(state?.search.active || state?.sourceDiscovery?.active)
+  // The finished session's shortlist and final sound stay in the dashboard slot too, so the listener can drive with them.
+  const personalizationActive = !!(state?.search.active || state?.sourceDiscovery?.active || state?.sourceDiscovery?.finalists?.length)
   const searchPanel = state && page === 'search' ? (
 <div className={'search-dialog ' + (personalizationActive ? 'search-active' : '')} role="dialog" aria-modal={personalizationActive ? undefined : true} aria-label="Personalize sound"><header className="search-dialog-header"><div><h2 className="text-xl">Personalize sound</h2>{state.search.active && <p className="text-sm text-neutral-400">{state.search.mode} · Pair {state.search.pairNumber}{state.search.stage ? <> · {state.search.stage}</> : ['gp-feature-v2', 'gp-feature-v3', 'gp-feature-v4'].includes(state.search.algorithm) && <> · {state.search.pairNumber <= 6 ? 'Explore features' : state.search.pairNumber >= 18 && state.search.pairNumber <= 20 ? 'Combine preferred features' : 'Refine preference'}</>}</p>}</div><div className="flex gap-2">{!state.search.active && <button className="control search-close" aria-label="Close" title="Close" onClick={leaveLab}>×</button>}</div></header>{error && <p role="alert" className="mx-6 mt-5 text-red-300">{error}</p>}{state.search.active ? <div className="search-content">
         <section className="panel space-y-4 p-6"><h3 className="text-lg">Session setup</h3><label className="block"><span className="label">Participant alias</span><input className="control mt-2 w-full" maxLength={80} value={participant} onChange={event => setParticipant(event.target.value)} /></label><label className="block"><span className="label">Starting sound</span><select className="control mt-2 w-full" value={state.search.active ? state.search.mode : mode} disabled={state.search.active} onChange={event => setMode(event.target.value)}>{state.soundThemes.map(name => <option key={name}>{name}</option>)}</select></label><label className="block"><span className="label">Method</span><select className="control mt-2 w-full" value={method} onChange={event => setMethod(event.target.value)}><option value="gp_preference">GP preference + BO</option><option value="evolutionary">Evolutionary</option><option value="recipe_preference">Recipe window pilot</option></select></label><div className="flex gap-2"><button className="control" disabled={state.search.active || state.running || state.soundSweepActive} onClick={() => void startSearch()}>New session</button><button className="control" onClick={() => void refreshSessions()}>Find saved</button></div></section>
@@ -312,8 +312,10 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
 
   return <div className={overlay ? 'beamng-overlay-root' : 'dashboard-wrapper'}>
     {favoriteChoiceOpen && state?.search.active && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Choose favorite sound"><h2 className="text-xl">Which sound do you prefer?</h2><p className="my-4 text-sm text-neutral-300">Choose the sound to save as your favorite.</p>{state.search.error && <p role="alert" className="mb-4 text-sm text-red-300">{state.search.error}</p>}<div className="flex flex-wrap gap-2"><button className="control" autoFocus onClick={() => setFavoriteChoiceOpen(false)}>Cancel</button><button className="control" onClick={() => void finishSearch(true, 'A')}>Save Sound A</button><button className="control" onClick={() => void finishSearch(true, 'B')}>Save Sound B</button></div></div></div>}
-    {leaveConfirm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Leave Preference Lab"><h2 className="text-xl">Leave the Preference Lab?</h2><p className="my-4 text-sm text-neutral-300">Your sound discovery session is still in progress ({state?.sourceDiscovery?.step ?? state?.sourceDiscovery?.completed ?? 0} / {state?.sourceDiscovery?.totalSteps ?? 20} steps). Leaving pauses it: open Personalize sound to continue where you stopped. Closing the app loses unfinished work: finished ratings are saved to Sound trace automatically.</p><div className="flex flex-wrap gap-2"><button className="control" autoFocus onClick={() => setLeaveConfirm(false)}>Stay</button><button className="control border-red-500" onClick={() => { setLeaveConfirm(false); setPage('dashboard') }}>Leave</button></div></div></div>}
-    {closeRequested && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Close active search"><h2 className="text-xl">Close active search?</h2><p className="my-4 text-sm text-neutral-300">{sourceTrialPresent && !state?.search.active ? 'Source discovery ratings are saved to Sound trace automatically; the unfinished pair is not.' : 'Save progress, discard this session, or keep working.'}</p><div className="flex flex-wrap gap-2"><button className="control" onClick={() => setCloseRequested(false)}>Cancel</button>{(!sourceTrialPresent || state?.search.active) && <button className="control" onClick={() => void closeWithSearch(false)}>Save and close</button>}<button className="control border-red-500" onClick={() => void closeWithSearch(true)}>Discard and close</button></div></div></div>}
+    {closeRequested && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Close active session">{sourceTrialPresent && !state?.search.active ? <>
+      {/* Closing ends a discovery session: it lives in memory only, so it cannot be resumed after the app restarts. */}
+      <h2 className="text-xl">End session and close?</h2><p className="my-4 text-sm text-neutral-300">Your {state?.sourceDiscovery?.completed ?? 0} rated pairs are already saved to Sound trace. Closing ends this session: it cannot be resumed, and the pair you are rating now is lost.</p><div className="flex flex-wrap gap-2"><button className="control" autoFocus onClick={() => setCloseRequested(false)}>Keep working</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>End session and close</button></div>
+    </> : <><h2 className="text-xl">Close active search?</h2><p className="my-4 text-sm text-neutral-300">Save progress, discard this session, or keep working.</p><div className="flex flex-wrap gap-2"><button className="control" onClick={() => setCloseRequested(false)}>Cancel</button><button className="control" onClick={() => void closeWithSearch(false)}>Save and close</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>Discard and close</button></div></>}</div></div>}
     {!state && <div className="min-h-screen p-5 md:p-8"><div className="panel p-8">Connecting to simulator…</div></div>}
     {state && overlay && (page === 'dashboard' || page === 'search') && <OverlayHost state={state} error={error} page={page} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onLeave={leaveLab} searchPanel={searchPanel} />}
     {state && !overlay && (page === 'dashboard' || page === 'search') && <Dashboard personalizeOpen={page === 'search'} state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => { setMode(state.soundTheme); setPage('search') }} onTrace={openTrace} initialSoundLab={soundLabStart} searchPanel={page === 'search' && personalizationActive ? searchPanel : null} />}

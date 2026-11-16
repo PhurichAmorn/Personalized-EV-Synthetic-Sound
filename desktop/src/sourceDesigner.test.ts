@@ -26,3 +26,16 @@ test('every family renders finite, bounded audio that loops without a jump', () 
     }
   }
 })
+
+test('plain source loops seamlessly, stays bounded, and its controls move the spectrum', async () => {
+  const { createPlainSource, spectrum, PLAIN_PRESETS, PLAIN_DEFAULT } = await import('./plainSource.ts')
+  const extras = [{ name: 'all extras', params: { ...PLAIN_DEFAULT, vowel: 1, fundamental: .05, whine: 1, bellModes: 1 } }, { name: 'synth extras', params: { ...PLAIN_DEFAULT, detune: 1, chordType: 2, chord: 1, brightness: .7 } }]
+  for (const { name, params } of [...PLAIN_PRESETS, ...extras]) {
+    const [channel] = createPlainSource(params, 16000)
+    assert.ok(channel.every(Number.isFinite) && Math.max(...channel.map(Math.abs)) <= .7 + 1e-6, name)
+    const step = Math.max(...channel.slice(1).map((value, i) => Math.abs(value - channel[i])))
+    assert.ok(Math.abs(channel[0] - channel[channel.length - 1]) <= step * 1.5 + 1e-6, `${name} loop seam`)
+  }
+  const centroid = (brightness: number) => spectrum(createPlainSource({ ...PLAIN_DEFAULT, air: 0, brightness }, 16000)[0], 16000).centroid
+  assert.ok(centroid(.9) > centroid(.1) * 1.5, 'brightness raises the centroid')
+})

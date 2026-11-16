@@ -56,7 +56,27 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Base-style exploration (stage 1 implemented: `source-style-explore-v1`, `StyleDiscovery`)
+### Level search (current app default: `source-levels-v1`, `LevelDiscovery`)
+
+Goal unchanged: help a listener with no sound in mind find one they enjoy. A sound is now built from settings instead of a style:
+a simplified base sound (Type: Strings / Choir / Glass, Brightness and Register, 3 settings each) plus six transformation
+effects applied after the granular player (chorus, reverb, vibrato, pedal-following tone, body resonance, tremolo; 2-3 settings each).
+Exact values and everything held fixed are in `desktop/src/levels.ts` and shown in Sound Lab ("Search setup").
+
+Why: Sound Lab listening tests (2026-11-14, one listener) found that tone colour works best in the base sound (it keeps its
+character as pitch rises), while space, motion and pedal response only work after the player. A blind test found the
+simplified Strings, Choir and Glass "very similar" to the original styles, so the seven styles were replaced.
+
+Session: 20 direct choices. Pairs 1-2 compare the three types (neutral effects); pairs 3-6 change one base setting; later pairs
+change one setting, effects first. Even pairs put the best sound against a one-setting change of it; odd pairs pair changes of
+the best sound and of the best sound of another type. One Bradley-Terry model over one-hot settings (ridge 1) learns a value per
+setting from every choice and picks the next changes (learned gain, a bonus for settings not heard yet, momentum). Shortlist and
+settle rule as in StyleDiscovery. Sounds are built and played live in the app through the Sound Lab engine (`labEngine.ts`):
+no offline render, so no automatic signal check per sound; every change is one whole setting, so the audio near-copy gate is
+not used. Limits: about 24 setting values for 20 choices, so effects that appear together early (the neutral effects) are
+partly confounded; effect amounts are not yet confirmed by ear.
+
+### Base-style exploration (baseline, previous default: `source-style-explore-v1`, `StyleDiscovery`)
 
 Agreed 2026-11-11; it replaces the open-pool policy below in the app, and that policy stays in code as a baseline.
 

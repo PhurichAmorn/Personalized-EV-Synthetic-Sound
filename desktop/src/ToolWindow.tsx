@@ -23,11 +23,11 @@ export default function ToolWindow({ view }: { view: 'telemetry' | 'sound-signal
     }).catch(report)
     const keydown = (event: KeyboardEvent) => {
       if (event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return
-      const key = event.key.toLowerCase()
+      const key = (event.code === 'KeyW' ? 'w' : event.code === 'KeyS' ? 's' : event.key.toLowerCase())  // physical key: works in any keyboard layout
       if (key === 'w' || key === 's') { event.preventDefault(); keys.add(key); updatePedals() }
     }
     const keyup = (event: KeyboardEvent) => {
-      if (keys.delete(event.key.toLowerCase())) { event.preventDefault(); updatePedals() }
+      if (keys.delete((event.code === 'KeyW' ? 'w' : event.code === 'KeyS' ? 's' : event.key.toLowerCase()))) { event.preventDefault(); updatePedals() }
     }
     const blur = () => {
       keys.clear()

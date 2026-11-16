@@ -2,14 +2,14 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.source_search import StyleDiscovery
+from experiment.source_search import TuningDiscovery
 from experiment.source_history import SourceHistory
 
 
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
-        self.source_discovery = StyleDiscovery()  # base-style exploration; OpenDiscovery (open pool) and SourceDiscovery (six families) kept as baselines
+        self.source_discovery = TuningDiscovery()  # seven starting sounds + tuning moves; LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery kept as baselines
         self.history = SourceHistory(self.source_discovery)
 
     def snapshot(self):
@@ -91,20 +91,23 @@ class DesktopBridge:
             if name == 'sourceDiscoveryStart':
                 if s.active or c.soundSweepActive:raise ValueError('Stop the native experiment or debug sweep first')
                 if discovery.active:raise ValueError('Finish the current source trial before starting another')
-                discovery.start();self.history.begin()
+                discovery.start(payload.get('motion'));self.history.begin()
             elif name == 'sourceDiscoveryHeard':discovery.heard(self._text(payload,'id'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFeedback':discovery.feedback(payload.get('ratings'),payload.get('context',{}),payload.get('choice'))
             elif name == 'sourceDiscoveryPlayoff':discovery.playoff_feedback(payload.get('choice'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFinish':discovery.finish(payload.get('id'))
+            elif name == 'sourceDiscoveryAccept':discovery.accept(payload.get('answer'))
+            elif name == 'sourceDiscoverySkip':discovery.skip_similar(payload.get('ids'))
             elif name == 'sourceDiscoveryExport':return discovery.export()
             elif name == 'sourceDiscoveryRetry':
                 if discovery.busy or not discovery.active:raise ValueError('No failed active trial to retry')
                 with discovery.lock:discovery._prepare()
             else:raise ValueError('Unknown source discovery command')
-            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish'):self.history.save()  # autosave to local history
+            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryAccept'):self.history.save()  # autosave to local history
             return self.snapshot()
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
+        if name == 'historyStar':return self.history.star(self._text(payload,'id'),self._bool(payload,'value'))
         if name == 'historyDelete':return self.history.delete(self._text(payload,'id'))
         if name == 'historyPreview':self.history.render(self._text(payload,'id'),self._text(payload,'candidate'));return self.snapshot()
         if name == 'historyPreviewClear':self.history.clear();return self.snapshot()
