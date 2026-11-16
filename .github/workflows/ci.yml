@@ -1,0 +1,38 @@
+# Runs the project's two automated checks (AGENTS.md) on every push and pull request.
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # Cloud runners have no screen, sound card or gamepad.
+      QT_QPA_PLATFORM: offscreen
+      SDL_AUDIODRIVER: dummy
+      SDL_VIDEODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: System libraries (PortAudio for audio output, Qt runtime)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libegl1 libgl1 libxkbcommon0
+      - name: Python dependencies
+        run: pip install -r requirements.txt
+      - name: Build native audio module
+        run: python setup.py build_ext --inplace
+      - name: Python tests
+        run: python -m unittest discover -s tests -v
+      - name: Frontend dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Frontend build
+        working-directory: desktop
+        run: npm run build
