@@ -29,7 +29,13 @@ jobs:
       - name: Build native audio module
         run: python setup.py build_ext --inplace
       - name: Python tests
-        run: python -m unittest discover -s tests -v
+        # Failing tests and their errors also appear as annotations on the run page.
+        run: |
+          set +e
+          python -m unittest discover -s tests 2>&1 | tee test.log
+          code=${PIPESTATUS[0]}
+          grep -E '^(ERROR|FAIL):|^[A-Za-z.]*(Error|Exception)\b' test.log | sort | uniq | head -40 | sed 's/^/::error::/'
+          exit $code
       - name: Frontend dependencies
         working-directory: desktop
         run: npm ci
