@@ -110,6 +110,8 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .vehicle-selector { width: 225px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 5px; background: #282828; color: var(--fg); font-size: 13px; }
 .display-customize-button { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 5px; background: #252525; color: var(--fg); font-size: 10px; letter-spacing: .06em; }
 .display-customize-button:hover { border-color: #7f7f7f; background: #2b2b2b; }
+.display-customize-button.active { border-color: #7f7f7f; }
+.display-customize-button.active .customize-light { background: #5fd38d; box-shadow: 0 0 6px #5fd38d; }
 .customize-light { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent); }
 .display-customizer-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 76%); backdrop-filter: blur(4px); }
 .display-customizer { width: min(690px, 100%); max-height: min(86vh, 760px); overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: 0 24px 70px #000b; color: var(--fg); }
@@ -193,7 +195,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .start-button { position: relative; display: flex; flex-direction: column; align-items: center; width: 142px; height: 142px; padding-top: 45px; border: 7px solid transparent; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff5a55, #d82127 60%, #810c13 100%) padding-box, linear-gradient(135deg, #f9f9f9, #717171 25%, #efefef 50%, #818181 75%, #f7f7f7) border-box; color: white; }
 .start-button:active { background: radial-gradient(circle at 35% 30%, #d82127, #b8161d 60%, #810c13 100%) padding-box, linear-gradient(135deg, #f9f9f9, #717171 25%, #efefef 50%, #818181 75%, #f7f7f7) border-box; }
 .start-indicator { width: 20px; height: 4px; margin-bottom: 25px; border-radius: 2px; background: #787878; }
-.start-indicator.on { background: #cecece; }
+.start-indicator.on { background: #5fd38d; box-shadow: 0 0 6px #5fd38d, 0 0 14px rgb(95 211 141 / 70%); }  /* car on: green glow, as the overlay LED */
 .start-button strong { font-size: 18px; }
 .personalize-button { width: 160px; height: 36px; border: 1px solid #636363; border-radius: 18px; background: #242424; color: #eaeaea; font-size: 13px; }
 .personalize-button:hover { background: #2e2e2e; }
@@ -338,6 +340,19 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-led.starting { background: #e8bd68; box-shadow: 0 0 6px #e8bd68; animation: overlay-led-pulse .8s ease-in-out infinite alternate; }
 .overlay-led.on { background: #5fd38d; box-shadow: 0 0 7px #5fd38d; }
 @keyframes overlay-led-pulse { to { opacity: .35; } }
+/* Sound signal: right-side panel of the dashboard, four live views stacked. */
+.signal-side { position: sticky; top: 0; display: flex; flex: none; flex-direction: column; gap: 10px; width: 380px; height: 100vh; box-sizing: border-box; padding: 18px 16px; overflow-y: auto; border-left: 1px solid var(--line); background: #171717; }
+.signal-side-header { display: flex; align-items: center; gap: 10px; }
+.signal-side-header h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 500; letter-spacing: .04em; }
+.signal-source { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
+.signal-close { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.signal-close:hover { background: rgb(255 255 255 / 10%); color: var(--fg); }
+.signal-panel { display: flex; flex: none; flex-direction: column; padding: 10px 12px 8px; border-radius: 10px; background: rgb(255 255 255 / 4%); }
+.signal-panel-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.signal-panel-title small { overflow: hidden; color: var(--muted); font-size: 9px; letter-spacing: .02em; text-transform: none; white-space: nowrap; text-overflow: ellipsis; }
+.signal-panel canvas { width: 100%; height: 130px; }
+.signal-panel:nth-of-type(3) canvas { height: 300px; }
+.signal-panel:nth-of-type(4) canvas { height: 240px; }
 @media (prefers-reduced-motion: reduce) { .overlay-led.starting { animation: none; } }
 .beamng-overlay-hint { margin: 0; color: #808080; font-size: 9px; text-align: center; }
 /* Personalize: card height follows its content and the window is sized to fit it (BeamNGOverlay); the page scrolls only past screen height. */

@@ -12,7 +12,7 @@ if (import.meta.env.DEV) {
 
 const requestedWindow = new URLSearchParams(window.location.search).get('window')
 if (requestedWindow === 'overlay') document.documentElement.classList.add('overlay-window')
-const toolView = requestedWindow === 'telemetry' || requestedWindow === 'sound-signal' ? requestedWindow : null
+const toolView = requestedWindow === 'telemetry' ? requestedWindow : null
 
 // Load only the code the window needs: the startup chooser must not wait for the whole app.
 async function view() {

@@ -39,6 +39,7 @@ python tools/sound_map/score.py            # guardrail self-check on the labelle
 python tools/sound_map/drive.py labelled   # full-drive self-check; must print "full-drive check OK"
 python tools/sound_map/generate.py 40      # 40 rounds x 140 sounds, about 12 min on 16 cores; out/library.json is rewritten every round
 python tools/sound_map/drive.py library    # full-drive check of every kept sound; writes experiment/sound_map_pool.json for the app
+python tools/sound_map/drive.py pool       # Evolving check of the pool; sounds that pass may be used when the driver picks Evolving in pair 1
 python -m tools.benchmark_sound_map        # simulated listeners: sound-map search vs random challengers
 python tools/sound_map/calibrate.py 600    # quick check vs full-drive check on 600 sounds, about 17 min; suggests quick limits
 ```

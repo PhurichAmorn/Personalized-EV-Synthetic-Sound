@@ -76,7 +76,15 @@ export function useCarSound(state: State, onCommand: Command, personalizeOpen: b
   const idle = !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active
   // Car on, or Personalize closed: GS (re)starts in the GS mode, which also ends any podium playback.
   // ...and when the driver's sound changes (picked in the list), GS switches to it.
-  useEffect(() => { if (state.running && !state.starting && gs && idle && !personalizeOpen) start() }, [state.running, state.starting, personalizeOpen, state.mySound?.id])
+  // A new driver's sound also brings its motion (the session's pair 1 choice): GS switches to Rise or Evolving with it.
+  const soundId = useRef(state.mySound?.id)
+  useEffect(() => {
+    const changed = soundId.current !== state.mySound?.id; soundId.current = state.mySound?.id
+    const own = (state.mySound?.recipe as { motion?: unknown } | undefined)?.motion
+    const next = changed && (own === 'rise' || own === 'evolving') ? own : mode
+    if (next !== mode) setMode(next)
+    if (state.running && !state.starting && gs && idle && !personalizeOpen) start(next)
+  }, [state.running, state.starting, personalizeOpen, state.mySound?.id])
   return {
     gs, mode, start: () => start(),
     cycle: () => { const next = mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'; setMode(next); start(next) },

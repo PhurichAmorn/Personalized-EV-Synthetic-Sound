@@ -52,7 +52,7 @@ declare global {
       window?: { getCurrentWindow: () => { close: () => Promise<void>; startDragging: () => Promise<void>; startResizeDragging: (direction: 'SouthEast') => Promise<void>; setSize: (size: unknown) => Promise<void> } }
       dpi?: { LogicalSize: new (width: number, height: number) => unknown }
       core: { invoke: (name: string, args: Record<string, unknown>) => Promise<void> }
-      event: { listen: (name: string, handler: (event: { payload: string }) => void) => Promise<() => void>; emit: (name: string, payload?: unknown) => Promise<void> }
+      event: { listen: <T = string>(name: string, handler: (event: { payload: T }) => void) => Promise<() => void>; emit: (name: string, payload?: unknown) => Promise<void> }
     }
   }
 }

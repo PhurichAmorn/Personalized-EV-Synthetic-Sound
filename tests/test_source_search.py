@@ -665,7 +665,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
     def test_session_spreads_opening_follows_taste_and_never_pairs_near_copies(self):
         from experiment.source_search import SoundMapDiscovery,MAP_OPENING,map_gap
         import random as stdrandom
-        d=SoundMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(2)
+        d=SoundMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(2)
         unit=lambda i:d._unit(d.candidates[i]['recipe'])
         taste=lambda i:-abs(unit(i)[0]-.1)  # likes the lowest pitch
         cells=set()
@@ -682,15 +682,34 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         for c in cells:self.assertTrue(lo-1e-9<=r[d.pool.index(d.by_cell[c])]<=hi+1e-9)  # opening from the middle ring, not the rim
         self.assertEqual((d.stage,d.completed),('done',20))
         self.assertLess(unit(d.finalists[0])[0],.35)  # the shortlist's top sound is low
-        data=d.export();self.assertEqual(data['policy'],'source-map-v5');self.assertTrue(data['pool']['created'])
+        data=d.export();self.assertEqual(data['policy'],'source-map-v6');self.assertTrue(data['pool']['created'])
         d.close()
+    def test_pair_one_sets_the_motion_and_evolving_uses_only_sounds_that_pass_in_evolving(self):
+        from experiment.source_search import SoundMapDiscovery,RegionMapDiscovery,MAP_OPENING
+        import random as stdrandom
+        for cls in (SoundMapDiscovery,RegionMapDiscovery):
+          with self.subTest(cls.__name__):
+            d=cls(renderer=lambda recipe:None);d._load()
+            d.start();d.rng=stdrandom.Random(3)
+            motion=lambda i:d.candidates[i]['recipe']['motion'];cell=lambda i:d.candidates[i]['recipe']['cell']
+            self.assertEqual(sorted(motion(i) for i in d.pair),['evolving','rise']);self.assertEqual(cell(d.pair[0]),cell(d.pair[1]))  # same sound
+            self.assertIn(cell(d.pair[0]),d.evolving_ok)
+            d.feedback(choice='A' if motion(d.pair[0])=='evolving' else 'B');self.assertEqual(d.motion,'evolving')
+            for n in range(19):
+                self.assertEqual(len(d.pair),2,d.error)
+                for i in d.pair:self.assertEqual(motion(i),'evolving');self.assertIn(cell(i),d.evolving_ok)
+                if n<MAP_OPENING:self.assertEqual(d.candidates[d.pair[0]]['origin']['kind'],'opening')
+                d.feedback(choice='A')
+            self.assertEqual((d.stage,d.completed),('done',20));self.assertEqual(d.export()['motion'],'evolving')
+            self.assertTrue(all(motion(i)=='evolving' for i in d.finalists))
+            d.close()
     def test_regions_same_opening_then_focus_on_the_liked_region(self):
         from experiment.source_search import RegionMapDiscovery,MAP_OPENING,MAP_EXPLORE
         import random as stdrandom
         cells=lambda d,n:[d.candidates[i]['recipe']['cell'] for i in d.pair]
         openings=[]
         for seed in (1,2):
-            d=RegionMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(seed)
+            d=RegionMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(seed)
             region=lambda i:d.region[d.candidates[i]['recipe']['cell']]
             liked=region(d.pair[0]);seen=[]
             for n in range(20):
@@ -711,7 +730,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
     def test_winner_stays_and_the_last_pair_confirms_the_top_two(self):
         from experiment.source_search import SoundMapDiscovery,MAP_OPENING,MAP_PLAYOFF
         import random as stdrandom
-        d=SoundMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(5)
+        d=SoundMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(5)
         pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
         for n in range(20):
             self.assertEqual(len(d.pair),2,d.error)

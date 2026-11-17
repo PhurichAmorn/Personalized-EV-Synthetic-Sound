@@ -5,6 +5,7 @@ the drive gain is used to skip moments where the sound is nearly silent.
 
   python tools/sound_map/drive.py labelled   # self-check: must reject Growl and Sci-fi sweep and pass every kept sound
   python tools/sound_map/drive.py library    # re-check every library sound; failures are dropped; writes experiment/sound_map_pool.json
+  python tools/sound_map/drive.py pool       # add Evolving results to experiment/sound_map_pool.json (sounds that pass may open as Evolving)
 """
 import json, os, subprocess, sys
 for var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS'): os.environ[var] = '1'
@@ -101,6 +102,13 @@ if __name__ == '__main__':
             assert {'growl', 'sweep'} <= flagged, 'full-drive check missed a dropped sound'
             assert not flagged & {i['id'] for i in items if i['label'] == 'ok'}, 'full-drive check rejected a kept sound'
             print('full-drive check OK')
+        elif what == 'pool':  # add Evolving results to the app's pool (no re-generation): the search opens with Rising vs Evolving
+            data = json.load(open(POOL))
+            jobs = [(e['id'], e['voice'], e['fx'], 'evolving') for e in data['sounds']]
+            for e, m in zip(data['sounds'], pool.map(measure, jobs)): e['driveEvolving'] = {k: v for k, v in m.items() if k != 'at'}
+            json.dump(data, open(POOL, 'w'), indent=0)
+            ok = sum(not verdict({'evolving': {**e['driveEvolving'], 'at': {k: 0 for k in 'SRF'}}}, ('evolving',)) for e in data['sounds'])
+            print(f"{ok} of {len(data['sounds'])} pool sounds also pass in Evolving -> {POOL}")
         else:
             lib = json.load(open(LIBRARY))
             # Split across machines: --part 1/2 checks every 2nd sound and saves <library>.part1of2.json; with all parts copied next to
@@ -126,7 +134,8 @@ if __name__ == '__main__':
             # Frozen pool for the app's sound-map search (experiment/source_search.py SoundMapDiscovery): only what a session needs.
             pool = {'created': lib.get('created'), 'source': 'tools/sound_map library (generate.py + drive.py library)', 'limits': lib['limits'],
                     'distinct': lib.get('distinct'), 'sounds': [{'id': e['id'], 'from': e.get('from'), 'voice': e['voice'], 'fx': library_sound(e)[1],
-                    'rootHz': e['rootHz'], 'metrics': e['metrics'], 'desc': e['desc'], 'drive': {k: v for k, v in e['drive']['rise'].items() if k != 'at'}} for e in kept]}
+                    'rootHz': e['rootHz'], 'metrics': e['metrics'], 'desc': e['desc'], 'drive': {k: v for k, v in e['drive']['rise'].items() if k != 'at'},
+                    'driveEvolving': {k: v for k, v in e['drive']['evolving'].items() if k != 'at'}} for e in kept]}  # Evolving sessions use sounds that pass here too
             json.dump(pool, open(POOL, 'w'), indent=0)
             print(f'pool for the app: {len(kept)} sounds -> {POOL}')
             print(f"{len(results)} sounds checked, {len(failed)} failed and dropped; {len(evolving)} kept sounds would fail in Evolving (not gated)")

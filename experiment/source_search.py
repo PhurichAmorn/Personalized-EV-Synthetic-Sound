@@ -1095,8 +1095,9 @@ class TuningDiscovery(LevelDiscovery):
 # (desktop/src/mapVoice.ts); frozen in experiment/sound_map_pool.json. Built and played live in the app (levels.ts, kind 'map').
 # Phase 2 (not built): grow new sounds around the listener's favourites between pairs.
 from pathlib import Path
-MAP_POLICY='source-map-v5'  # v1: plain synth, 90-box grid, features from synth settings; v2: two voices, open archive, dry;
-# v3: searched effects, larger steps; v4: shortlist led by the model's best (not the champion)
+MAP_POLICY='source-map-v6'  # v1: plain synth, 90-box grid, features from synth settings; v2: two voices, open archive, dry;
+# v3: searched effects, larger steps; v4: shortlist led by the model's best (not the champion); v5: middle-ring opening;
+# v6: pair 1 = one central sound Rising vs Evolving; Evolving sessions use only sounds that also pass the guardrail in Evolving
 MAP_POOL=Path(__file__).with_name('sound_map_pool.json')
 def _centre(s):
     """Spectral centre: energy-weighted octave band (0 = under 100 Hz .. 7 = over 6.4 kHz), from the offline profile."""
@@ -1126,9 +1127,9 @@ def map_gap(a,b,step):
                abs(x['R']-y['R'])/step['R'],abs(x['F']-y['F'])/step['F'],
                *(abs(x.get(k,0)-y.get(k,0))/step[k] for k in ('chorus','vib') if k in step))
 
-def map_recipe(sound):
+def map_recipe(sound,motion='rise'):
     """Pool sound -> live recipe (desktop/src/levels.ts MapRecipe v5): its voice and effects as the full-drive check played them."""
-    return {'version':5,'kind':'map','seed':0,'motion':'rise','cell':sound['id'],'voice':sound['voice'],'fx':sound['fx']}
+    return {'version':5,'kind':'map','seed':0,'motion':motion,'cell':sound['id'],'voice':sound['voice'],'fx':sound['fx']}
 
 def load_map_pool(path=MAP_POOL):
     data=json.loads(Path(path).read_text())
@@ -1146,29 +1147,44 @@ class SoundMapDiscovery(TuningDiscovery):
         if self.pool is None:
             if not Path(self.pool_path).exists():raise ValueError('Sound map pool missing: run tools/sound_map/generate.py and drive.py library first')
             self.pool_meta,self.pool=load_map_pool(self.pool_path);self.by_cell={s['id']:s for s in self.pool}
+            # Evolving check results (tools/sound_map/drive.py pool) narrow Evolving sessions to sounds that pass in Evolving too.
+            # ponytail: without them every pool sound may play Evolving unchecked (gated in Rising only); run drive.py pool to gate it.
+            lim=self.pool_meta['limits'];checked=any('driveEvolving' in s for s in self.pool)
+            self.evolving_ok={s['id'] for s in self.pool if not checked or ('driveEvolving' in s and all(s['driveEvolving'][k]<=lim[k] for k in 'SRF'))}
     def start(self,motion=None):
+        """motion None: pair 1 is one central sound Rising vs Evolving; the choice sets the motion."""
         self._load()
-        with self.lock:self.champion=None;self.confirm=None;super().start('rise')  # phase 1: Rising only (the mode the full-drive check gates)
+        with self.lock:self.champion=None;self.confirm=None;super().start(motion or (None if self.evolving_ok else 'rise'))
+    def _space(self):return self.pool if self.motion=='rise' else [s for s in self.pool if s['id'] in self.evolving_ok]
     def _unit(self,recipe):return self.by_cell[recipe['cell']]['unit']
     def _features(self,recipe):z=2*self._unit(recipe)-1;return np.ravel(np.column_stack([z,z*z]))
-    def _id(self,recipe):return hashlib.sha256(json.dumps([recipe.get('voice',recipe.get('plain')),recipe['fx']],sort_keys=True).encode()).hexdigest()[:32]
+    def _id(self,recipe):  # motion in the key only when Evolving, so Rising ids stay as in v1-v5
+        return hashlib.sha256(json.dumps([recipe.get('voice',recipe.get('plain')),recipe['fx']]+([recipe['motion']] if recipe.get('motion')=='evolving' else []),sort_keys=True).encode()).hexdigest()[:32]
     def _label(self,recipe):
         s=self.by_cell[recipe['cell']]
-        return f"{'Blocks' if s['voice']['kind']=='blocks' else 'Plain synth'} · {s['rootHz']:.0f} Hz · sharpness {s['drive']['S']:.2f} ({recipe['cell']})"
+        return f"{'Blocks' if s['voice']['kind']=='blocks' else 'Plain synth'} · {s['rootHz']:.0f} Hz · sharpness {s['drive']['S']:.2f}{' · Evolving' if recipe.get('motion')=='evolving' else ''} ({recipe['cell']})"
     def _distinct(self,a,b):return self.candidates[a]['recipe']['cell']!=self.candidates[b]['recipe']['cell']
     def _spread(self,count):
         """Opening sounds from the middle ring of the pool (distance from the pool centre between the 30th and 70th percentile), spread
         around the ring by farthest-point from a random first sound: different from each other, but not the odd sounds at the rim."""
-        units=np.array([s['unit'] for s in self.pool]);r=np.linalg.norm(units-units.mean(0),axis=1)
+        space=self._space();units=np.array([s['unit'] for s in space]);r=np.linalg.norm(units-units.mean(0),axis=1)
         ring=np.flatnonzero((r>=np.percentile(r,MAP_RING[0]))&(r<=np.percentile(r,MAP_RING[1])))
         if len(ring)<count:ring=np.argsort(np.abs(r-np.median(r)))[:count]
         picked=[int(ring[self.rng.randrange(len(ring))])]
         while len(picked)<count:
             gap=np.min(np.linalg.norm(units[ring][:,None,:]-units[picked][None,:,:],axis=2),axis=1);picked.append(int(ring[np.argmax(gap)]))
-        return [self.pool[i] for i in picked]
-    def _add_sound(self,sound,kind,summary):return self._add(map_recipe(sound),{'kind':kind,'cell':sound['id'],'from':sound.get('from'),'summary':summary})
+        return [space[i] for i in picked]
+    def _set_motion(self,rows):winner=rows[0]['winner'];self.motion=self.candidates[winner]['recipe']['motion'] if winner else 'rise'  # Both good / Neither: Rising
+    def _add_sound(self,sound,kind,summary):return self._add(map_recipe(sound,self.motion),{'kind':kind,'cell':sound['id'],'from':sound.get('from'),'summary':summary})
     def _proposals(self):
-        self.check_parent=None;step=self.completed;rows=self._choices()
+        self.check_parent=None;mp=self.motion_pairs;step=self.completed-mp;rows=self._choices()
+        if mp and self.completed==0:  # the pool sound nearest the centre that passes in both modes
+            both=[s for s in self.pool if s['id'] in self.evolving_ok];centre=np.mean([s['unit'] for s in self.pool],axis=0)
+            s=min(both,key=lambda s:np.linalg.norm(s['unit']-centre));names={'rise':'Rising','evolving':'Evolving'}
+            self.rematch=[self._add(map_recipe(s,m),{'kind':'motion','motion':m,'cell':s['id'],'summary':f"Motion: {names[m]} ({s['id']})"}) for m in ('rise','evolving')]
+            return []
+        if mp and self.completed==1:self._set_motion(rows)
+        rows=rows[mp:]  # the opening and playoff count from the first pair after the motion pair
         if step==0:self.opening=[self._add_sound(s,'opening',f"Opening: {s['id']}") for s in self._spread(2*MAP_OPENING)]
         if step<MAP_OPENING:self.rematch=self.opening[2*step:2*step+2];return []
         ranked=self._ranked()
@@ -1192,12 +1208,12 @@ class SoundMapDiscovery(TuningDiscovery):
         if self.completed==STYLE_PAIRS-1:
             self._rank_finalists()
             if len(self.finalists)>=2:self.confirm={'first':self.finalists[0],'second':self.finalists[1]};self.rematch=self.finalists[:2];return []
-        self._sample();heard={i for r in rows for i in r['pair']};here=self.by_cell[self.candidates[best]['recipe']['cell']]
-        pool=[s for s in self.pool if self._id(map_recipe(s)) not in heard|self.excluded
+        self._sample();heard={i for r in self._choices() for i in r['pair']};here=self.by_cell[self.candidates[best]['recipe']['cell']]
+        pool=[s for s in self._space() if self._id(map_recipe(s,self.motion)) not in heard|self.excluded
               and map_gap(s,here,self.pool_meta['distinct'])>=1]  # never a near-copy of the best
-        pool.sort(key=lambda s:-self._sampled(map_recipe(s)))
+        pool.sort(key=lambda s:-self._sampled(map_recipe(s,self.motion)))
         self.check_parent=best
-        return [(map_recipe(s),{'kind':'challenger','cell':s['id'],'from':s.get('from'),'summary':f"Challenger: {s['id']} (Thompson sample)"}) for s in pool]
+        return [(map_recipe(s,self.motion),{'kind':'challenger','cell':s['id'],'from':s.get('from'),'summary':f"Challenger: {s['id']} (Thompson sample)"}) for s in pool]
     def _rank_finalists(self):
         """Shortlist as the tuning search: the model's best sounds among those heard at least twice lead. The confirmation pair's winner
         is still recorded as champion (export) but no longer forced to #1 (v3 did): in simulation one noisy last game often put a weaker
@@ -1261,39 +1277,43 @@ class RegionMapDiscovery(SoundMapDiscovery):
             elif r['choice']=='neither':l[reg(a)]+=1;l[reg(b)]+=1
             elif r.get('winner'):w[reg(r['winner'])]+=1;l[reg(b if r['winner']==a else a)]+=1
         return w,l
+    def _map_rows(self):return self._choices()[self.motion_pairs:]  # answers after the Rising vs Evolving pair
     def focus_regions(self,rows=None):
         """Regions in order of win rate (posterior mean); the first two plus one more per two Neither answers after the region stage."""
-        rows=self._choices() if rows is None else rows;w,l=self._region_record(rows)
+        rows=self._map_rows() if rows is None else rows;w,l=self._region_record(rows)
         order=[int(k) for k in np.lexsort((-(w+l),-(w+1)/(w+l+2)))]
         return order[:2+sum(r['choice']=='neither' for r in rows[MAP_EXPLORE:])//2]
     def _proposals(self):
-        self.check_parent=None;step=self.completed;rows=self._choices()
+        mp=self.motion_pairs
+        if mp and self.completed==0:return super()._proposals()  # pair 1: Rising vs Evolving
+        if mp and self.completed==1:self._set_motion(self._choices())
+        self.check_parent=None;step=self.completed-mp;rows=self._map_rows();space=self._space()
         if step<MAP_OPENING:
             # Opening pairs: each typical sound with the one most different from it among those left.
-            if step==0:
-                left=list(self.typical);order=[]
+            if step==0:  # Evolving: each region's typical sound among those that also pass in Evolving
+                left=[min([s for s in space if self.region[s['id']]==self.region[t['id']]] or [t],key=lambda s:np.linalg.norm(s['unit']-t['unit'])) for t in self.typical];order=[]
                 while left:
                     a=left.pop(0);b=max(left,key=lambda s:np.linalg.norm(s['unit']-a['unit']));left.remove(b);order+=[a,b]
                 self.opening=[self._add_sound(s,'opening',f"Opening: region {self.region[s['id']]+1} ({s['id']})") for s in order]
             self.rematch=self.opening[2*step:2*step+2];return []
         if step<MAP_EXPLORE:
-            w,l=self._region_record(rows);heard={i for r in rows for i in r['pair']}|self.excluded;self._sample()
+            w,l=self._region_record(rows);heard={i for r in self._choices() for i in r['pair']}|self.excluded;self._sample()
             pair=[]
             for k in sorted(range(MAP_REGIONS),key=lambda k:-self.rng.betavariate(w[k]+1,l[k]+1)):
-                left=[s for s in self.pool if self.region[s['id']]==k and self._id(map_recipe(s)) not in heard]
-                if left:pair.append(max(left,key=lambda s:self._sampled(map_recipe(s))))
+                left=[s for s in space if self.region[s['id']]==k and self._id(map_recipe(s,self.motion)) not in heard]
+                if left:pair.append(max(left,key=lambda s:self._sampled(map_recipe(s,self.motion))))
                 if len(pair)==2:break
             if len(pair)==2:
                 self.rematch=[self._add_sound(s,'region',f"Region {self.region[s['id']]+1}: {s['id']} (Thompson sample)") for s in pair];return []
         options=super()._proposals()
-        if self.rematch or step==STYLE_PAIRS-1:return options
+        if self.rematch or self.completed==STYLE_PAIRS-1:return options
         focus=self.focus_regions(rows);best=[focus[0]] if self.rng.random()<MAP_FOCUS else focus[1:]
         for regions in (best,focus):
             kept=[o for o in options if self.region[o[1]['cell']] in regions]
             if kept:return kept
         return options
     def export(self):
-        data=super().export();w,l=self._region_record(self._choices())
+        data=super().export();w,l=self._region_record(self._map_rows())
         data.update(regions={'count':MAP_REGIONS,'explore':MAP_EXPLORE,'focus':[k+1 for k in self.focus_regions()],
                              'wins':w.astype(int).tolist(),'losses':l.astype(int).tolist(),
                              'by_sound':{i:self.region[c['recipe']['cell']]+1 for i,c in self.candidates.items() if c['recipe'].get('cell') in self.region}})

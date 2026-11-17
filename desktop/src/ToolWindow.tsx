@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import Diagnostics, { type Powertrain, type SoundDebug } from './Diagnostics'
+import Diagnostics, { type Powertrain } from './Diagnostics'
 import { tauriClient, type BackendMessage } from './client'
 import type { State } from './App'
 
-export default function ToolWindow({ view }: { view: 'telemetry' | 'sound-signal' }) {
+export default function ToolWindow({ view }: { view: 'telemetry' }) {
   const clientRef = useRef<ReturnType<typeof tauriClient> | null>(null)
   const [state, setState] = useState<State | null>(null)
   const [powertrain, setPowertrain] = useState<Powertrain | null>(null)
-  const [soundDebug, setSoundDebug] = useState<SoundDebug | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -15,7 +14,7 @@ export default function ToolWindow({ view }: { view: 'telemetry' | 'sound-signal
     let disconnect = () => {}
     let timer: number | undefined
     const keys = new Set<string>()
-    const client = tauriClient(view === 'telemetry' ? 1_000_000_000 : 2_000_000_000)
+    const client = tauriClient(1_000_000_000)
     clientRef.current = client
     const report = (reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))
     const updatePedals = () => void client.command('pedals', {
@@ -47,13 +46,8 @@ export default function ToolWindow({ view }: { view: 'telemetry' | 'sound-signal
       disconnect = stop
       void client.command('snapshot').then(snapshot => { if (!disposed) setState(snapshot as State) }).catch(report)
       if (document.hasFocus()) focus()
-      if (view === 'sound-signal') void client.command('debugVisible', { value: true }).catch(report)
       timer = window.setInterval(() => {
-        if (view === 'telemetry') {
-          void client.command('powertrain').then(data => { if (!disposed) setPowertrain(data as Powertrain) }).catch(report)
-        } else {
-          void client.command('soundDebug').then(data => { if (!disposed) setSoundDebug(data as SoundDebug) }).catch(report)
-        }
+        void client.command('powertrain').then(data => { if (!disposed) setPowertrain(data as Powertrain) }).catch(report)
       }, 100)
     }).catch(reason => { if (!disposed) report(reason) })
     return () => {
@@ -65,16 +59,13 @@ export default function ToolWindow({ view }: { view: 'telemetry' | 'sound-signal
       window.removeEventListener('focus', focus)
       disconnect()
       clientRef.current = null
-      if (view === 'sound-signal') void client.command('debugVisible', { value: false }).catch(() => {})
     }
   }, [view])
 
   return <main className="tool-window">
     {error && <p role="alert" className="mb-4 text-red-300">{error}</p>}
     {!state ? <p className="text-neutral-400">Connecting to simulator…</p> : <Diagnostics
-      view={view}
       powertrain={powertrain}
-      soundDebug={soundDebug}
       rpm={state.rpm}
       maxRpm={state.maxRpm}
       running={state.running}

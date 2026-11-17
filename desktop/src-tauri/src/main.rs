@@ -176,7 +176,7 @@ fn main() {
         .on_menu_event(|app, event| {
             let (label, title, route, size) = match event.id().as_ref() {
                 "open_telemetry" => ("telemetry", "EV Sound Lab · Telemetry", "telemetry", (840.0, 640.0)),
-                "open_sound_signal" => ("sound-signal", "EV Sound Lab · Sound signal", "sound-signal", (840.0, 700.0)),
+                "open_sound_signal" => { let _ = app.emit("toggle-sound-signal", ()); return }  // a panel on the dashboard, not a window
                 _ => return,
             };
             let app = app.clone();

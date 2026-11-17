@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { spectrumBins } from './signal_bins'
 
 export type Powertrain = {
   torque: number; shaftPower: number; wheelPower: number; batteryPower: number
@@ -11,38 +10,12 @@ export type SoundDebug = {
 }
 
 function number(value: number, digits = 0) { return Number.isFinite(value) ? value.toFixed(digits) : '—' }
-function line(values: number[], min: number, max: number): string {
-  if (!values.length) return ''
-  return values.map((value, index) => `${index / Math.max(1, values.length - 1) * 600},${130 - (value - min) / (max - min) * 130}`).join(' ')
-}
-
-export default function Diagnostics({ view, powertrain, soundDebug, rpm, maxRpm, running, sweepActive, onSweep }: {
-  view: 'telemetry' | 'sound-signal'
-  powertrain: Powertrain | null; soundDebug: SoundDebug | null
+export default function Diagnostics({ powertrain, rpm, maxRpm, running, sweepActive, onSweep }: {
+  powertrain: Powertrain | null
   rpm: number; maxRpm: number; running: boolean; sweepActive: boolean; onSweep: () => void
 }) {
-  const [history, setHistory] = useState<number[][]>([])
   const [trail, setTrail] = useState<{ time: number; rpm: number; torque: number }[]>([])
   const previousRunning = useRef(false)
-  const canvas = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    if (!soundDebug) return
-    setHistory(rows => [...rows, spectrumBins(soundDebug.frequencies, soundDebug.spectrum_db)].slice(-100))
-  }, [soundDebug])
-
-  useEffect(() => {
-    const context = canvas.current?.getContext('2d')
-    if (!context) return
-    context.fillStyle = '#202020'
-    context.fillRect(0, 0, 600, 130)
-    const width = 600 / Math.max(1, history.length)
-    history.forEach((bins, column) => bins.forEach((level, row) => {
-      const fraction = level / 90
-      context.fillStyle = `hsl(0 0% ${6 + fraction * 90}%)`
-      context.fillRect(column * width, 130 - (row + 1) * 130 / 96, Math.ceil(width), 2)
-    }))
-  }, [history])
 
   useEffect(() => {
     if (running && !previousRunning.current) setTrail([])
@@ -63,12 +36,9 @@ export default function Diagnostics({ view, powertrain, soundDebug, rpm, maxRpm,
     return point(speed, -Math.min(powertrain.maxRegenTorque, powertrain.maxRegenPower * 1000 / Math.max(omega, .001)))
   }).join(' ') : ''
   const recent = trail.map(sample => point(sample.rpm, sample.torque)).join(' ')
-  const samples = soundDebug?.waveform || []
-  const range = Math.max(.02, ...samples.map(value => Math.abs(value) * 1.15))
-  const spectrum = soundDebug?.spectrum_db || []
 
   return <div className="space-y-5">
-    {view === 'telemetry' && <section className="panel space-y-4 p-6">
+    <section className="panel space-y-4 p-6">
       <div className="flex items-center justify-between"><h2 className="text-xl">Powertrain telemetry</h2><button className="control text-xs" onClick={() => setTrail([])}>Clear traces</button></div>
       <p className="text-xs text-neutral-400">{powertrain?.mapDescription} · limits before traction and battery constraints</p>
       {powertrain && <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3"><div>Torque {number(powertrain.torque, 1)} Nm</div><div>Shaft {number(powertrain.shaftPower, 1)} kW</div><div>Wheels {number(powertrain.wheelPower, 1)} kW</div><div>Battery {number(powertrain.batteryPower, 1)} kW</div><div>Acceleration {number(powertrain.acceleration, 2)} m/s²</div><div>SOC {number(powertrain.soc, 1)}%</div></div>}
@@ -81,11 +51,6 @@ export default function Diagnostics({ view, powertrain, soundDebug, rpm, maxRpm,
       </svg>
       <div className="flex flex-wrap gap-5 text-xs text-neutral-400"><span>Motor RPM: {number(rpm)}</span><span>Drive limit</span><span>Regen limit</span><span>Last 30 s</span></div>
       <button className="control" disabled={running} onClick={onSweep}>{sweepActive ? 'Stop sound sweep' : 'Run sound sweep'}</button>
-    </section>}
-    {view === 'sound-signal' && <section className="panel space-y-4 p-6"><h2 className="text-xl">Sound signal</h2><p className="text-xs text-neutral-400">Output estimates, refreshed at 10 Hz while visible</p>
-      <div><div className="label mb-2">Waveform · ms</div><svg className="h-32 w-full rounded-lg bg-[#202020]" viewBox="0 0 600 130" role="img" aria-label="Recent audio waveform"><line x1="0" x2="600" y1="65" y2="65" stroke="#494949" /><polyline points={line(samples, -range, range)} fill="none" stroke="#d4d4d4" strokeWidth="1.5" /></svg></div>
-      <div><div className="label mb-2">Spectrum · Hz</div><svg className="h-32 w-full rounded-lg bg-[#202020]" viewBox="0 0 600 130" role="img" aria-label="Audio frequency spectrum"><polyline points={line(spectrum.map(level => Math.max(-90, Math.min(0, level))), -90, 0)} fill="none" stroke="#dadada" strokeWidth="1.5" /></svg></div>
-      <div><div className="label mb-2">Spectrogram · last 10 s</div><canvas ref={canvas} width={600} height={130} className="h-32 w-full rounded-lg" role="img" aria-label="Recent audio spectrogram" /></div>
-    </section>}
+    </section>
   </div>
 }
