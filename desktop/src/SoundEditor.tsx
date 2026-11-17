@@ -47,7 +47,7 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
     if (source.current) { command.current('sourceAudition', { value: true }); source.current.start(refresh) }
   }
   useImperativeHandle(ref, () => ({ start: startSound, analyser: () => (lab.playing ? lab.analyser : source.current?.analyser()) ?? null, auditionContext: () => source.current?.auditionContext() ?? {}, audition: (urls, input, label) => source.current?.audition(urls, input, label) ?? Promise.resolve(false), stop: () => { stopAll(); setSourcePlaying(false); command.current('sourceAudition', { value: false }) } }))
-  const discoveryWorkspace = embedded && !state.search.active && !state.soundSweepActive && !!state.sourceDiscovery?.active
+  const discoveryWorkspace = embedded && !state.search.active && !state.soundSweepActive && (!!state.sourceDiscovery?.active || (personalizeOpen && !!state.sourceDiscovery?.finalists?.length))  // podium too: else the built-in car sound plays on the pedal
   useEffect(() => { void command.current('sourceAudition', { value: sourcePlaying || discoveryWorkspace }) }, [sourcePlaying, discoveryWorkspace])
   useEffect(() => () => { void command.current('sourceAudition', { value: false }) }, [])
   const backendReady = typeof state.sourceAudition === 'boolean' && typeof state.motorLoad === 'number'
