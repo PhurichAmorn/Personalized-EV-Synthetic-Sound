@@ -12,7 +12,7 @@ import type { DiscoveryCandidate } from './SourceSearch'
 // Sound Lab page loads on first open: the BeamNG overlay and a plain drive never download it.
 const SoundLab = lazy(() => import('./SoundLab'))
 
-export default function SoundEditor({ active, state, onCommand, embedded = false, ref, granularMode, onModeChange, onSourceSelected, onAudioError, personalizeOpen = false }: { onAudioError?: (message: string) => void; personalizeOpen?: boolean; onSourceSelected?: () => void; granularMode: GranularMode; onModeChange: (mode: GranularMode) => void; ref?: Ref<SourceHandle>; embedded?: boolean; active: boolean; state: State; onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void }) {
+export default function SoundEditor({ active, state, onCommand, embedded = false, ref, granularMode, onModeChange, onSourceSelected, onAudioError, personalizeOpen = false, gsSelected }: { gsSelected: boolean; onAudioError?: (message: string) => void; personalizeOpen?: boolean; onSourceSelected?: () => void; granularMode: GranularMode; onModeChange: (mode: GranularMode) => void; ref?: Ref<SourceHandle>; embedded?: boolean; active: boolean; state: State; onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void }) {
   const source = useRef<SourceHandle>(null)
   const [discoveryContainer] = useState(() => document.createElement('div'))
   useEffect(() => {
@@ -31,24 +31,30 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
   useEffect(() => () => lab.close(), [lab])
   const stopLab = () => { lab.stop(); setLabPlaying(false) }
   const stopAll = () => { source.current?.stop(); stopLab() }
-  const audition = async (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => {
+  const audition = async (candidate: DiscoveryCandidate, input: 'driving' | 'simulated', motion?: GranularMode) => {
     if (!isLiveRecipe(candidate.recipe)) { stopLab(); return source.current?.audition(candidate.urls, input, candidate.label) ?? false }
     source.current?.stop()
     try {
       const { plain, fx, mode, travel } = liveSound(candidate.recipe)
       await lab.play(candidate.id, await liveStems(candidate.recipe), fx, plain.rootHz, input === 'simulated' ? 'simulated' : 'live',
-        () => ({ input: latest.current.input, stale: performance.now() - latest.current.at > 750 }), simulatedDrive, mode, travel)
+        () => ({ input: latest.current.input, stale: performance.now() - latest.current.at > 750 }), simulatedDrive, motion ?? mode, travel)
       setLabPlaying(true); return true
     } catch (problem) { stopLab(); return problem instanceof Error ? problem.message : 'Could not play the sound.' }
   }
   const command = useRef(onCommand)
   command.current = onCommand
-  const startSound = (refresh = false) => {
-    if (source.current) { command.current('sourceAudition', { value: true }); source.current.start(refresh) }
+  // GS plays the driver's sound (newest saved final, kept across restarts) in the GS mode; the stock source only before any session.
+  const my = state.mySound
+  const mine = my && isLiveRecipe(my.recipe) ? { id: my.id, label: my.label, recipe: my.recipe, urls: [], traces: {} } : null
+  const startSound = (refresh = false, motion = granularMode) => {
+    if (mine) { onSourceSelected?.(); void audition(mine, 'driving', motion) }
+    else source.current?.start(refresh)
   }
-  useImperativeHandle(ref, () => ({ start: startSound, analyser: () => (lab.playing ? lab.analyser : source.current?.analyser()) ?? null, auditionContext: () => source.current?.auditionContext() ?? {}, audition: (urls, input, label) => source.current?.audition(urls, input, label) ?? Promise.resolve(false), stop: () => { stopAll(); setSourcePlaying(false); command.current('sourceAudition', { value: false }) } }))
-  const discoveryWorkspace = embedded && !state.search.active && !state.soundSweepActive && (!!state.sourceDiscovery?.active || (personalizeOpen && !!state.sourceDiscovery?.finalists?.length))  // podium too: else the built-in car sound plays on the pedal
-  useEffect(() => { void command.current('sourceAudition', { value: sourcePlaying || discoveryWorkspace }) }, [sourcePlaying, discoveryWorkspace])
+  useImperativeHandle(ref, () => ({ start: startSound, analyser: () => (lab.playing ? lab.analyser : source.current?.analyser()) ?? null, auditionContext: () => source.current?.auditionContext() ?? {}, audition: (urls, input, label) => source.current?.audition(urls, input, label) ?? Promise.resolve(false), stop: () => { stopAll(); setSourcePlaying(false) } }))
+  const discoveryWorkspace = embedded && (!!state.sourceDiscovery?.active || (personalizeOpen && !!state.sourceDiscovery?.finalists?.length))
+  // The one mute rule: the backend car sound plays only when a theme is chosen and nothing app-side plays (session, podium, GS).
+  const muteBackend = !state.search.active && !state.soundSweepActive && (gsSelected || sourcePlaying || labPlaying || discoveryWorkspace)
+  useEffect(() => { void command.current('sourceAudition', { value: muteBackend }) }, [muteBackend])
   useEffect(() => () => { void command.current('sourceAudition', { value: false }) }, [])
   const backendReady = typeof state.sourceAudition === 'boolean' && typeof state.motorLoad === 'number'
   return <section className={"sound-editor" + (embedded ? " sound-editor-embedded" : "")} hidden={!active || embedded} aria-label="Sound Lab">
@@ -58,4 +64,25 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
       {backendReady && !state.search.active && !state.soundSweepActive ? <><SteadySource headless onError={onAudioError} granularMode={granularMode} onModeChange={onModeChange} ref={source} compact blocked={false} onPlay={() => { onSourceSelected?.(); setSourcePlaying(true); setLabStop(value => value + 1); stopLab() }} onPlayingChange={setSourcePlaying} driving={driving} /></> : <p className="sound-editor-error">{!backendReady ? 'Restart EV Sound Lab to load live source support.' : 'Stop the experiment or audio debug sweep to try the source renderer.'}</p>}
     </>}
   </section>
+}
+
+type Command = (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
+/** One owner for what the car plays: GS (the driver's sound, else the stock source) or a backend theme. Dashboard and the BeamNG overlay both use it. */
+export function useCarSound(state: State, onCommand: Command, personalizeOpen: boolean) {
+  const ref = useRef<SourceHandle>(null)
+  const [gs, setGs] = useState(true)
+  const [mode, setMode] = useState<GranularMode>('rise')
+  const start = (next = mode) => { setGs(true); ref.current?.start(true, next) }
+  const idle = !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active
+  // Car on, or Personalize closed: GS (re)starts in the GS mode, which also ends any podium playback.
+  useEffect(() => { if (state.running && !state.starting && gs && idle && !personalizeOpen) start() }, [state.running, state.starting, personalizeOpen])
+  return {
+    gs, mode, start: () => start(),
+    cycle: () => { const next = mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'; setMode(next); start(next) },
+    theme: (name: string) => { setGs(false); ref.current?.stop(); void onCommand('theme', { name }) },
+    stop: () => ref.current?.stop(),
+    resume: () => { if (gs && state.running) ref.current?.start() },
+    analyser: () => ref.current?.analyser() ?? null,
+    editor: { ref, gsSelected: gs, granularMode: mode, onModeChange: setMode, onSourceSelected: () => setGs(true), personalizeOpen },
+  }
 }

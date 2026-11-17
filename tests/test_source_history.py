@@ -1,4 +1,4 @@
-import hashlib, json, pathlib, tempfile, time, unittest
+import hashlib, json, os, pathlib, tempfile, time, unittest
 from experiment.source_history import SourceHistory
 from experiment.source_search import OpenDiscovery
 
@@ -52,6 +52,18 @@ class SourceHistoryTest(unittest.TestCase):
             self.history.get('../etc/passwd')
         with self.assertRaises(ValueError):
             self.history.star('../etc/passwd', True)
+
+
+    def test_my_sound_is_newest_final(self):
+        root = self.history.root
+        def session(ident, final, at):
+            (root / f'{ident}.json').write_text(json.dumps({'final': final, 'candidates': {'f': {'label': 'L', 'recipe': {'kind': 'map'}}}}))
+            os.utime(root / f'{ident}.json', (at, at))
+        session('a' * 32, 'f', 1)
+        session('b' * 32, None, 2)  # newer, but no final pick
+        self.assertEqual(SourceHistory(self.discovery, root).my_sound, {'id': 'f', 'label': 'L', 'recipe': {'kind': 'map'}})
+        self.history.delete('a' * 32)
+        self.assertIsNone(self.history.my_sound)  # deleting the session forgets its sound
 
 
 if __name__ == '__main__':

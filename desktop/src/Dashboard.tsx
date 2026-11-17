@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import ClusterGauge from './ClusterGauge'
-import SoundEditor from './SoundEditor'
+import SoundEditor, { useCarSound } from './SoundEditor'
 import NavRail from './NavRail'
-import type { SourceHandle } from './SteadySource'
-import type { GranularMode } from './granularPlayer'
 import type { State } from './App'
 
 type Props = {
@@ -69,13 +67,8 @@ function PowerChargeBar({ power, charge }: { power: number; charge: number }) {
 }
 
 export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, searchPanel, personalizeOpen = false, initialSoundLab = false }: Props) {
-  const sound = useRef<SourceHandle>(null)
   const [sourceAudioError, setSourceAudioError] = useState('')
-  const [granularMode, setGranularMode] = useState<GranularMode>('evolving')
-  const [granularSelected, setGranularSelected] = useState(true)
-  useEffect(() => {
-    if (state.running && !state.starting && granularSelected && !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active) sound.current?.start(true)
-  }, [state.running, state.starting])
+  const car = useCarSound(state, onCommand, personalizeOpen)
   const [expanded, setExpanded] = useState(false)
   const [soundLabOpen, setSoundLabOpen] = useState(initialSoundLab)
   const [showInputs, setShowInputs] = useState(false)
@@ -124,10 +117,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
   }, [customizerOpen])
   const connected = !!state.controllerName
   const startVehicleFromButton = async () => {
-    if (!state.running) {
-      sound.current?.stop()
-      await onCommand('sourceAudition', { value: false })
-    }
+    if (!state.running) car.stop()
     await onCommand('toggle')
   }
   const status = state.soundSweepActive ? 'AUDIO DEBUG' : state.starting ? 'STARTING' : state.running ? 'READY' : 'STANDBY'
@@ -151,7 +141,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
     <NavRail active={soundLabOpen ? 'soundlab' : 'dashboard'} expanded={expanded} onSelect={target => {
       if (target === 'trace') { setSoundLabOpen(false); onTrace(); return }
       setSoundLabOpen(target === 'soundlab')
-      if (target === 'dashboard' && granularSelected && state.running) sound.current?.start()
+      if (target === 'dashboard') car.resume()
     }} />
     <div className="dashboard-main">
       {/* Header and cluster unmount while Sound Lab is open, so backend state updates do not re-render hidden gauges. */}
@@ -161,9 +151,9 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <div className="header-spacer" />
         <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : 'SOUND'}</span>
         <div className="theme-buttons" role="group" aria-label="Sound theme">
-          <div className="theme-option"><button className={'theme-button' + (granularSelected ? ' active' : '')} aria-pressed={granularSelected} disabled={state.search.active || state.soundSweepActive} onClick={() => { setGranularSelected(true); sound.current?.start(true) }}>GS</button><button className="theme-recipe" aria-label={`Next granular mode, currently ${granularMode}`} title={`Change mode: ${granularMode}`} disabled={state.search.active || state.soundSweepActive} onClick={() => { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }}><span aria-hidden="true">⏭</span><small>{granularMode === 'steady' ? 'Steady' : granularMode === 'rise' ? 'Rise' : 'Evolving'}</small></button></div>
+          <div className="theme-option"><button className={'theme-button' + (car.gs ? ' active' : '')} aria-pressed={car.gs} disabled={state.search.active || state.soundSweepActive} onClick={car.start}>GS</button><button className="theme-recipe" aria-label={`Next granular mode, currently ${car.mode}`} title={`Change mode: ${car.mode}`} disabled={state.search.active || state.soundSweepActive} onClick={car.cycle}><span aria-hidden="true">⏭</span><small>{car.mode === 'steady' ? 'Steady' : car.mode === 'rise' ? 'Rise' : 'Evolving'}</small></button></div>
           {state.soundThemes.map(name => <div className="theme-option" key={name}>
-            <button className={'theme-button ' + name.toLowerCase() + (name === state.soundTheme && !granularSelected ? ' active' : '')} aria-label={`${name} sound, ${state.soundRecipeSelection[name]}`} aria-pressed={name === state.soundTheme && !granularSelected} disabled={state.search.active || state.soundSweepActive || state.sourceDiscovery?.active} onClick={() => { setGranularSelected(false); sound.current?.stop(); onCommand('theme', { name }) }}>{name}</button>
+            <button className={'theme-button ' + name.toLowerCase() + (name === state.soundTheme && !car.gs ? ' active' : '')} aria-label={`${name} sound, ${state.soundRecipeSelection[name]}`} aria-pressed={name === state.soundTheme && !car.gs} disabled={state.search.active || state.soundSweepActive || state.sourceDiscovery?.active} onClick={() => car.theme(name)}>{name}</button>
             <button className="theme-recipe" aria-label={`Change ${name} sound recipe, currently ${state.soundRecipeSelection[name]}`} title={`Change tune: ${state.soundRecipeSelection[name]}`} disabled={state.search.active || state.soundSweepActive || state.sourceAudition} onClick={() => onCommand('recipeCycle', { name })}><span aria-hidden="true">⏭</span><small>{state.soundRecipeSelection[name]}</small></button>
           </div>)}
         </div>
@@ -198,7 +188,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.starting ? 'STARTING' : state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button></>}</div>
       </section>
       {(error || state.audioError || sourceAudioError) && <div role="alert" className="dashboard-error">{error || state.audioError || sourceAudioError}</div>}
-      <SoundEditor onAudioError={setSourceAudioError} personalizeOpen={personalizeOpen} onSourceSelected={() => setGranularSelected(true)} granularMode={granularMode} onModeChange={setGranularMode} ref={sound} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />
+      <SoundEditor onAudioError={setSourceAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />
     </div>
   </div>
 }

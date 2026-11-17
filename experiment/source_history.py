@@ -11,6 +11,7 @@ class SourceHistory:
     def __init__(self,discovery,root=ROOT):
         self.discovery=discovery;self.root=root;self.session=None;self.created=None
         self.preview={};self.keys=set();self.token=0;self.lock=threading.Lock()
+        self.my_sound=self._newest_final()
     def begin(self):
         self.session=uuid.uuid4().hex;self.created=datetime.now().astimezone().isoformat(timespec='seconds')  # computer's own clock and zone
     def save(self):
@@ -20,6 +21,14 @@ class SourceHistory:
         data={**self.discovery.export(),'id':self.session,'created':self.created}
         for candidate in data['candidates'].values():candidate.pop('urls',None);candidate.pop('traces',None)  # cache paths; previews are regenerated
         temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data));temp.replace(self.root/f'{self.session}.json')
+        self.my_sound=self._newest_final()
+    def _newest_final(self):
+        """The driver's sound: final pick of the newest session that has one. GS plays it, also after a restart."""
+        for path in sorted(self.root.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True):
+            try:d=json.loads(path.read_text());c=d['candidates'][d['final']] if d.get('final') else None
+            except (OSError,ValueError,KeyError):continue
+            if c:return {'id':d['final'],'label':c.get('label',''),'recipe':c['recipe']}
+        return None
     def _read(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
         return json.loads((self.root/f'{ident}.json').read_text())
@@ -46,7 +55,7 @@ class SourceHistory:
     def get(self,ident):return self._read(ident)
     def delete(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
-        (self.root/f'{ident}.json').unlink(missing_ok=True)
+        (self.root/f'{ident}.json').unlink(missing_ok=True);self.my_sound=self._newest_final()
         if ident in self.starred():self.star(ident,False)
         return True
     def render(self,ident,candidate):

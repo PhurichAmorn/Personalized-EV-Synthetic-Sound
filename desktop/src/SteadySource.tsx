@@ -9,7 +9,7 @@ import { GranularPlayer, type GranularMode } from './granularPlayer'
 import { drivingSoundTargets, responseRiseSeconds, type SoundResponse, type DrivingInput } from './drivingSoundMapping'
 
 type Voice = { chorus: ReturnType<typeof createChorus>; sources: (AudioBufferSourceNode | GranularPlayer)[]; gains: GainNode[]; filter: BiquadFilterNode; level: GainNode; dry: GainNode; wet: GainNode; drive: GainNode; expression: GainNode; driveTarget?: number; response?: SoundResponse; granularMode?: GranularMode; authored?: boolean; sourceRevision?: number }
-export type SourceHandle = { start: (refresh?: boolean) => void; stop: () => void; analyser: () => AnalyserNode | null; auditionContext: () => Record<string, unknown>; audition: (urls: string[], input: 'driving' | 'simulated', label: string) => Promise<boolean | string> }
+export type SourceHandle = { start: (refresh?: boolean, mode?: GranularMode) => void; stop: () => void; analyser: () => AnalyserNode | null; auditionContext: () => Record<string, unknown>; audition: (urls: string[], input: 'driving' | 'simulated', label: string) => Promise<boolean | string> }
 const STEMS = ['body', 'pad', 'glass', 'air']
 const granularWorklets = new WeakMap<AudioContext, Promise<void>>()  // processor modules are registered per AudioContext
 export default function SteadySource({ blocked, onPlay, driving, onPlayingChange, onError, compact = false, headless = false, ref, granularMode, onModeChange }: { granularMode: GranularMode; onModeChange: (mode: GranularMode) => void; ref?: Ref<SourceHandle>; compact?: boolean; headless?: boolean; blocked: boolean; onPlay: () => void; driving?: DrivingInput; onError?: (message: string) => void; onPlayingChange?: (playing: boolean) => void }) {

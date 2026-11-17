@@ -21,6 +21,7 @@ class DesktopBridge:
         return {
             'sourceDiscovery': self.source_discovery.snapshot(),
             'historyPreview': self.history.preview,
+            'mySound': self.history.my_sound,
             'sourceMode': c.sourceMode, 'beamngConnected': c.beamngConnected,
             'beamngError': c.beamngError, 'beamngThrottle': c.telemetryThrottle,
             'beamngBrake': c.telemetryBrake, 'beamngRegen': c.telemetryRegen,

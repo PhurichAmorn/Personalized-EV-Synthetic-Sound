@@ -28,6 +28,7 @@ export type State = {
   availableControllers: { id: number; name: string }[]; controllerEnabled: boolean
   sourceDiscovery?: SourceDiscoveryState
   historyPreview?: HistoryPreview
+  mySound?: { id: string; label: string; recipe: unknown } | null  // newest saved final sound; GS plays it
   search: Search
 }
 type SavedSession = { id: string; text: string; favorite: boolean }
