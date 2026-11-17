@@ -1095,7 +1095,7 @@ class TuningDiscovery(LevelDiscovery):
 # (desktop/src/mapVoice.ts); frozen in experiment/sound_map_pool.json. Built and played live in the app (levels.ts, kind 'map').
 # Phase 2 (not built): grow new sounds around the listener's favourites between pairs.
 from pathlib import Path
-MAP_POLICY='source-map-v4'  # v1: plain synth, 90-box grid, features from synth settings; v2: two voices, open archive, dry;
+MAP_POLICY='source-map-v5'  # v1: plain synth, 90-box grid, features from synth settings; v2: two voices, open archive, dry;
 # v3: searched effects, larger steps; v4: shortlist led by the model's best (not the champion)
 MAP_POOL=Path(__file__).with_name('sound_map_pool.json')
 def _centre(s):
@@ -1105,10 +1105,11 @@ def _centre(s):
 MAP_FEATURES=(('pitch',lambda s:s['rootHz'],80,200,1),('sharpness',lambda s:s['drive']['S'],.3,1.,0),('roughness',lambda s:s['drive']['R'],0,.3,0),
     ('pulsing',lambda s:s['drive']['F'],0,.4,0),('inharmonic',lambda s:s['desc']['inharm'],0,1,0),('centre',_centre,1,6,0),
     ('blocks',lambda s:float(s['voice']['kind']=='blocks'),0,1,0),('chorus',lambda s:s['fx'].get('chorus',0),0,2,0),
-    ('vibrato',lambda s:s['fx'].get('vibDepth',0),0,20,0))
+    ('vibrato',lambda s:s['fx'].get('vibDepth',0),0,8,0))
 # Each feature enters as z and z^2 (z = 2x-1 in -1..1), so the model can learn "middle pitch is best", not only "higher is better".
 MAP_FEATURE_NAMES=[f'{n}{p}' for n,*_ in MAP_FEATURES for p in ('','^2')]
-MAP_OPENING=3      # pairs 1-3: six sounds spread as far apart as the pool allows
+MAP_OPENING=3      # pairs 1-3: six sounds spread around the middle ring of the pool
+MAP_RING=(30,70)   # middle ring: percentiles of distance from the pool centre
 MAP_PLAYOFF=2      # pairs 4-5: the opening winners against each other
 
 def map_unit(sound):
@@ -1156,10 +1157,14 @@ class SoundMapDiscovery(TuningDiscovery):
         return f"{'Blocks' if s['voice']['kind']=='blocks' else 'Plain synth'} · {s['rootHz']:.0f} Hz · sharpness {s['drive']['S']:.2f} ({recipe['cell']})"
     def _distinct(self,a,b):return self.candidates[a]['recipe']['cell']!=self.candidates[b]['recipe']['cell']
     def _spread(self,count):
-        """Farthest-point sample of the pool in feature space, from a random first sound: very different sounds for the opening."""
-        units=np.array([s['unit'] for s in self.pool]);picked=[self.rng.randrange(len(self.pool))]
+        """Opening sounds from the middle ring of the pool (distance from the pool centre between the 30th and 70th percentile), spread
+        around the ring by farthest-point from a random first sound: different from each other, but not the odd sounds at the rim."""
+        units=np.array([s['unit'] for s in self.pool]);r=np.linalg.norm(units-units.mean(0),axis=1)
+        ring=np.flatnonzero((r>=np.percentile(r,MAP_RING[0]))&(r<=np.percentile(r,MAP_RING[1])))
+        if len(ring)<count:ring=np.argsort(np.abs(r-np.median(r)))[:count]
+        picked=[int(ring[self.rng.randrange(len(ring))])]
         while len(picked)<count:
-            gap=np.min(np.linalg.norm(units[:,None,:]-units[picked][None,:,:],axis=2),axis=1);picked.append(int(np.argmax(gap)))
+            gap=np.min(np.linalg.norm(units[ring][:,None,:]-units[picked][None,:,:],axis=2),axis=1);picked.append(int(ring[np.argmax(gap)]))
         return [self.pool[i] for i in picked]
     def _add_sound(self,sound,kind,summary):return self._add(map_recipe(sound),{'kind':kind,'cell':sound['id'],'from':sound.get('from'),'summary':summary})
     def _proposals(self):
@@ -1206,11 +1211,11 @@ class SoundMapDiscovery(TuningDiscovery):
         data.update(motion=self.motion,pool={k:self.pool_meta.get(k) for k in ('created','source','limits')} if self.pool_meta else None,
                     champion=self.champion,confirmation=self.confirm)
         data['preference_model'].update(version='bayes-bt-map-2',feature_sd={n:round(float(v),3) for n,v in zip(self.feature_names,np.sqrt(np.diag(cov)))})
-        data['note']=('Sound-map search (phase 1, v4). Pool: generated sounds from tools/sound_map: an open archive (no grid) of sounds made with the '
+        data['note']=('Sound-map search (phase 1, v5). Pool: generated sounds from tools/sound_map: an open archive (no grid) of sounds made with the '
             'plain synth or the blocks voice (FM, noise band, waveshaper, amplitude modulation, inharmonic partials, resonant peaks), each kept only '
             'if it passed the guardrail (sharpness, roughness, pulsing, crowding) and the full 22 s Rising drive check and sounds different from all '
-            'others (spectrum, pitch, inharmonicity, roughness, pulsing, chorus or vibrato; pool "distinct" steps). Effects searched per sound: tone, resonance, tremolo, reverb, chorus, vibrato (engine, up to 20 cents), body EQ. Rising only. Pairs 1-3: six sounds spread as far '
-            'apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners. Pairs 6-19: '
+            'others (spectrum, pitch, inharmonicity, roughness, pulsing, chorus or vibrato; pool "distinct" steps). Effects searched per sound: tone, resonance, tremolo, reverb, chorus, vibrato (engine, up to 8 cents; half the sounds dry), body EQ. Rising only. Pairs 1-3: six sounds spread as far '
+            'apart as the middle ring of the pool allows (distance from the pool centre between its 30th and 70th percentile; farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners. Pairs 6-19: '
             'the champion against a challenger: the unheard pool sound with the highest Thompson-sampled utility (half spread), never a near-copy of '
             'the champion. Winner stays: a challenger that wins becomes champion and defends next. The first champion, and the champion after Neither '
             '(taken from outside the rejected pair), is the posterior-mean best. Pair 20: confirmation, shortlist #1 against #2 as they stand '

@@ -26,17 +26,19 @@ BLOCK_GENES = {'rootRatio': (80 / 174.8, 200 / 174.8, 1), 'slope': (.3, 2.5, 0),
                'noiseWidth': (50, 2000, 1), 'amRate': (0, 40, 0), 'amDepth': (0, .8, 0), 'lope': (0, 1, 0), 'drive': (0, 4, 0), 'ensemble': (0, 1, 0)}
 BLOCK_SWITCHES = ('inharm', 'lope', 'drive', 'fmMix', 'noiseMix', 'amDepth')  # building blocks that are off (0) unless switched on
 # Engine effects after the player (labEngine.ts), shared by both voices.
-# chorus (0-2, as LEVEL_VALUES), vibrato depth in cents (engine vibrato only, cap +-20; never baked into the loop), body EQ: give sounds width
-# and life. The quick check skips them (score.play); the full-drive check (drive.py) renders them.
+# chorus (0-2, as LEVEL_VALUES), vibrato depth in cents (engine vibrato only; never baked into the loop), body EQ: give sounds width
+# and life. Vibrato capped at 8 cents and half of new sounds dry (v4): with 0-20 cents and no dry share, 61% of the v3 pool wobbled
+# over 10 cents and sessions sounded ghostly (heard 2026-11-17). The quick check skips them (score.play); the full-drive check (drive.py) renders them.
 FX_GENES = {'tone': (800, 6000, 1), 'res': (.6, 8, 1), 'tremDepth': (0, .6, 0), 'tremRate': (.1, 2, 1), 'reverb': (0, .6, 0),
-            'chorus': (0, 2, 0), 'vibDepth': (0, 20, 0), 'vibRate': (3, 7, 0), 'bodyHz': (200, 1200, 1), 'bodyDb': (0, 6, 0)}
+            'chorus': (0, 2, 0), 'vibDepth': (0, 8, 0), 'vibRate': (3, 7, 0), 'bodyHz': (200, 1200, 1), 'bodyDb': (0, 6, 0)}
 FX_CHOICES = {'pump': [0, 1], 'drift': [0, 1]}
 GENES = {**PLAIN_GENES, **BLOCK_GENES, **FX_GENES}
 VOICE_GENES = {'plain': list(PLAIN_GENES) + list(FX_GENES), 'blocks': list(BLOCK_GENES) + list(FX_GENES)}
 # Distinct = clearly different on at least one heard trait. v2 used the app's too-similar steps (spectrum 0.25, 5 semitones,
-# inharm 0.25, R 0.1, F 0.15) and the listener heard most sounds as alike (2026-11-17), so every step is larger. Chorus and vibrato
+# inharm 0.25, R 0.1, F 0.15) and the listener heard most sounds as alike (2026-11-17), so every step is larger. Vibrato step
+# 5 cents of the 8-cent range (v4). Chorus and vibrato
 # count as traits so wide or moving sounds are not replaced by dry near-copies. All steps provisional (not yet checked by ear).
-DISTINCT = {'spectrum': .4, 'pitch': 7, 'inharm': .4, 'R': .15, 'F': .2, 'chorus': 1.2, 'vib': 12}
+DISTINCT = {'spectrum': .4, 'pitch': 7, 'inharm': .4, 'R': .15, 'F': .2, 'chorus': 1.2, 'vib': 5}
 BANDS = [100, 200, 400, 800, 1600, 3200, 6400]  # Hz, as levels.ts soundProfile
 rng = np.random.default_rng(1)
 WORKERS = max(1, os.cpu_count() - 1)
@@ -57,6 +59,7 @@ def random_genome(voice=None):
     for k in BLOCK_SWITCHES:
         if rng.random() > .3: g[k] = 0.  # each building block on with 30% chance: sounds made of a few blocks, not all at once
     g.update({k: int(rng.choice(v)) for k, v in {**PLAIN_CHOICES, **FX_CHOICES}.items()})
+    if rng.random() < .5: g['chorus'], g['vibDepth'] = rng.uniform(0, .3), 0.  # dry: no wobble, little chorus
     g['voice'] = voice or ('plain' if rng.random() < .5 else 'blocks'); return g
 
 

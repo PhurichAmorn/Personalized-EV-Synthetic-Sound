@@ -677,9 +677,12 @@ class SoundMapDiscoveryTest(unittest.TestCase):
                 a,b=(d.by_cell[d.candidates[i]['recipe']['cell']] for i in d.pair);self.assertGreaterEqual(map_gap(a,b,d.pool_meta['distinct']),1)
             a,b=d.pair;d.feedback(choice='A' if taste(a)>taste(b) else 'B')
         self.assertEqual(len(cells),2*MAP_OPENING)  # six different sounds in the opening
+        import numpy as np
+        units=np.array([s['unit'] for s in d.pool]);r=np.linalg.norm(units-units.mean(0),axis=1);lo,hi=np.percentile(r,[30,70])
+        for c in cells:self.assertTrue(lo-1e-9<=r[d.pool.index(d.by_cell[c])]<=hi+1e-9)  # opening from the middle ring, not the rim
         self.assertEqual((d.stage,d.completed),('done',20))
         self.assertLess(unit(d.finalists[0])[0],.35)  # the shortlist's top sound is low
-        data=d.export();self.assertEqual(data['policy'],'source-map-v4');self.assertTrue(data['pool']['created'])
+        data=d.export();self.assertEqual(data['policy'],'source-map-v5');self.assertTrue(data['pool']['created'])
         d.close()
     def test_map_recipe_matches_the_app_type(self):
         from experiment.source_search import load_map_pool,map_recipe
