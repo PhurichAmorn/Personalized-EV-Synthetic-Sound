@@ -663,7 +663,7 @@ class TuningDiscoveryTest(unittest.TestCase):
 
 class SoundMapDiscoveryTest(unittest.TestCase):
     def test_session_spreads_opening_follows_taste_and_never_pairs_near_copies(self):
-        from experiment.source_search import SoundMapDiscovery,MAP_OPENING,MAP_NEAR
+        from experiment.source_search import SoundMapDiscovery,MAP_OPENING,map_gap
         import random as stdrandom
         d=SoundMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(2)
         unit=lambda i:d._unit(d.candidates[i]['recipe'])
@@ -673,17 +673,35 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             self.assertEqual(len(d.pair),2,d.error)
             for i in d.pair:self.assertEqual(d.candidates[i]['recipe']['kind'],'map');self.assertEqual(d.candidates[i]['recipe']['motion'],'rise')
             if n<MAP_OPENING:cells|={d.candidates[i]['recipe']['cell'] for i in d.pair}
-            elif not d.rematch_pair:
-                a,b=(unit(i) for i in d.pair);self.assertGreaterEqual(float(np.sqrt(np.mean((a-b)**2))),MAP_NEAR)
+            elif not d.rematch_pair:  # a challenger is never a near-copy of the champion
+                a,b=(d.by_cell[d.candidates[i]['recipe']['cell']] for i in d.pair);self.assertGreaterEqual(map_gap(a,b,d.pool_meta['distinct']),1)
             a,b=d.pair;d.feedback(choice='A' if taste(a)>taste(b) else 'B')
         self.assertEqual(len(cells),2*MAP_OPENING)  # six different sounds in the opening
         self.assertEqual((d.stage,d.completed),('done',20))
         self.assertLess(unit(d.finalists[0])[0],.35)  # the shortlist's top sound is low
-        data=d.export();self.assertEqual(data['policy'],'source-map-v1');self.assertTrue(data['pool']['created'])
+        data=d.export();self.assertEqual(data['policy'],'source-map-v3');self.assertTrue(data['pool']['created'])
         d.close()
     def test_map_recipe_matches_the_app_type(self):
         from experiment.source_search import load_map_pool,map_recipe
         _,pool=load_map_pool();r=map_recipe(pool[0])
-        self.assertEqual(set(r),{'version','kind','seed','motion','cell','plain','fx'})  # = MapRecipe in desktop/src/levels.ts
-        self.assertIn("kind: 'map'",Path('desktop/src/levels.ts').read_text())
+        self.assertEqual(set(r),{'version','kind','seed','motion','cell','voice','fx'})  # = MapRecipe in desktop/src/levels.ts
+        self.assertIn("kind: 'map'",Path('desktop/src/levels.ts').read_text());self.assertIn(r['voice']['kind'],('plain','blocks'))
         self.assertEqual((r['fx']['follow'],r['fx']['size']),(1,2.5))  # as the full-drive check played it
+    def test_winner_stays_and_the_last_pair_confirms_the_champion(self):
+        from experiment.source_search import SoundMapDiscovery,MAP_OPENING,MAP_PLAYOFF
+        import random as stdrandom
+        d=SoundMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(5)
+        pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
+        for n in range(20):
+            self.assertEqual(len(d.pair),2,d.error)
+            if n>MAP_OPENING+MAP_PLAYOFF and d.history[-1]['winner'] and d.history[-1]['winner']!=d.history[-2]['winner'] and n<19:
+                last=d.history[-1]
+                if d.history[-2]['winner'] in last['pair']:self.assertIn(last['winner'],d.pair)  # a challenger that won defends next
+            if n==19:self.assertEqual(set(d.pair),{d.confirm['champion'],d.confirm['runner_up']})
+            a,b=d.pair;d.feedback(choice='A' if pitch(a)<pitch(b) else 'B')  # this listener prefers the lowest sound
+        games=lambda i:sum(i in r['pair'] for r in d.history)
+        self.assertGreaterEqual(games(d.finalists[0]),2)  # the pick never rests on one game
+        self.assertEqual(d.finalists[0],d.champion);self.assertEqual(d._bt_order()[0][0],d.champion)
+        winners=[r['winner'] for r in d.history[MAP_OPENING+MAP_PLAYOFF:] if r['winner']]
+        self.assertTrue(any(w!=winners[0] for w in winners))  # a challenger did take over
+        d.close()

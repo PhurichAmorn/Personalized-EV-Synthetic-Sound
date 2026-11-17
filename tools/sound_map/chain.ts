@@ -1,9 +1,11 @@
 // The app's driving chain over the 22 s simulated drive, offline (Node check and the listening page share it).
-// Same code as the app where it can be: plain synth, granular player (granular-processor.mjs), drivingSoundTargets, simulatedDrive,
+// Same code as the app where it can be: source stems (mapVoice.ts: plain synth or blocks), granular player (granular-processor.mjs), drivingSoundTargets, simulatedDrive,
 // driveEnvelopeTarget. The WebAudio nodes of labEngine.buildRig/applyFx/driveRig are replayed sample by sample:
 // vibrato delay, tremolo/pump, body peaking EQ, pedal-following low-pass (Q in dB, drift on detune), chorus.
 // Returns left then right (pre-reverb, drive gain held at 1) and the drive gain every 50 ms step.
-import { createPlainSource, EXTRAS_OFF, type PlainParams } from '../../desktop/src/plainSource'
+// ponytail: the app plays each of the three stems in its own granular player; here they are summed into one player (grain alignment
+// differs slightly). Run one player per stem if the check must match the app sample for sample.
+import { mapStems, mapRootHz, type MapVoice } from '../../desktop/src/mapVoice'
 import { drivingSoundTargets, responseRiseSeconds } from '../../desktop/src/drivingSoundMapping'
 import { driveEnvelopeTarget } from '../../desktop/src/audioAutomation'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from '../../desktop/src/simulatedDrive'
@@ -44,15 +46,18 @@ class Biquad {  // direct form I, per channel
 const pumpRaw = (p: number) => { let v = 0; for (let n = 1; n <= 8; n++) v += (n % 2 ? 1 : -1) / n * Math.sin(2 * Math.PI * n * p); return v }
 const PUMP_PEAK = Math.max(...Array.from({ length: 4096 }, (_, i) => Math.abs(pumpRaw(i / 4096))))
 
-/** plain/fx as stored (partial): filled with the synth's extras off and levels.SEARCH_FIXED, as the generator does. */
-export function driveSound(plain: Partial<PlainParams>, fx: Partial<Fx>, mode: 'rise' | 'evolving') {
-  return render({ ...EXTRAS_OFF, air: 0, ...plain } as PlainParams, { ...SEARCH_FIXED, ...fx } as Fx, mode)
+/** voice/fx as stored: fx filled with levels.SEARCH_FIXED, as the app plays a sound-map recipe. */
+export function driveSound(voice: MapVoice, fx: Partial<Fx>, mode: 'rise' | 'evolving') {
+  const stems = mapStems(voice), sum = (c: number) => Float32Array.from(stems[0][c], (v, i) => v + stems[1][c][i] + stems[2][c][i])
+  // Left stems into both ears, as the check was calibrated (2026-11-16): with width on, the right stem is a few cents sharp, and the
+  // L+R mix the check measures turned that stereo spread into beating nobody hears (Sparkle, Bright aah read as pulsing).
+  const left = sum(0)
+  return render([left, left], mapRootHz(voice), { ...SEARCH_FIXED, ...fx } as Fx, mode)
 }
 
-export function render(plain: PlainParams, fx: Fx, mode: 'rise' | 'evolving') {
-  const [left, right] = createPlainSource(plain)
+export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mode: 'rise' | 'evolving') {
   const player = new SourceLoopEngine([left, right], FS)
-  if (fx.rasp > 0) player.setEngine({ baseHz: plain.rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 })
+  if (fx.rasp > 0) player.setEngine({ baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 })
   const vib = [new Delay(), new Delay()], chorus = [new Delay(), new Delay()], body = new Biquad(), low = new Biquad()
   body.peaking(fx.bodyHz, 1.5, fx.bodyDb)
   const vibGain = fx.vibDepth / 1731 / (2 * Math.PI * fx.vibRate), wetC = .25 * fx.chorus, dryC = 1 - wetC
@@ -63,7 +68,7 @@ export function render(plain: PlainParams, fx: Fx, mode: 'rise' | 'evolving') {
   for (let n = 0; n < N; n++) {
     if (n % STEP === 0) {  // driveRig, every 50 ms
       const target = drivingSoundTargets(simulatedDrive(n / FS), false, motion.response, mode, motion.travel)
-      t.rate = fx.peakHz ? Math.min(target.rate, fx.peakHz / plain.rootHz) : target.rate
+      t.rate = fx.peakHz ? Math.min(target.rate, fx.peakHz / rootHz) : target.rate
       t.cycle = target.cycleSpeed; t.hold = target.loopHold
       t.cutoff = Math.min(20000, Math.max(200, fx.tone * 2 ** (fx.follow * (2 * target.propulsion - 1))))
       const env = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < driveTarget)

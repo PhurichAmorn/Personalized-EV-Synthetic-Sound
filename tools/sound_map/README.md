@@ -9,14 +9,19 @@ sound-map search (`experiment/source_search.py` `SoundMapDiscovery`, see `docs/s
   The limits were read off the listener's labels (`labelled.ts`; crowding from the sound-map marks of 2026-11-16). They reject both dropped
   sounds (Growl, Sci-fi sweep) and Pulse, and pass all 22 kept sounds. They miss the early Digital and the 7.5x Electric whine (both only "Maybe").
   Not covered by any rule: bells heard as "too high" and the darkest sounds heard as "too dark"; the closest metrics would also reject kept sounds.
-- **Generator** (`generate.py`): MAP-Elites. A grid of kinds of sound (3 pitch registers x 5 brightness steps x 6 textures = 90 boxes)
-  starts from the kept sounds, then mutates and crosses settings of the app's own synth (`desktop/src/plainSource.ts`; air stays 0 as in
-  every preset). Each box keeps the passing sound with the most room under the limits, plus 4 runners-up.
+- **Generator** (`generate.py`): an open archive, no grid and no size limit. Two voices (`desktop/src/mapVoice.ts`): the app's plain synth
+  (`plainSource.ts`; air stays 0 as in every preset) and the generic `blocks` voice (`sourceDesigner.ts`: harmonic slope, two resonant peaks,
+  FM, noise band, waveshaper, amplitude modulation, inharmonic partials; each block off unless switched on). Starts from random sounds
+  (`--seeds` adds the listener's kept sounds), then mutates and crosses them. Effects are searched per sound too: tone, resonance, tremolo,
+  reverb, chorus, engine vibrato (up to 20 cents; never baked into the loop) and body EQ. A passing sound is kept if it clearly differs from
+  every kept sound on at least one heard trait: octave-band spectrum (0.4), pitch (7 semitones), inharmonic share (0.4), roughness (0.15),
+  pulsing (0.2), chorus (1.2) or vibrato (12 cents); all steps provisional (v2's smaller steps were heard as alike). Among near-copies the one with more room under the limits stays
+  (novelty search with local competition). The archive grows until new sounds stop being different.
 - **Full-drive check** (`drive.py`, `drive.ts`, `chain.ts`): renders each winner through the app's real chain (granular player, drive mapping,
   `labEngine` nodes replayed offline) over the 22 s simulated drive and applies the guardrail to the worst moment. Rising decides; Evolving is
-  recorded only (it rejects the kept Pure tone: pulsing 0.46). A failing winner is replaced by its box's best passing runner-up.
-- **Listening page** (`page/sound-map.html`): grid of the library; click to hear a sound on the 22 s drive (the same render the check judged),
-  mark bad sounds, copy the marks.
+  recorded only (it rejects the kept Pure tone: pulsing 0.46). Sounds that fail are dropped.
+- **Listening page** (`page/sound-map.html`): map of the library (across = spectral centre, up = pitch, colour = voice); click to hear a
+  sound on the 22 s drive (the same render the check judged), mark bad sounds, copy the marks.
 
 ## Setup (any OS)
 
@@ -33,15 +38,16 @@ python -m venv .venv-soundmap
 python tools/sound_map/score.py            # guardrail self-check on the labelled sounds, about 4 min; must print "guardrail check OK"
 python tools/sound_map/drive.py labelled   # full-drive self-check; must print "full-drive check OK"
 python tools/sound_map/generate.py 40      # 40 rounds x 140 sounds, about 12 min on 16 cores; out/library.json is rewritten every round
-python tools/sound_map/drive.py library    # full-drive check of every winner; writes experiment/sound_map_pool.json for the app
+python tools/sound_map/drive.py library    # full-drive check of every kept sound; writes experiment/sound_map_pool.json for the app
 python -m tools.benchmark_sound_map        # simulated listeners: sound-map search vs random challengers
+python tools/sound_map/calibrate.py 600    # quick check vs full-drive check on 600 sounds, about 17 min; suggests quick limits
 ```
 
 Everything else is written to `tools/sound_map/out/` (git-ignored). To view: publish `page/sound-map.html` with `out/library.json` and
-`out/synth.js` beside it. Marks are kept per library (a new run puts new sounds in the same boxes).
+`out/synth.js` beside it. Marks are kept per library (a new run makes new sounds).
 
 ## Known gaps
 
-The check skips reverb tails beyond the drive, vibrato and chorus settings of library sounds (they use the search defaults), and level:
-everything is judged at a fixed 70 dB. Neighbouring boxes can sound alike (66 of 90 sounds have a near-twin under the app's 0.10 distance),
-because every sound comes from one synth and each box keeps its safest sound.
+The quick check skips chorus, vibrato and body EQ (the full-drive check renders them). The full-drive check skips reverb tails beyond the drive, and level:
+everything is judged at a fixed 70 dB. Blocks sounds pass the guardrail far less often than plain ones (about 1 in 4 random ones; mostly roughness).
+The guardrail limits were read off plain-synth sounds only; new kinds of sound (FM, noise, grit) have not been labelled yet.

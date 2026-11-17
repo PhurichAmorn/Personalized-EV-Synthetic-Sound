@@ -30,13 +30,13 @@ def session(args):
         d.feedback(choice=choice)
     top = utility(d._unit(d.candidates[d.finalists[0]]['recipe']))
     d.close()
-    return int(np.sum(pool_u > top)) + 1  # 1 = the listener's favourite sound in the whole pool
+    return (int(np.sum(pool_u > top)) + 1) / len(pool_u)  # rank as a share of the pool: 1/len = the listener's favourite
 
 
 if __name__ == '__main__':
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     with Pool() as pool:
         for policy in ('map', 'random'):
-            ranks = np.array(pool.map(session, [(s, policy) for s in range(n)]))
-            print(f"{policy:7} listeners {n}: top sound is the favourite {np.mean(ranks == 1):.0%}, in top 5% {np.mean(ranks <= 4.5):.0%} "
-                  f"(+-{2 * np.sqrt(np.mean(ranks <= 4.5) * (1 - np.mean(ranks <= 4.5)) / n):.0%}), top 10% {np.mean(ranks <= 9):.0%}, median rank {np.median(ranks):.0f} of 90")
+            share = np.array(pool.map(session, [(s, policy) for s in range(n)])); top5 = np.mean(share <= .05)
+            print(f"{policy:7} listeners {n}: pick in the listener's top 5% {top5:.0%} (+-{2 * np.sqrt(top5 * (1 - top5) / n):.0%}), "
+                  f"top 10% {np.mean(share <= .1):.0%}, median rank {np.median(share):.0%} of the pool")

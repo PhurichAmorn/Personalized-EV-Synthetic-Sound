@@ -1,4 +1,5 @@
 import { EXTRAS_OFF, plainPartials, type PlainParams } from './plainSource'
+import { mapRootHz, type MapVoice } from './mapVoice'
 import { FX_DEFAULT, type Fx } from './labEngine'
 import { drivingSoundTargets } from './drivingSoundMapping'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from './simulatedDrive'
@@ -43,7 +44,9 @@ export type TuningRecipe = { version: 3; kind: 'tuning'; seed: number; motion: T
 export const isTuningRecipe = (recipe: unknown): recipe is TuningRecipe => (recipe as TuningRecipe | null)?.kind === 'tuning'
 /** Sound-map search (experiment/source_search.py SoundMapDiscovery): a generated sound from tools/sound_map, stored as its synth settings
  * and effects. Played as the full-drive check played it: levels SEARCH_FIXED effects plus the sound's own. */
-export type MapRecipe = { version: 4; kind: 'map'; seed: number; motion: 'rise' | 'evolving'; cell: string; plain: Partial<PlainParams>; fx: Partial<Fx> }
+export type MapRecipe = { version: 4 | 5; kind: 'map'; seed: number; motion: 'rise' | 'evolving'; cell: string; fx: Partial<Fx>
+  plain?: Partial<PlainParams>  // version 4: plain synth only
+  voice?: MapVoice }            // version 5: plain or blocks voice (mapVoice.ts)
 export const isMapRecipe = (recipe: unknown): recipe is MapRecipe => (recipe as MapRecipe | null)?.kind === 'map'
 export type LiveRecipe = LevelRecipe | TuningRecipe | MapRecipe
 /** Built and played in the app (no offline render). */
@@ -69,7 +72,10 @@ export function pairDistance(a: LiveRecipe, b: LiveRecipe) {
 export const tooSimilar = (a: LiveRecipe, b: LiveRecipe) => { const d = pairDistance(a, b); return d.spectrum < .25 && d.semitones < 5 }
 /** Plain source, effects and motion for any live-built search sound (level or tuning recipe). */
 export function liveSound(recipe: LiveRecipe) {
-  if (isMapRecipe(recipe)) return { plain: { ...EXTRAS_OFF, air: 0, ...recipe.plain } as PlainParams, fx: { ...SEARCH_FIXED, ...recipe.fx }, mode: recipe.motion, travel: 1 }
+  if (isMapRecipe(recipe)) {  // plain: the synth settings; blocks: only rootHz is meaningful (stems come from voiceCache.liveStems)
+    const plain = recipe.voice?.kind === 'blocks' ? { rootHz: mapRootHz(recipe.voice) } : recipe.voice?.plain ?? recipe.plain
+    return { plain: { ...EXTRAS_OFF, air: 0, ...plain } as PlainParams, fx: { ...SEARCH_FIXED, ...recipe.fx }, mode: recipe.motion, travel: 1 }
+  }
   if (!isTuningRecipe(recipe)) return { ...levelSound(recipe), mode: 'rise' as const, travel: 1 }
   const { plain, fx, travel } = tunedSound({ kind: recipe.motion, ...recipe.base, ...recipe.fx }, COMFORT_CAP_HZ)
   return { plain, fx, travel, mode: recipe.motion }

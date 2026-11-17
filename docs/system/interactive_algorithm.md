@@ -56,26 +56,39 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Sound-map search (phase 1, `source-map-v1`, `SoundMapDiscovery`): selectable per session
+### Sound-map search (phase 1, `source-map-v3`, `SoundMapDiscovery`): selectable per session
 
 Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
 fixed preset set. Personalize sound now has a search selector: *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`, the default; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
 
-- **Pool.** `experiment/sound_map_pool.json`, frozen from `tools/sound_map` (see its README): about 90 sounds of the app's plain synth, grown by
-  MAP-Elites over pitch register x measured sharpness x texture. Every sound passed the rule-based guardrail (MoSQITo sharpness, roughness,
-  pulsing, plus partial crowding) and the full 22 s Rising drive check through the app's chain. Built live in the app (`levels.ts`, kind `map`).
+- **Pool.** `experiment/sound_map_pool.json`, frozen from `tools/sound_map` (see its README): an open archive (no grid, no size limit) of
+  sounds made with the plain synth or the generic `blocks` voice (FM, noise band, waveshaper, amplitude modulation, inharmonic partials),
+  each kept only if it passed the rule-based guardrail (MoSQITo sharpness, roughness, pulsing, plus partial crowding), the full 22 s Rising
+  drive check, and sounds different from every other kept sound. Built live in the app (`levels.ts` kind `map`, stems from `mapVoice.ts`).
+  v1 (2026-11-16) was 90 plain-synth sounds in a pitch x sharpness x texture grid; its one session ended on a near-copy of the listener's
+  own Cinematic pad (octave-band distance 0.13), which led to v2. v2 (233 sounds, 2026-11-17) played every sound dry (no chorus, vibrato or
+  body EQ) with the app's small too-similar steps; the listener heard most sounds as alike and plain, which led to v3: chorus, engine vibrato
+  (up to 20 cents) and body EQ are searched per sound, and every "distinct" step is larger (chorus and vibrato count as traits).
 - **Session.** Rising only. 20 direct choices with the tuning search's answers (Prefer A / B, Both good, Neither). Pairs 1-3: six sounds spread as
   far apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners.
-  Pairs 6-20: the best sound (posterior mean) against the unheard pool sound with the highest Thompson-sampled utility, never within 0.25 feature
-  distance of the best; the app's too-similar check also applies. Shortlist and yes/no answer as in the tuning search.
-- **Model.** Bayesian Bradley-Terry (as `TuningDiscovery`) over 11 audible features (pitch, sharpness, chord, detune, bell, vowel, whine, hollow,
-  swell, reverb, resonance), each as z and z^2 so a middle value can be preferred.
+  Pairs 6-19: the champion against the unheard pool sound with the highest Thompson-sampled utility, never a near-copy of the champion (backend
+  check on spectrum, pitch, inharmonicity, roughness and pulsing; the app's spectrum-and-pitch check is used for the tuning search only). Winner stays: a challenger that wins becomes champion and defends next. Pair 20 confirms the champion
+  against the strongest other sound it has not just met, so the pick never rests on one game. The shortlist puts the champion first.
+- **Model.** Bayesian Bradley-Terry (as `TuningDiscovery`) over 9 traits that work for both voices (pitch, sharpness, roughness, pulsing,
+  inharmonicity, spectral centre, voice, chorus, vibrato), each as z and z^2 so a middle value can be preferred.
 - **Simulated listeners (2026-11-16, `tools/benchmark_sound_map.py`, 300 per condition, hidden ideal-point taste, noisy answers).** The shortlist's
   top sound was in the listener's top 5% of the pool in about 31% of sessions, the same as random challengers (30%, +-5%). Linear-only features,
   posterior-mean or full-spread sampling, radial-basis features and a nearness bonus were all within that noise. Interpretation (project): with
   about 90 sounds and 20 pairs, the best-vs-challenger structure and the shortlist do the work; the model should only matter once the pool is
   large, i.e. with phase 2. So phase 1 tests the pool and the session with listeners, not the model.
+  On the v2 pool (233 sounds, 2026-11-17): pick in the listener's top 5% in 22% of sessions vs 25% for random challengers (+-5%), top 10% in
+  40% vs 39%. Still a tie: 20 pairs hear under a tenth of the pool, and the pair policy is the open question below.
+  On the v3 pool (99 sounds, 2026-11-17): 26% vs 28% (+-5%), top 10% 42% vs 45%; a tie.
 - **Not built (phase 2).** Growing new sounds around the listener's favourites between pairs (mutation + the same guardrail).
+- **Open question: pair design (deferred, 2026-11-17).** Champion vs challenger ("winner stays", added after the first session) is one
+  choice, kept for now. The alternative to discuss: pairs chosen to learn the listener's taste, which need not include the favourite (e.g. two
+  sound types against each other to see which way the listener leans), as in preferential BO acquisitions (EUBO, information gain). In
+  simulation every pair policy tied with random on the 90-sound pool, so compare them once the sound space is wider.
 - **Status.** Untested with listeners. The guardrail limits come from one listener's labels.
 
 ### Level search (previous default: `source-levels-v1`, `LevelDiscovery`)

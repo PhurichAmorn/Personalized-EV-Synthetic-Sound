@@ -6,7 +6,7 @@ import SteadySource, { type SourceHandle } from './SteadySource'
 import type { GranularMode } from './granularPlayer'
 import { LabPlayer } from './labEngine'
 import { isLiveRecipe, liveSound } from './levels'
-import { plainVoices } from './voiceCache'
+import { liveStems } from './voiceCache'
 import { simulatedDrive } from './simulatedDrive'
 import type { DiscoveryCandidate } from './SourceSearch'
 // Sound Lab page loads on first open: the BeamNG overlay and a plain drive never download it.
@@ -36,7 +36,7 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
     source.current?.stop()
     try {
       const { plain, fx, mode, travel } = liveSound(candidate.recipe)
-      await lab.play(candidate.id, await plainVoices(plain), fx, plain.rootHz, input === 'simulated' ? 'simulated' : 'live',
+      await lab.play(candidate.id, await liveStems(candidate.recipe), fx, plain.rootHz, input === 'simulated' ? 'simulated' : 'live',
         () => ({ input: latest.current.input, stale: performance.now() - latest.current.at > 750 }), simulatedDrive, mode, travel)
       setLabPlaying(true); return true
     } catch (problem) { stopLab(); return problem instanceof Error ? problem.message : 'Could not play the sound.' }

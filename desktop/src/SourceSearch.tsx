@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
-import { describeSound, isLiveRecipe, isMapRecipe, isTuningRecipe, liveSound, tooSimilar, type LiveRecipe } from './levels'
-import { plainVoices } from './voiceCache'
+import { describeSound, isLiveRecipe, isTuningRecipe, tooSimilar, type LiveRecipe } from './levels'
+import { liveStems } from './voiceCache'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
@@ -26,12 +26,13 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   // Too-similar pairs: the app measures each new pair and asks the search for another (motion pair excluded: same sound on purpose).
   useEffect(() => {
     const [a, b] = discovery?.pair ?? []
-    const motionSearch = (r: unknown) => isTuningRecipe(r) || isMapRecipe(r)
-    if (!discovery?.active || !a || !b || !motionSearch(a.recipe) || !motionSearch(b.recipe) || a.recipe.motion !== b.recipe.motion) return
+    // Sound-map pairs are checked in the backend on more traits (spectrum, pitch, inharmonicity, roughness, pulsing); this rule sees only the
+    // first two, so it would drop FM/noise/grit sounds that differ from the champion exactly where it cannot look.
+    if (!discovery?.active || !a || !b || !isTuningRecipe(a.recipe) || !isTuningRecipe(b.recipe) || a.recipe.motion !== b.recipe.motion) return
     if (tooSimilar(a.recipe, b.recipe)) void onCommand('sourceDiscoverySkip', { ids: [a.id, b.id] })
   }, [revision])
   // Build both sounds of a new pair (and the shortlist) in the background, so the first switch is instant too.
-  useEffect(() => { for (const c of [...discovery?.pair ?? [], ...discovery?.finalists ?? []]) if (isLiveRecipe(c.recipe)) void plainVoices(liveSound(c.recipe).plain).catch(() => {}) }, [revision, discovery?.finalists?.length])
+  useEffect(() => { for (const c of [...discovery?.pair ?? [], ...discovery?.finalists ?? []]) if (isLiveRecipe(c.recipe)) void liveStems(c.recipe).catch(() => {}) }, [revision, discovery?.finalists?.length])
   useEffect(() => { auditionSequence.current++; heard.current.clear(); setAudition(null); setReadyAudition(null); setRatings({}); setChoice(null); setShowMore(false) }, [revision, mode])
   useEffect(() => {
     if (!audition || readyAudition !== audition || !playing || hidden || !discovery?.active || (!running || !activity) || heard.current.has(audition)) return

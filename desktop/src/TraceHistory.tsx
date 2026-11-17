@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SourceRecipe } from './sourceRecipe'
-import { plainVoices } from './voiceCache'
+import { liveStems } from './voiceCache'
 import { isLiveRecipe, liveSound, type LiveRecipe } from './levels'
 import { LabPlayer } from './labEngine'
 import { simulatedDrive } from './simulatedDrive'
@@ -24,6 +24,8 @@ const BANDS = ['<100', '100', '180', '300', '500', '800', '1.2k', '1.8k', '2.6k'
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) // the computer's own clock and zone
 const short = (id: string) => id.slice(0, 6)
 const isLive = isLiveRecipe  // built and played in the app, not rendered offline
+// Source settings shown in the trace: level/tuning base, or a sound-map voice (plain synth or blocks shape + controls).
+const settingsOf = (r: LiveRecipe): object => 'base' in r ? r.base : r.voice ? (r.voice.kind === 'blocks' ? { voice: 'blocks', ...r.voice.shape, ...r.voice.controls } : r.voice.plain) : r.plain ?? {}
 
 export default function TraceHistory({ command, preview }: { command: Command; preview?: HistoryPreview }) {
   const [rows, setRows] = useState<Row[]>([])
@@ -43,7 +45,7 @@ export default function TraceHistory({ command, preview }: { command: Command; p
   const collapse = () => { stopLive(); setSound(null); void command('historyPreviewClear') }
   const playLive = (id: string, recipe: LiveRecipe) => {
     const { plain, fx, mode, travel } = liveSound(recipe)
-    void plainVoices(plain).then(voices => traceLab.play(id, voices, fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel)).then(() => setLivePlaying(true))
+    void liveStems(recipe).then(voices => traceLab.play(id, voices, fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel)).then(() => setLivePlaying(true))
   }
   const star = async (id: string, value: boolean) => { await command('historyStar', { id, value }); void refresh() }
   const starred = !!rows.find(row => row.id === session?.id)?.starred
@@ -99,7 +101,7 @@ export default function TraceHistory({ command, preview }: { command: Command; p
       <h3>Preview</h3>
       {isLive(detail.recipe) ? <><button type="button" className="control" onClick={() => livePlaying ? stopLive() : playLive(sound, detail.recipe as LiveRecipe)}>{livePlaying ? 'Stop' : '▶ Play on the 22 s drive'}</button>
         <h3>Settings</h3>
-        <dl className="history-params">{[...Object.entries('base' in detail.recipe ? detail.recipe.base : detail.recipe.plain), ...Object.entries(detail.recipe.fx)].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>)}</dl>
+        <dl className="history-params">{[...Object.entries(settingsOf(detail.recipe as LiveRecipe)), ...Object.entries(detail.recipe.fx)].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>)}</dl>
       </> : <>
       {preview?.candidate !== sound || preview.status === 'rendering' || !preview.status ? <p className="loading-note text-sm text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Generating sound…</p>
         : preview.status === 'error' ? <p className="text-sm text-red-300" role="alert">{preview.error}</p>

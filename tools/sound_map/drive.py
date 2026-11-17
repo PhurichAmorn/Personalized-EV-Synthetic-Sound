@@ -4,7 +4,7 @@ Level is held fixed (drive gain 1, scaled to 70 dB like score.py) so only the so
 the drive gain is used to skip moments where the sound is nearly silent.
 
   python tools/sound_map/drive.py labelled   # self-check: must reject Growl and Sci-fi sweep and pass every kept sound
-  python tools/sound_map/drive.py library    # re-check every box winner; a failure is replaced by its box's next-best passing runner-up
+  python tools/sound_map/drive.py library    # re-check every library sound; failures are dropped; writes experiment/sound_map_pool.json
 """
 import json, os, subprocess, sys
 for var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS'): os.environ[var] = '1'
@@ -13,7 +13,7 @@ import numpy as np
 from scipy.signal import fftconvolve
 from mosqito.sq_metrics import sharpness_din_tv, roughness_dw
 from score import FS, SPL, HERE, fluctuation, prepare
-from generate import LIMITS, split
+from generate import LIMITS
 
 MODES = ('rise', 'evolving')
 GATE = ('rise',)     # modes that decide pass/fail. Evolving is recorded only: it rejects the kept Pure tone (pulsing 0.46, two crossfaded voices)
@@ -39,10 +39,10 @@ def worst(values, times):
 
 
 def measure(job):
-    """job = (id, plain, fx, mode). Returns worst S, R, F over the audible part of the drive, with their times (s)."""
-    key, plain, fx, mode = job
+    """job = (id, voice, fx, mode); voice as desktop/src/mapVoice.ts. Returns worst S, R, F over the audible part of the drive, with their times (s)."""
+    key, voice, fx, mode = job
     batch = f'{TMP}/{key}.{mode}.json'
-    json.dump([{'id': key, 'plain': plain, 'fx': fx, 'modes': [mode]}], open(batch, 'w'))
+    json.dump([{'id': key, 'voice': voice, 'fx': fx, 'modes': [mode]}], open(batch, 'w'))
     subprocess.run(['node', 'drive.mjs', batch, TMP], check=True)
     base = f'{TMP}/{key}.{mode}'
     x = np.fromfile(base + '.f32', np.float32).astype(float).reshape(2, -1)
@@ -71,16 +71,15 @@ def verdict(per_mode, modes=GATE):
 
 
 def check_all(sounds, pool):
-    """sounds: {id: (plain, fx)} -> {id: {mode: metrics}}"""
-    jobs = [(i, plain, fx, mode) for i, (plain, fx) in sounds.items() for mode in MODES]
+    """sounds: {id: (voice, fx)} -> {id: {mode: metrics}}"""
+    jobs = [(i, voice, fx, mode) for i, (voice, fx) in sounds.items() for mode in MODES]
     out = {}
     for (i, _, _, mode), m in zip(jobs, pool.map(measure, jobs)): out.setdefault(i, {})[mode] = m
     return out
 
 
 def library_sound(entry):
-    plain, fx = split({k: v for k, v in entry['genome'].items() if k != 'seed'})
-    return plain, {**fx, **LIBRARY_FX}
+    return entry['voice'], {**entry['fx'], **LIBRARY_FX}
 
 
 if __name__ == '__main__':
@@ -91,7 +90,7 @@ if __name__ == '__main__':
     with Pool(int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))) as pool:
         if what == 'labelled':
             items = json.load(open('manifest.json'))
-            results = check_all({i['id']: (i['plain'], i['fx']) for i in items}, pool)
+            results = check_all({i['id']: ({'kind': 'plain', 'plain': i['plain']}, i['fx']) for i in items}, pool)
             json.dump(results, open('drive_scores.json', 'w'), indent=1)
             flagged = set()
             for i in items:
@@ -104,29 +103,17 @@ if __name__ == '__main__':
             print('full-drive check OK')
         else:
             lib = json.load(open('library.json'))
-            results = check_all({e['cell']: library_sound(e) for e in lib['elites']}, pool)
-            failed = {c: verdict(r) for c, r in results.items() if verdict(r)}
-            # Fallback: the box's runners-up, safest first; the first that passes the full drive takes the box.
-            tries = {f"{e['cell']}#{n}": library_sound(r) for e in lib['elites'] if e['cell'] in failed for n, r in enumerate(e.get('runners', []))}
-            backup = check_all(tries, pool) if tries else {}
-            kept, report = [], {'failed': failed, 'replaced': {}, 'dropped': []}
-            for e in lib['elites']:
-                c = e['cell']
-                if c not in failed: kept.append({**e, 'drive': results[c]}); continue
-                ok = next((n for n in range(len(e.get('runners', []))) if not verdict(backup[f'{c}#{n}'])), None)
-                if ok is None: report['dropped'].append(c); continue
-                kept.append({**e['runners'][ok], 'drive': backup[f'{c}#{ok}'], 'replaces': 'elite failed the full drive'})
-                report['replaced'][c] = ok + 1
-            lib['elites'], lib['driveCheck'] = kept, report
+            results = check_all({e['id']: library_sound(e) for e in lib['sounds']}, pool)
+            failed = {i: verdict(r) for i, r in results.items() if verdict(r)}
+            kept = [{**e, 'drive': results[e['id']]} for e in lib['sounds'] if e['id'] not in failed]
+            evolving = [e['id'] for e in kept if verdict(e['drive'], ('evolving',))]
+            lib['sounds'], lib['driveCheck'] = kept, {'failed': failed, 'evolvingOnly': evolving}
             json.dump(lib, open('library.json', 'w'), indent=1)
             # Frozen pool for the app's sound-map search (experiment/source_search.py SoundMapDiscovery): only what a session needs.
             pool = {'created': lib.get('created'), 'source': 'tools/sound_map library (generate.py + drive.py library)', 'limits': lib['limits'],
-                    'sounds': [{'cell': e['cell'], 'from': e.get('from'), 'genome': {k: v for k, v in e['genome'].items() if k != 'seed'},
-                                'metrics': e['metrics'], 'drive': {k: v for k, v in e['drive']['rise'].items() if k != 'at'}} for e in kept]}
+                    'distinct': lib.get('distinct'), 'sounds': [{'id': e['id'], 'from': e.get('from'), 'voice': e['voice'], 'fx': library_sound(e)[1],
+                    'rootHz': e['rootHz'], 'metrics': e['metrics'], 'desc': e['desc'], 'drive': {k: v for k, v in e['drive']['rise'].items() if k != 'at'}} for e in kept]}
             json.dump(pool, open(POOL, 'w'), indent=0)
             print(f'pool for the app: {len(kept)} sounds -> {POOL}')
-            evolving = [c for e in kept for c in [e['cell']] if verdict(e['drive'], ('evolving',))]
-            report['evolvingOnly'] = evolving
-            print(f"{len(results)} winners checked, {len(failed)} failed, {len(report['replaced'])} replaced, {len(report['dropped'])} boxes emptied; {len(evolving)} kept sounds would fail in Evolving (not gated)")
-            for c, why in sorted(failed.items()):
-                print(f"  {c:16}{'; '.join(why)}  ->  {'runner-up #' + str(report['replaced'][c]) if c in report['replaced'] else 'no passing runner-up, box emptied'}")
+            print(f"{len(results)} sounds checked, {len(failed)} failed and dropped; {len(evolving)} kept sounds would fail in Evolving (not gated)")
+            for i, why in sorted(failed.items()): print(f"  {i:12}{'; '.join(why)}")
