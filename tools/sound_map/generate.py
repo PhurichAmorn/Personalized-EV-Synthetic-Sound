@@ -60,10 +60,10 @@ def random_genome(voice=None):
     g['voice'] = voice or ('plain' if rng.random() < .5 else 'blocks'); return g
 
 
-def mutate(g):
+def mutate(g, sigma=.12):
     child = dict(g)
     for k in rng.choice(VOICE_GENES[g['voice']], size=rng.integers(2, 5), replace=False):
-        child[k] = from_unit(k, to_unit(k, g[k]) + rng.normal(0, .12))
+        child[k] = from_unit(k, to_unit(k, g[k]) + rng.normal(0, sigma))
     for k in BLOCK_SWITCHES:
         if g['voice'] == 'blocks' and rng.random() < .05: child[k] = 0. if g[k] else from_unit(k, rng.random())  # switch a block on/off
     for k, v in {**PLAIN_CHOICES, **FX_CHOICES}.items():

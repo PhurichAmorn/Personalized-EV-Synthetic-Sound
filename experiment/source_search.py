@@ -1095,7 +1095,8 @@ class TuningDiscovery(LevelDiscovery):
 # (desktop/src/mapVoice.ts); frozen in experiment/sound_map_pool.json. Built and played live in the app (levels.ts, kind 'map').
 # Phase 2 (not built): grow new sounds around the listener's favourites between pairs.
 from pathlib import Path
-MAP_POLICY='source-map-v3'  # v1: plain synth, 90-box grid, features from synth settings; v2: two voices, open archive, dry
+MAP_POLICY='source-map-v4'  # v1: plain synth, 90-box grid, features from synth settings; v2: two voices, open archive, dry;
+# v3: searched effects, larger steps; v4: shortlist led by the model's best (not the champion)
 MAP_POOL=Path(__file__).with_name('sound_map_pool.json')
 def _centre(s):
     """Spectral centre: energy-weighted octave band (0 = under 100 Hz .. 7 = over 6.4 kHz), from the offline profile."""
@@ -1181,11 +1182,11 @@ class SoundMapDiscovery(TuningDiscovery):
         if self.champion is None or rejected:self.champion=next((i for i in ranked if i not in rejected),ranked[0])
         elif self.champion in last.get('pair',()) and last.get('winner') not in (None,self.champion):self.champion=last['winner']
         best=self.champion
-        # Last pair: confirmation. The champion against the strongest other sound it has not just met, so the final pick never
-        # rests on one game (a challenger that wins pair 19 defends here).
+        # Last pair: confirmation. The podium's #1 against #2 as they stand (model order among sounds heard at least twice), so the last
+        # answer decides which of the top two leads. v3: the champion against the strongest sound it had not just met.
         if self.completed==STYLE_PAIRS-1:
-            runner=next((i for i in ranked if i not in (best,*last.get('pair',()))),None) or next((i for i in ranked if i!=best),None)
-            if runner:self.confirm={'champion':best,'runner_up':runner};self.rematch=[best,runner];return []
+            self._rank_finalists()
+            if len(self.finalists)>=2:self.confirm={'first':self.finalists[0],'second':self.finalists[1]};self.rematch=self.finalists[:2];return []
         self._sample();heard={i for r in rows for i in r['pair']};here=self.by_cell[self.candidates[best]['recipe']['cell']]
         pool=[s for s in self.pool if self._id(map_recipe(s)) not in heard|self.excluded
               and map_gap(s,here,self.pool_meta['distinct'])>=1]  # never a near-copy of the best
@@ -1193,10 +1194,11 @@ class SoundMapDiscovery(TuningDiscovery):
         self.check_parent=best
         return [(map_recipe(s),{'kind':'challenger','cell':s['id'],'from':s.get('from'),'summary':f"Challenger: {s['id']} (Thompson sample)"}) for s in pool]
     def _rank_finalists(self):
-        """Shortlist as the tuning search, but the champion leads: after the confirmation pair, its winner (a tie keeps the champion)."""
+        """Shortlist as the tuning search: the model's best sounds among those heard at least twice lead. The confirmation pair's winner
+        is still recorded as champion (export) but no longer forced to #1 (v3 did): in simulation one noisy last game often put a weaker
+        sound first, while the model weighs every answer."""
         super()._rank_finalists();rows=self._choices();last=rows[-1] if rows else {}
-        if self.confirm and set(last.get('pair',()))=={self.confirm['champion'],self.confirm['runner_up']} and last.get('winner'):self.champion=last['winner']
-        if self.champion:self.finalists=[self.champion]+[i for i in self.finalists if i!=self.champion][:SHORTLIST-1]
+        if self.confirm and set(last.get('pair',()))=={self.confirm['first'],self.confirm['second']} and last.get('winner'):self.champion=last['winner']
     def _bt_order(self):
         strength=dict(super()._bt_order());return [(i,strength[i]) for i in self.finalists]  # keep the shortlist order (champion first)
     def export(self):
@@ -1204,15 +1206,15 @@ class SoundMapDiscovery(TuningDiscovery):
         data.update(motion=self.motion,pool={k:self.pool_meta.get(k) for k in ('created','source','limits')} if self.pool_meta else None,
                     champion=self.champion,confirmation=self.confirm)
         data['preference_model'].update(version='bayes-bt-map-2',feature_sd={n:round(float(v),3) for n,v in zip(self.feature_names,np.sqrt(np.diag(cov)))})
-        data['note']=('Sound-map search (phase 1, v3). Pool: generated sounds from tools/sound_map: an open archive (no grid) of sounds made with the '
+        data['note']=('Sound-map search (phase 1, v4). Pool: generated sounds from tools/sound_map: an open archive (no grid) of sounds made with the '
             'plain synth or the blocks voice (FM, noise band, waveshaper, amplitude modulation, inharmonic partials, resonant peaks), each kept only '
             'if it passed the guardrail (sharpness, roughness, pulsing, crowding) and the full 22 s Rising drive check and sounds different from all '
             'others (spectrum, pitch, inharmonicity, roughness, pulsing, chorus or vibrato; pool "distinct" steps). Effects searched per sound: tone, resonance, tremolo, reverb, chorus, vibrato (engine, up to 20 cents), body EQ. Rising only. Pairs 1-3: six sounds spread as far '
             'apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners. Pairs 6-19: '
             'the champion against a challenger: the unheard pool sound with the highest Thompson-sampled utility (half spread), never a near-copy of '
             'the champion. Winner stays: a challenger that wins becomes champion and defends next. The first champion, and the champion after Neither '
-            '(taken from outside the rejected pair), is the posterior-mean best. Pair 20: confirmation, the champion against the strongest other sound '
-            'it has not just met (champion and confirmation in the export). Model: Bayesian Bradley-Terry '
+            '(taken from outside the rejected pair), is the posterior-mean best. Pair 20: confirmation, shortlist #1 against #2 as they stand '
+            '(champion and confirmation in the export). Shortlist: sounds heard at least twice, in model order (the confirmation winner is not forced first). Model: Bayesian Bradley-Terry '
             f'over {len(MAP_FEATURES)} heard traits (pitch, sharpness, roughness, pulsing, inharmonicity, spectral centre, voice, chorus, vibrato), each as z '
             'and z^2 so a middle value can be best; N(0,1) prior, Laplace approximation. Answers, shortlist and yes/no as the tuning search.')
         return data

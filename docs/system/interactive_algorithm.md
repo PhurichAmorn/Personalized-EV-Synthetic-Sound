@@ -56,7 +56,7 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Sound-map search (phase 1, `source-map-v3`, `SoundMapDiscovery`): selectable per session
+### Sound-map search (phase 1, `source-map-v4`, `SoundMapDiscovery`): selectable per session
 
 Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
 fixed preset set. Personalize sound now has a search selector: *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`, the default; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
@@ -72,8 +72,10 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
 - **Session.** Rising only. 20 direct choices with the tuning search's answers (Prefer A / B, Both good, Neither). Pairs 1-3: six sounds spread as
   far apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners.
   Pairs 6-19: the champion against the unheard pool sound with the highest Thompson-sampled utility, never a near-copy of the champion (backend
-  check on spectrum, pitch, inharmonicity, roughness and pulsing; the app's spectrum-and-pitch check is used for the tuning search only). Winner stays: a challenger that wins becomes champion and defends next. Pair 20 confirms the champion
-  against the strongest other sound it has not just met, so the pick never rests on one game. The shortlist puts the champion first.
+  check on spectrum, pitch, inharmonicity, roughness and pulsing; the app's spectrum-and-pitch check is used for the tuning search only). Winner stays: a challenger that wins becomes champion and defends next. Pair 20 plays the shortlist's #1
+  against #2 as they stand, so the last answer decides which of the top two leads. The shortlist is in model order among sounds heard at
+  least twice (v4; v3 put the champion first after a champion-vs-runner-up pair 20, and in simulation one noisy last game often put a
+  weaker sound there).
 - **Model.** Bayesian Bradley-Terry (as `TuningDiscovery`) over 9 traits that work for both voices (pitch, sharpness, roughness, pulsing,
   inharmonicity, spectral centre, voice, chorus, vibrato), each as z and z^2 so a middle value can be preferred.
 - **Simulated listeners (2026-11-16, `tools/benchmark_sound_map.py`, 300 per condition, hidden ideal-point taste, noisy answers).** The shortlist's
