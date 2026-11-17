@@ -21,7 +21,7 @@ class DesktopBridge:
         return {
             'sourceDiscovery': self.source_discovery.snapshot(),
             'historyPreview': self.history.preview,
-            'mySound': self.history.my_sound,
+            'mySound': self.history.my_sound, 'mySounds': self.history.my_sounds,
             'sourceMode': c.sourceMode, 'beamngConnected': c.beamngConnected,
             'beamngError': c.beamngError, 'beamngThrottle': c.telemetryThrottle,
             'beamngBrake': c.telemetryBrake, 'beamngRegen': c.telemetryRegen,
@@ -115,6 +115,7 @@ class DesktopBridge:
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
         if name == 'historyStar':return self.history.star(self._text(payload,'id'),self._bool(payload,'value'))
+        if name == 'mySound':self.history.choose(self._text(payload,'id'));return self.snapshot()
         if name == 'historyDelete':return self.history.delete(self._text(payload,'id'))
         if name == 'historyPreview':self.history.render(self._text(payload,'id'),self._text(payload,'candidate'));return self.snapshot()
         if name == 'historyPreviewClear':self.history.clear();return self.snapshot()

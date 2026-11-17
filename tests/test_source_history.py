@@ -61,9 +61,20 @@ class SourceHistoryTest(unittest.TestCase):
             os.utime(root / f'{ident}.json', (at, at))
         session('a' * 32, 'f', 1)
         session('b' * 32, None, 2)  # newer, but no final pick
-        self.assertEqual(SourceHistory(self.discovery, root).my_sound, {'id': 'f', 'label': 'L', 'recipe': {'kind': 'map'}})
+        self.assertEqual(SourceHistory(self.discovery, root).my_sound['session'], 'a' * 32)
         self.history.delete('a' * 32)
         self.assertIsNone(self.history.my_sound)  # deleting the session forgets its sound
+
+    def test_choose_an_older_final(self):
+        root = self.history.root
+        for ident, at in (('a' * 32, 1), ('b' * 32, 2)):
+            (root / f'{ident}.json').write_text(json.dumps({'final': 'f', 'created': '2026-11-17T10:00', 'candidates': {'f': {'label': ident[0], 'recipe': {}}}}))
+            os.utime(root / f'{ident}.json', (at, at))
+        history = SourceHistory(self.discovery, root)
+        self.assertEqual([s['session'] for s in history.my_sounds], ['b' * 32, 'a' * 32])
+        self.assertEqual(history.my_sound['label'], 'b')  # newest by default
+        history.choose('a' * 32)
+        self.assertEqual(SourceHistory(self.discovery, root).my_sound['label'], 'a')  # kept after a restart
 
 
 if __name__ == '__main__':
