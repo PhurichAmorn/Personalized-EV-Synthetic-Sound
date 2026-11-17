@@ -1223,3 +1223,83 @@ class SoundMapDiscovery(TuningDiscovery):
             f'over {len(MAP_FEATURES)} heard traits (pitch, sharpness, roughness, pulsing, inharmonicity, spectral centre, voice, chorus, vibrato), each as z '
             'and z^2 so a middle value can be best; N(0,1) prior, Laplace approximation. Answers, shortlist and yes/no as the tuning search.')
         return data
+
+MAP_REGIONS=6      # regions of the pool (k-means on the heard traits)
+MAP_EXPLORE=10     # pairs 1-10 compare regions; pairs 11-19 search inside the listener's two best regions
+MAP_FOCUS=.7       # share of focus challengers from the best region (the rest from the runner-up)
+
+def map_regions(units,k=MAP_REGIONS,seed=0):
+    """k-means (best of 20 seeded starts) on pool feature values: region label per sound and each region's most typical sound (closest to its centre)."""
+    rng=np.random.default_rng(seed);best=None
+    for _ in range(20):
+        c=units[rng.choice(len(units),k,replace=False)]
+        for _ in range(50):
+            label=np.argmin(((units[:,None]-c[None])**2).sum(2),1);c=np.array([units[label==j].mean(0) if (label==j).any() else c[j] for j in range(k)])
+        sse=float(((units-c[label])**2).sum())
+        if best is None or sse<best[0]:best=(sse,label,c)
+    _,label,c=best
+    typical=[int(np.flatnonzero(label==j)[np.argmin(((units[label==j]-c[j])**2).sum(1))]) for j in range(k)]
+    return label,typical
+
+class RegionMapDiscovery(SoundMapDiscovery):
+    """Sound map, broad then narrow. The pool is split into MAP_REGIONS regions. Pairs 1-3: each region's most typical sound (the same
+    opening for every listener). Pairs 4-10: two regions per pair, picked by a Thompson sample of each region's win rate, each played by
+    the model's Thompson-sampled best unheard sound of that region. Pairs 11-19: winner stays, challengers from the best region
+    (MAP_FOCUS) or the runner-up; every two Neither answers in this stage open the next region. Pair 20 and shortlist as SoundMapDiscovery."""
+    policy='source-map-regions-1'
+    def _load(self):
+        fresh=self.pool is None;super()._load()
+        if fresh:
+            label,typical=map_regions(np.array([s['unit'] for s in self.pool]))
+            self.region={s['id']:int(k) for s,k in zip(self.pool,label)};self.typical=[self.pool[i] for i in typical]
+    def _region_record(self,rows):
+        """Wins and losses per region over all answers: Both good is a win for both sounds' regions, Neither a loss for both."""
+        w,l=np.zeros(MAP_REGIONS),np.zeros(MAP_REGIONS);reg=lambda i:self.region[self.candidates[i]['recipe']['cell']]
+        for r in rows:
+            a,b=r['pair']
+            if r['choice']=='good':w[reg(a)]+=1;w[reg(b)]+=1
+            elif r['choice']=='neither':l[reg(a)]+=1;l[reg(b)]+=1
+            elif r.get('winner'):w[reg(r['winner'])]+=1;l[reg(b if r['winner']==a else a)]+=1
+        return w,l
+    def focus_regions(self,rows=None):
+        """Regions in order of win rate (posterior mean); the first two plus one more per two Neither answers after the region stage."""
+        rows=self._choices() if rows is None else rows;w,l=self._region_record(rows)
+        order=[int(k) for k in np.lexsort((-(w+l),-(w+1)/(w+l+2)))]
+        return order[:2+sum(r['choice']=='neither' for r in rows[MAP_EXPLORE:])//2]
+    def _proposals(self):
+        self.check_parent=None;step=self.completed;rows=self._choices()
+        if step<MAP_OPENING:
+            # Opening pairs: each typical sound with the one most different from it among those left.
+            if step==0:
+                left=list(self.typical);order=[]
+                while left:
+                    a=left.pop(0);b=max(left,key=lambda s:np.linalg.norm(s['unit']-a['unit']));left.remove(b);order+=[a,b]
+                self.opening=[self._add_sound(s,'opening',f"Opening: region {self.region[s['id']]+1} ({s['id']})") for s in order]
+            self.rematch=self.opening[2*step:2*step+2];return []
+        if step<MAP_EXPLORE:
+            w,l=self._region_record(rows);heard={i for r in rows for i in r['pair']}|self.excluded;self._sample()
+            pair=[]
+            for k in sorted(range(MAP_REGIONS),key=lambda k:-self.rng.betavariate(w[k]+1,l[k]+1)):
+                left=[s for s in self.pool if self.region[s['id']]==k and self._id(map_recipe(s)) not in heard]
+                if left:pair.append(max(left,key=lambda s:self._sampled(map_recipe(s))))
+                if len(pair)==2:break
+            if len(pair)==2:
+                self.rematch=[self._add_sound(s,'region',f"Region {self.region[s['id']]+1}: {s['id']} (Thompson sample)") for s in pair];return []
+        options=super()._proposals()
+        if self.rematch or step==STYLE_PAIRS-1:return options
+        focus=self.focus_regions(rows);best=[focus[0]] if self.rng.random()<MAP_FOCUS else focus[1:]
+        for regions in (best,focus):
+            kept=[o for o in options if self.region[o[1]['cell']] in regions]
+            if kept:return kept
+        return options
+    def export(self):
+        data=super().export();w,l=self._region_record(self._choices())
+        data.update(regions={'count':MAP_REGIONS,'explore':MAP_EXPLORE,'focus':[k+1 for k in self.focus_regions()],
+                             'wins':w.astype(int).tolist(),'losses':l.astype(int).tolist(),
+                             'by_sound':{i:self.region[c['recipe']['cell']]+1 for i,c in self.candidates.items() if c['recipe'].get('cell') in self.region}})
+        data['note']=data['note'].replace('Sound-map search (phase 1, v5).','Sound-map search (phase 1, regions v1). The pool is split into '
+            f'{MAP_REGIONS} regions (k-means on the 9 traits). Pairs 1-3: each region\'s most typical sound. Pairs 4-{MAP_EXPLORE}: two regions per pair '
+            '(Thompson sample of region win rates), each played by the model\'s best guess in that region. Pairs '
+            f'{MAP_EXPLORE+1}-19: winner stays, challengers from the best region ({MAP_FOCUS:.0%}) or the runner-up; two Neither answers open the '
+            'next region. Below: the v5 description, of which pair 20, the challenger rule, model and shortlist still apply.')
+        return data

@@ -13,7 +13,7 @@ import numpy as np
 from scipy.signal import fftconvolve
 from mosqito.sq_metrics import sharpness_din_tv, roughness_dw
 from score import FS, SPL, HERE, fluctuation, prepare
-from generate import LIMITS
+from generate import LIMITS, LIBRARY
 
 MODES = ('rise', 'evolving')
 GATE = ('rise',)     # modes that decide pass/fail. Evolving is recorded only: it rejects the kept Pure tone (pulsing 0.46, two crossfaded voices)
@@ -21,7 +21,7 @@ STEP = FS // 20      # drive control step (50 ms)
 AUDIBLE = .3         # drive gain (after the envelope's square root) above which a moment counts
 WINDOW = 1.0         # seconds: sharpness and roughness are averaged over this before taking the worst moment
 TMP = 'drive-tmp'
-POOL = os.path.join(HERE, '..', '..', 'experiment', 'sound_map_pool.json')
+POOL = os.environ.get('POOL') or os.path.join(HERE, '..', '..', 'experiment', 'sound_map_pool.json')  # POOL=...: try a library without touching the app's pool
 LIBRARY_FX = {'size': 2.5, 'follow': 1}  # as the listening page plays library sounds; the rest is levels.SEARCH_FIXED
 
 
@@ -102,13 +102,27 @@ if __name__ == '__main__':
             assert not flagged & {i['id'] for i in items if i['label'] == 'ok'}, 'full-drive check rejected a kept sound'
             print('full-drive check OK')
         else:
-            lib = json.load(open('library.json'))
-            results = check_all({e['id']: library_sound(e) for e in lib['sounds']}, pool)
+            lib = json.load(open(LIBRARY))
+            # Split across machines: --part 1/2 checks every 2nd sound and saves <library>.part1of2.json; with all parts copied next to
+            # the library, --parts 2 joins them and writes the library and pool as a full run would.
+            arg = lambda flag: sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else None
+            if arg('--part'):
+                i, n = map(int, arg('--part').split('/'))
+                part = {e['id']: library_sound(e) for k, e in enumerate(sorted(lib['sounds'], key=lambda e: e['id'])) if k % n == i - 1}
+                json.dump(check_all(part, pool), open(f'{LIBRARY}.part{i}of{n}.json', 'w'))
+                print(f'part {i}/{n}: {len(part)} sounds checked -> {LIBRARY}.part{i}of{n}.json'); sys.exit()
+            if arg('--parts'):
+                n = int(arg('--parts')); results = {}
+                for i in range(1, n + 1): results.update(json.load(open(f'{LIBRARY}.part{i}of{n}.json')))
+                missing = [e['id'] for e in lib['sounds'] if e['id'] not in results]
+                if missing: raise SystemExit(f'{len(missing)} sounds have no check result: are all {n} parts from this library?')
+            else:
+                results = check_all({e['id']: library_sound(e) for e in lib['sounds']}, pool)
             failed = {i: verdict(r) for i, r in results.items() if verdict(r)}
             kept = [{**e, 'drive': results[e['id']]} for e in lib['sounds'] if e['id'] not in failed]
             evolving = [e['id'] for e in kept if verdict(e['drive'], ('evolving',))]
             lib['sounds'], lib['driveCheck'] = kept, {'failed': failed, 'evolvingOnly': evolving}
-            json.dump(lib, open('library.json', 'w'), indent=1)
+            json.dump(lib, open(LIBRARY, 'w'), indent=1)
             # Frozen pool for the app's sound-map search (experiment/source_search.py SoundMapDiscovery): only what a session needs.
             pool = {'created': lib.get('created'), 'source': 'tools/sound_map library (generate.py + drive.py library)', 'limits': lib['limits'],
                     'distinct': lib.get('distinct'), 'sounds': [{'id': e['id'], 'from': e.get('from'), 'voice': e['voice'], 'fx': library_sound(e)[1],

@@ -13,6 +13,7 @@ from mosqito.sq_metrics import sharpness_din_st, roughness_dw
 from score import FS, PITCHES, play, fluctuation, crowding, prepare
 
 LIMITS = {'S': 1.3, 'R': .3, 'F': .4, 'C': 70}  # guardrail: reject above any (checked on the listener's labels; C from the 2026-11-16 map marks)
+LIMITS['F'] = float(os.environ.get('LIMIT_F', LIMITS['F']))  # LIMIT_F=0.2: stricter pulsing (layered stacks: listening marks 2026-11-18 sat near 0.3)
 # Gene: (low, high, log scale). Plain synth settings (plainSource.ts); no 'air': fixed at 0 like every preset (heard as wind).
 PLAIN_GENES = {'rootHz': (80, 200, 1), 'brightness': (0, 1, 0), 'hollow': (0, 1, 0), 'bell': (0, 1, 0), 'softTop': (600, 6000, 1),
                'chord': (0, 1, 0), 'vowel': (0, 1, 0), 'vowelShape': (0, 1, 0), 'fundamental': (.3, 1, 0), 'whine': (0, 1, 0),
@@ -32,16 +33,30 @@ BLOCK_SWITCHES = ('inharm', 'lope', 'drive', 'fmMix', 'noiseMix', 'amDepth')  # 
 FX_GENES = {'tone': (800, 6000, 1), 'res': (.6, 8, 1), 'tremDepth': (0, .6, 0), 'tremRate': (.1, 2, 1), 'reverb': (0, .6, 0),
             'chorus': (0, 2, 0), 'vibDepth': (0, 8, 0), 'vibRate': (3, 7, 0), 'bodyHz': (200, 1200, 1), 'bodyDb': (0, 6, 0)}
 FX_CHOICES = {'pump': [0, 1], 'drift': [0, 1]}
-GENES = {**PLAIN_GENES, **BLOCK_GENES, **FX_GENES}
-VOICE_GENES = {'plain': list(PLAIN_GENES) + list(FX_GENES), 'blocks': list(BLOCK_GENES) + list(FX_GENES)}
+# Stack voice (desktop/src/stackVoice.ts, 2026-11-17): the same note in 3-5 octaves, each layer its own texture and slow swell, with a
+# fixed after-player low peak and low-pass. stRoot is the lowest layer (41-130 Hz; the stack reaches up from there). The first run
+# (low-pass 500-3000 Hz) piled up at the darkest settings, so the low-pass now spans the other voices' brightness range.
+STACK_GENES = {'stRoot': (41, 130, 1), 'stFall': (.35, .95, 0), 'stDepth': (0, .5, 0), 'stFifth': (0, .6, 0), 'stShimmer': (0, .5, 0),
+               'stSpread': (0, 1, 0), 'stPeakHz': (60, 400, 1), 'stPeakDb': (0, 9, 0), 'stCutoff': (800, 6000, 1)}
+STACK_CHOICES = {'stLayers': [3, 4, 5], 'stSeed': list(range(6)), **{f'stT{k}': [0, 1, 2, 3] for k in range(5)}}
+# Frame (2026-11-17): every layer may take any of 12 textures (stackVoice.ts STACK_TEXTURES: plain, strings, hollow, glass, sparkle,
+# air, choir, strings pad, cello, electric, the plain synth voice, the blocks voice); --textures all switches it on. No chorus:
+# depth comes from the layers (chorus only added copies of the same sound).
+STACK_GENES['stTwinkle'] = (3, 16, 0)
+FRAME_TEXTURES = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]  # no 5 air (wind noise); clicky sparkle is dropped by LIMIT_F=0.2: marks 2026-11-18
+GENES = {**PLAIN_GENES, **BLOCK_GENES, **FX_GENES, **STACK_GENES}
+VOICE_GENES = {'plain': list(PLAIN_GENES) + list(FX_GENES), 'blocks': list(BLOCK_GENES) + list(FX_GENES), 'stack': list(STACK_GENES) + list(FX_GENES)}
+NO_CHORUS = set()  # voices that never get chorus (--textures all: stack)
+VOICES = ['plain', 'blocks']  # voices new random sounds use; --voices stack (comma list) changes it
 # Distinct = clearly different on at least one heard trait. v2 used the app's too-similar steps (spectrum 0.25, 5 semitones,
 # inharm 0.25, R 0.1, F 0.15) and the listener heard most sounds as alike (2026-11-17), so every step is larger. Vibrato step
 # 5 cents of the 8-cent range (v4). Chorus and vibrato
 # count as traits so wide or moving sounds are not replaced by dry near-copies. All steps provisional (not yet checked by ear).
 DISTINCT = {'spectrum': .4, 'pitch': 7, 'inharm': .4, 'R': .15, 'F': .2, 'chorus': 1.2, 'vib': 5}
 BANDS = [100, 200, 400, 800, 1600, 3200, 6400]  # Hz, as levels.ts soundProfile
-rng = np.random.default_rng(1)
-WORKERS = max(1, os.cpu_count() - 1)
+rng = np.random.default_rng(int(os.environ.get('SEED', 1)))  # SEED=2, 3...: a different start per machine (islands, merged by merge.py)
+WORKERS = int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))  # WORKERS=4 on a laptop: slower, stays cool
+LIBRARY = os.environ.get('LIBRARY', 'library.json')  # in out/; a separate name keeps the app's library and pool untouched
 
 
 def to_unit(key, value):
@@ -58,9 +73,11 @@ def random_genome(voice=None):
     g = {k: from_unit(k, rng.random()) for k in GENES}
     for k in BLOCK_SWITCHES:
         if rng.random() > .3: g[k] = 0.  # each building block on with 30% chance: sounds made of a few blocks, not all at once
-    g.update({k: int(rng.choice(v)) for k, v in {**PLAIN_CHOICES, **FX_CHOICES}.items()})
+    g.update({k: int(rng.choice(v)) for k, v in {**PLAIN_CHOICES, **FX_CHOICES, **STACK_CHOICES}.items()})
     if rng.random() < .5: g['chorus'], g['vibDepth'] = rng.uniform(0, .3), 0.  # dry: no wobble, little chorus
-    g['voice'] = voice or ('plain' if rng.random() < .5 else 'blocks'); return g
+    g['voice'] = voice or str(rng.choice(VOICES))
+    if g['voice'] in NO_CHORUS: g['chorus'] = 0.
+    return g
 
 
 def mutate(g, sigma=.12):
@@ -69,9 +86,10 @@ def mutate(g, sigma=.12):
         child[k] = from_unit(k, to_unit(k, g[k]) + rng.normal(0, sigma))
     for k in BLOCK_SWITCHES:
         if g['voice'] == 'blocks' and rng.random() < .05: child[k] = 0. if g[k] else from_unit(k, rng.random())  # switch a block on/off
-    for k, v in {**PLAIN_CHOICES, **FX_CHOICES}.items():
+    for k, v in {**PLAIN_CHOICES, **FX_CHOICES, **STACK_CHOICES}.items():
         if rng.random() < .08: child[k] = int(rng.choice(v))
-    if rng.random() < .03: child['voice'] = 'blocks' if g['voice'] == 'plain' else 'plain'
+    if rng.random() < .03 and len(VOICES) > 1: child['voice'] = str(rng.choice([v for v in VOICES if v != g['voice']]))
+    if child['voice'] in NO_CHORUS: child['chorus'] = 0.
     return child
 
 
@@ -79,8 +97,18 @@ def crossover(a, b):
     return {k: (a if rng.random() < .5 else b).get(k, a.get(k)) for k in a.keys() | b.keys()} if a['voice'] == b['voice'] else dict(a)
 
 
+def used(g):
+    return {g[f'stT{k}'] for k in range(g['stLayers'])}
+
+
 def voice_of(g):
     """mapVoice.ts MapVoice of a genome."""
+    if g['voice'] == 'stack':
+        return {'kind': 'stack', 'stack': {'rootHz': round(g['stRoot'] * 5) / 5, 'layers': g['stLayers'], 'timbres': [g[f'stT{k}'] for k in range(5)],
+                'fall': g['stFall'], 'depth': g['stDepth'], 'seed': g['stSeed'], 'fifth': g['stFifth'], 'shimmer': g['stShimmer'],
+                'spread': g['stSpread'], 'peakHz': g['stPeakHz'], 'peakDb': g['stPeakDb'], 'cutoff': g['stCutoff'], 'twinkle': g.get('stTwinkle', 8),
+                **({'plain': {**{k: g[k] for k in PLAIN_GENES}, **{k: g[k] for k in PLAIN_CHOICES}, 'width': 1}} if 10 in used(g) else {}),
+                **({'blocks': {'shape': {k: g[k] for k in BLOCK_GENES if k != 'ensemble'}, 'controls': {'body': .5, 'character': .5, 'ensemble': g['ensemble'], 'movement': 0}}} if 11 in used(g) else {})}}
     if g['voice'] == 'blocks':
         shape = {k: g[k] for k in BLOCK_GENES if k != 'ensemble'}
         return {'kind': 'blocks', 'shape': shape, 'controls': {'body': .5, 'character': .5, 'ensemble': g['ensemble'], 'movement': 0}}
@@ -94,6 +122,7 @@ def fx_of(g):
 
 
 def root_hz(g):
+    if g['voice'] == 'stack': return round(g['stRoot'] * 5) / 5
     return round(174.8 * g['rootRatio'] * 5) / 5 if g['voice'] == 'blocks' else g['rootHz']
 
 
@@ -129,6 +158,33 @@ def check(job):
     return worst, describe(loop, fx, root)
 
 
+SAFE = .25  # guardrail margin above which two near-copies count as equally safe
+
+
+def better(new, old, others):
+    """Local competition between near-copies. If both are comfortably inside the guardrail (margin >= SAFE), the one more different from
+    the rest of the archive stays; otherwise the safer one. Before (to 2026-11-17): always the safer one, which pulled the stack voice to
+    its darkest settings (darker = less sharp = safer)."""
+    if min(new['margin'], old['margin']) < SAFE: return new['margin'] > old['margin']
+    novelty = lambda e: min((gap(e['desc'], o['desc']) for o in others), default=0)
+    return novelty(new) > novelty(old)
+
+
+def insert(archive, entry):
+    """Archive rule: a clearly different sound is added; a near-copy competes with its nearest (better()). Returns 'added', 'replaced' or None."""
+    if any(e['id'] == entry['id'] for e in archive): return None
+    gaps = [gap(entry['desc'], e['desc']) for e in archive]
+    near = int(np.argmin(gaps)) if gaps else None
+    if near is None or gaps[near] >= 1: archive.append(entry); return 'added'
+    if better(entry, archive[near], [e for k, e in enumerate(archive) if k != near]): archive[near] = entry; return 'replaced'
+    return None
+
+
+def config():
+    """Settings two libraries must share to be merged (merge.py) or resumed."""
+    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE}
+
+
 def gap(a, b):
     """How different two sounds are, as a multiple of the 'distinct' step on their most different trait (>= 1: distinct)."""
     spectrum = float(np.hypot.reduce(np.array(a['bands']) - np.array(b['bands'])) / np.sqrt(2))
@@ -161,12 +217,23 @@ def seeds():
 
 if __name__ == '__main__':
     prepare()
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    if '--voices' in sys.argv: VOICES[:] = sys.argv[sys.argv.index('--voices') + 1].split(',')
+    if '--textures' in sys.argv:  # frame: every layer any texture; the plain and blocks genes evolve inside stacks too; no chorus
+        STACK_CHOICES.update({f'stT{k}': FRAME_TEXTURES for k in range(5)}); NO_CHORUS.add('stack')
+        VOICE_GENES['stack'] = [k for k in VOICE_GENES['stack'] if k != 'chorus'] + [k for k in PLAIN_GENES if k != 'rootHz'] + [k for k in BLOCK_GENES if k != 'rootRatio']
+    args = [a for a in sys.argv[1:] if not a.startswith('--') and a not in VOICES and a != 'all']
     generations, size, fresh = int(args[0]) if args else 40, 140, .15  # fresh: share of each round that is new random sounds
-    archive, log, tried, passed = [], [], 0, 0
+    archive, log, tried, passed, first = [], [], 0, 0, 0
     created = time.strftime('%Y-%m-%d %H:%M')  # identifies this library (the page keeps marks per library)
+    if '--resume' in sys.argv and os.path.exists(LIBRARY):  # continue a saved run (e.g. after a Colab disconnect)
+        saved = json.load(open(LIBRARY))
+        if saved.get('config') != json.loads(json.dumps(config())): raise SystemExit('resume: the saved library was made with other settings')
+        archive, log, created = saved['sounds'], saved['log'], saved['created']
+        tried, passed, first = log[-1]['tried'], log[-1]['passed'], log[-1]['gen'] + 1
+        rng = np.random.default_rng([int(os.environ.get('SEED', 1)), first])  # fresh stream, not a replay of the first rounds
+        print(f'resuming {LIBRARY} at round {first} with {len(archive)} sounds', flush=True)
     with Pool(WORKERS) as pool:
-        for gen in range(generations + 1):
+        for gen in range(first, generations + 1):
             start = time.time()
             if gen == 0:
                 genomes = (seeds() if '--seeds' in sys.argv else []) + [random_genome() for _ in range(size)]
@@ -182,12 +249,11 @@ if __name__ == '__main__':
                 desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': g['chorus'], 'vib': g['vibDepth']}
                 entry = {'id': hashlib.sha1(json.dumps(g, sort_keys=True).encode()).hexdigest()[:10], 'genome': g, 'voice': voice_of(g),
                          'fx': fx_of(g), 'rootHz': root_hz(g), 'metrics': m, 'desc': desc, 'margin': margin, 'gen': gen, 'from': g.get('seed')}
-                gaps = [gap(desc, e['desc']) for e in archive]
-                near = int(np.argmin(gaps)) if gaps else None
-                if near is None or gaps[near] >= 1: archive.append(entry); added += 1
-                elif margin > archive[near]['margin']: archive[near] = entry; replaced += 1  # local competition: the safer near-copy stays
+                result = insert(archive, entry)
+                added += result == 'added'; replaced += result == 'replaced'
             log.append({'gen': gen, 'tried': tried, 'passed': passed, 'kept': len(archive), 'added': added, 'replaced': replaced,
                         'blocks': sum(e['genome']['voice'] == 'blocks' for e in archive), 'seconds': round(time.time() - start, 1)})
             print(log[-1], flush=True)
-            json.dump({'created': created, 'limits': LIMITS, 'distinct': DISTINCT, 'log': log, 'sounds': archive}, open('library.json', 'w'), indent=1)
+            json.dump({'created': created, 'limits': LIMITS, 'distinct': DISTINCT, 'config': config(), 'log': log, 'sounds': archive}, open(LIBRARY + '.tmp', 'w'), indent=1)
+            os.replace(LIBRARY + '.tmp', LIBRARY)  # never a half-written library if the machine stops mid-save
     shutil.rmtree('tmp', ignore_errors=True)

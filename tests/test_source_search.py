@@ -684,6 +684,24 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertLess(unit(d.finalists[0])[0],.35)  # the shortlist's top sound is low
         data=d.export();self.assertEqual(data['policy'],'source-map-v5');self.assertTrue(data['pool']['created'])
         d.close()
+    def test_regions_same_opening_then_focus_on_the_liked_region(self):
+        from experiment.source_search import RegionMapDiscovery,MAP_OPENING,MAP_EXPLORE
+        import random as stdrandom
+        cells=lambda d,n:[d.candidates[i]['recipe']['cell'] for i in d.pair]
+        openings=[]
+        for seed in (1,2):
+            d=RegionMapDiscovery(renderer=lambda recipe:None);d.start();d.rng=stdrandom.Random(seed)
+            region=lambda i:d.region[d.candidates[i]['recipe']['cell']]
+            liked=region(d.pair[0]);seen=[]
+            for n in range(20):
+                self.assertEqual(len(d.pair),2,d.error)
+                if n<MAP_OPENING:seen+=sorted(d.candidates[i]['recipe']['cell'] for i in d.pair)
+                if MAP_EXPLORE<=n<19:self.assertTrue(any(region(i) in d.focus_regions() for i in d.pair))
+                a,b=d.pair;d.feedback(choice='A' if region(a)==liked else 'B' if region(b)==liked else 'A')
+            openings.append(seen);self.assertEqual(d.focus_regions()[0],liked)  # the region always picked leads
+            data=d.export();self.assertEqual(data['policy'],'source-map-regions-1');self.assertEqual(data['regions']['focus'][0],liked+1)
+            d.close()
+        self.assertEqual(openings[0],openings[1])  # every listener hears the same six typical sounds first
     def test_map_recipe_matches_the_app_type(self):
         from experiment.source_search import load_map_pool,map_recipe
         _,pool=load_map_pool();r=map_recipe(pool[0])

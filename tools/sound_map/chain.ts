@@ -5,7 +5,7 @@
 // Returns left then right (pre-reverb, drive gain held at 1) and the drive gain every 50 ms step.
 // ponytail: the app plays each of the three stems in its own granular player; here they are summed into one player (grain alignment
 // differs slightly). Run one player per stem if the check must match the app sample for sample.
-import { mapStems, mapRootHz, type MapVoice } from '../../desktop/src/mapVoice'
+import { mapStems, mapRootHz, mapStage, type MapVoice } from '../../desktop/src/mapVoice'
 import { drivingSoundTargets, responseRiseSeconds } from '../../desktop/src/drivingSoundMapping'
 import { driveEnvelopeTarget } from '../../desktop/src/audioAutomation'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from '../../desktop/src/simulatedDrive'
@@ -52,12 +52,14 @@ export function driveSound(voice: MapVoice, fx: Partial<Fx>, mode: 'rise' | 'evo
   // Left stems into both ears, as the check was calibrated (2026-11-16): with width on, the right stem is a few cents sharp, and the
   // L+R mix the check measures turned that stereo spread into beating nobody hears (Sparkle, Bright aah read as pulsing).
   const left = sum(0)
-  return render([left, left], mapRootHz(voice), { ...SEARCH_FIXED, ...fx } as Fx, mode)
+  return render([left, left], mapRootHz(voice), { ...SEARCH_FIXED, ...fx } as Fx, mode, mapStage(voice))
 }
 
-export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mode: 'rise' | 'evolving') {
+/** stage: optional after-player stage (EngineStage config: fixed resonances, low-pass), as the app's engine and cello use. */
+export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mode: 'rise' | 'evolving', stage?: { resonances: [number, number, number][]; lowpassHz: number }) {
   const player = new SourceLoopEngine([left, right], FS)
-  if (fx.rasp > 0) player.setEngine({ baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 })
+  if (stage) player.setEngine({ baseHz: rootHz, rasp: fx.rasp, cabin: 0, ...stage })
+  else if (fx.rasp > 0) player.setEngine({ baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 })
   const vib = [new Delay(), new Delay()], chorus = [new Delay(), new Delay()], body = new Biquad(), low = new Biquad()
   body.peaking(fx.bodyHz, 1.5, fx.bodyDb)
   const vibGain = fx.vibDepth / 1731 / (2 * Math.PI * fx.vibRate), wetC = .25 * fx.chorus, dryC = 1 - wetC

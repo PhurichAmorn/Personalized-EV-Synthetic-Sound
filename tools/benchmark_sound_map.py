@@ -1,13 +1,13 @@
 """Simulated listeners for the sound-map search (experiment/source_search.py SoundMapDiscovery).
 Each listener has a hidden taste over the pool: an ideal sound (a random pool sound) and random weights saying which features matter;
 a sound's utility is minus its weighted distance to the ideal. Answers are noisy (Bradley-Terry with temperature), with Both good /
-Neither when both sounds are clearly above / below the listener's median. Score: where the shortlist's top sound sits in the
+Neither when both sounds are clearly above / below the listener's median. Policies: map (v5), regions (broad then narrow), random (map with random challengers). Score: where the shortlist's top sound sits in the
 listener's own ranking of the whole pool. Baseline: the same session with challengers in random order (no learning).
 Usage: python -m tools.benchmark_sound_map [listeners per condition, default 200]"""
 import math, random, sys
 from multiprocessing import Pool
 import numpy as np
-from experiment.source_search import SoundMapDiscovery
+from experiment.source_search import SoundMapDiscovery, RegionMapDiscovery
 
 NOISE = .15  # temperature: utility gap at which the better sound wins 73% of the time
 
@@ -15,7 +15,7 @@ NOISE = .15  # temperature: utility gap at which the better sound wins 73% of th
 def session(args):
     seed, policy = args
     rng = np.random.default_rng(seed)
-    d = SoundMapDiscovery(renderer=lambda r: None); d.start(); d.rng = random.Random(seed)
+    d = (RegionMapDiscovery if policy == 'regions' else SoundMapDiscovery)(renderer=lambda r: None); d.start(); d.rng = random.Random(seed)
     if policy == 'random': d._sampled = lambda recipe: d.rng.random()  # challengers in random order
     units = np.array([s['unit'] for s in d.pool])
     ideal, weight = units[rng.integers(len(units))], rng.dirichlet(np.ones(units.shape[1]) * .5)  # a few features matter most
@@ -36,7 +36,7 @@ def session(args):
 if __name__ == '__main__':
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     with Pool() as pool:
-        for policy in ('map', 'random'):
+        for policy in ('map', 'regions', 'random'):
             share = np.array(pool.map(session, [(s, policy) for s in range(n)])); top5 = np.mean(share <= .05)
             print(f"{policy:7} listeners {n}: pick in the listener's top 5% {top5:.0%} (+-{2 * np.sqrt(top5 * (1 - top5) / n):.0%}), "
                   f"top 10% {np.mean(share <= .1):.0%}, median rank {np.median(share):.0%} of the pool")

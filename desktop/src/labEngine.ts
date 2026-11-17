@@ -9,6 +9,7 @@ import { sourceAudioBuffers } from './sourceDesigner'
 export type Fx = { tone: number; follow: number; bodyHz: number; bodyDb: number; chorus: number; reverb: number; size: number; tremRate: number; tremDepth: number; rasp: number; vibDepth: number; vibRate: number
   pump: number; res: number  // pump 1: tremolo becomes a sidechain-style duck (sudden dip, slow swell); res: low-pass resonance (Q)
   peakHz?: number  // comfort cap: highest note (Hz) the drive may reach
+  stage?: { resonances: [number, number, number][]; lowpassHz: number }  // fixed after-player stage of a 'stack' map voice (mapStage)
   drift?: number }  // 1: low-pass breathes +-1100 cents on a 14 s cycle (Dark ambience)
 export type Motion = { mode: 'source' | GranularMode; travel: number; response: SoundResponse; input: 'drive' | 'manual'; position: number; pedal: number }
 // Starts near the original styles' warmth: their chorus and room, a gentle body bump at 450 Hz.
@@ -42,7 +43,7 @@ export function buildRig(context: AudioContext, sources: AudioBuffer[], mode: Mo
   drive.connect(dry); dry.connect(master); drive.connect(convolver); convolver.connect(wet); wet.connect(master); master.connect(analyser)
   const startedAt = context.currentTime + .03
   players.forEach(player => player.start(startedAt))
-  const rig = { players, granular, vib, vibLfo, vibDepth, trem, lfo, lfoDepth, drift, driftDepth, body, low, chorus, drive, dry, wet, master, startedAt, driveTarget: 0, size: 0, rasp: -1, rootHz: 0, pump: 0,
+  const rig = { players, granular, vib, vibLfo, vibDepth, trem, lfo, lfoDepth, drift, driftDepth, body, low, chorus, drive, dry, wet, master, startedAt, driveTarget: 0, size: 0, engineKey: '', rootHz: 0, pump: 0,
     setRoom(seconds: number) {
       // A new convolver per decay: reassigning .buffer is not allowed in every WebKit version.
       const next = context.createConvolver(), [left, right] = roomImpulse(context.sampleRate, seconds)
@@ -75,9 +76,10 @@ export function applyFx(rig: ReturnType<typeof buildRig>, fx: Fx, rootHz: number
   rig.chorus.setAmount(fx.chorus, now)
   set(rig.dry.gain, 1 - fx.reverb * .5); set(rig.wet.gain, fx.reverb)
   if (Math.abs(rig.size - fx.size) > .01) { rig.size = fx.size; rig.setRoom(fx.size) }
-  if (rig.granular && rig.rasp !== fx.rasp) {
-    rig.rasp = fx.rasp
-    for (const player of rig.players as GranularPlayer[]) player.setEngine(fx.rasp > 0 ? { baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 } : null)
+  const engineKey = JSON.stringify([fx.rasp, fx.stage ?? null])
+  if (rig.granular && rig.engineKey !== engineKey) {
+    rig.engineKey = engineKey
+    for (const player of rig.players as GranularPlayer[]) player.setEngine(fx.stage ? { baseHz: rootHz, rasp: fx.rasp, cabin: 0, ...fx.stage } : fx.rasp > 0 ? { baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 } : null)
   }
 }
 

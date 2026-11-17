@@ -324,7 +324,7 @@ export default function SoundLab({ onStart, stopToken }: { onStart: () => void; 
       <section className="lab-panel" aria-labelledby="lab-fx">
         <h3 id="lab-fx">Transformation <small>after the player · live</small></h3>
         {FX_RANGES.map(({ group, items }) => <fieldset key={group} disabled={bypass}><legend>{group}</legend>
-          {items.map(range => <Slider key={range.key} range={range} value={fx[range.key as keyof Fx] as number} was={before?.fx[range.key as keyof Fx]} onChange={value => setFx(f => ({ ...f, [range.key]: value }))} />)}
+          {items.map(range => <Slider key={range.key} range={range} value={fx[range.key as keyof Fx] as number} was={before?.fx[range.key as keyof Fx] as number | undefined} onChange={value => setFx(f => ({ ...f, [range.key]: value }))} />)}
         </fieldset>)}
         <button type="button" onClick={() => setFx(FX_DEFAULT)}>Reset transformation</button>
       </section>

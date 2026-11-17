@@ -25,7 +25,7 @@ const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'med
 const short = (id: string) => id.slice(0, 6)
 const isLive = isLiveRecipe  // built and played in the app, not rendered offline
 // Source settings shown in the trace: level/tuning base, or a sound-map voice (plain synth or blocks shape + controls).
-const settingsOf = (r: LiveRecipe): object => 'base' in r ? r.base : r.voice ? (r.voice.kind === 'blocks' ? { voice: 'blocks', ...r.voice.shape, ...r.voice.controls } : r.voice.plain) : r.plain ?? {}
+const settingsOf = (r: LiveRecipe): object => 'base' in r ? r.base : r.voice ? (r.voice.kind === 'blocks' ? { voice: 'blocks', ...r.voice.shape, ...r.voice.controls } : r.voice.kind === 'stack' ? { voice: 'stack', ...r.voice.stack } : r.voice.plain) : r.plain ?? {}
 
 export default function TraceHistory({ command, preview }: { command: Command; preview?: HistoryPreview }) {
   const [rows, setRows] = useState<Row[]>([])

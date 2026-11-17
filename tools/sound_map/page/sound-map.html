@@ -6,14 +6,17 @@
 :root {
   --bg: #f3f5f6; --panel: #ffffff; --ink: #14202a; --muted: #5d6b76; --line: #d5dde2;
   --key: #e4ebef; --accent: #0f7c86; --accent-ink: #ffffff; --blocks: #a2581b; --bad: #c2412d;
+  --calm: #2f7d4f; --sport: #c2412d; --deep: #5b4bb5; --none: #8a949b;
   --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0f1519; --panel: #172026; --ink: #e3eaee; --muted: #8d9ba5; --line: #2a363e;
-  --key: #23303a; --accent: #3fb6bf; --accent-ink: #062226; --blocks: #e0995a; --bad: #ef6b55; color-scheme: dark } }
+  --key: #23303a; --accent: #3fb6bf; --accent-ink: #062226; --blocks: #e0995a; --bad: #ef6b55;
+  --calm: #5fc488; --sport: #ef6b55; --deep: #9d8ff0; --none: #7d8992; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #0f1519; --panel: #172026; --ink: #e3eaee; --muted: #8d9ba5; --line: #2a363e;
-  --key: #23303a; --accent: #3fb6bf; --accent-ink: #062226; --blocks: #e0995a; --bad: #ef6b55; color-scheme: dark }
+  --key: #23303a; --accent: #3fb6bf; --accent-ink: #062226; --blocks: #e0995a; --bad: #ef6b55;
+  --calm: #5fc488; --sport: #ef6b55; --deep: #9d8ff0; --none: #7d8992; color-scheme: dark }
 body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 40px }
 main { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px }
@@ -34,6 +37,19 @@ button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink
 .dot.blocks { background: var(--blocks); border-radius: 3px }
 .dot.bad { box-shadow: 0 0 0 2px var(--bad) }
 .dot.on { box-shadow: 0 0 0 3px var(--ink); z-index: 2 }
+.dot[data-feel]::after { content: ""; position: absolute; inset: -6px; border-radius: inherit; border: 2px solid var(--f) }
+.dot[data-feel="calm"] { --f: var(--calm) } .dot[data-feel="sport"] { --f: var(--sport) } .dot[data-feel="deep"] { --f: var(--deep) } .dot[data-feel="none"] { --f: var(--none) }
+.dot[data-strength="bit"]::after { border-style: dashed }
+.orch { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; min-width: 0 }
+.card h3 { margin: 0; font-size: 15px; font-weight: 600 }
+.card audio { width: 100% }
+.card .settings span { color: var(--ink) }
+.feel button[data-feel="calm"][aria-pressed="true"] { background: var(--calm); border-color: var(--calm) }
+.feel button[data-feel="sport"][aria-pressed="true"] { background: var(--sport); border-color: var(--sport) }
+.feel button[data-feel="deep"][aria-pressed="true"] { background: var(--deep); border-color: var(--deep) }
+.feel button[data-feel="none"][aria-pressed="true"] { background: var(--none); border-color: var(--none) }
+h2.section { font-size: 17px; font-weight: 600; margin: 8px 0 0 }
 .axis { position: absolute; font: 11px var(--mono); color: var(--muted); letter-spacing: .04em }
 .axis.x { left: 44px; right: 12px; bottom: 6px; display: flex; justify-content: space-between }
 .axis.y { left: 4px; top: 12px; bottom: 28px; display: flex; flex-direction: column; justify-content: space-between; text-align: right; width: 34px }
@@ -54,13 +70,24 @@ button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink
     <p>Every dot is a generated sound that passed the guardrail (sharpness, roughness, pulsing, crowding) and sounds different from all the others. Click one to hear it on a 22 s simulated drive (launch, climb to 110 km/h, ease off, coast), then mark any that sound bad.</p>
     <div class="stats" id="stats"></div>
   </header>
+  <section style="display:grid;gap:10px">
+    <h2 class="section">Octave layers (Shepard-like, normal behaviour)</h2>
+    <p>The same note in several octaves, each octave with its own texture and its own slow swell, played by the app's granular player like any other sound: pitch rises with speed, holds at cruise, falls on regen. A fixed low peak after the player stays put while the pitch climbs, so it stays deep. No endless rise and no octave jumps.</p>
+    <div class="orch" id="oct"></div>
+  </section>
+  <h2 class="section">Rate the sound map</h2>
+  <p>For each sound, pick the feeling it gives you: <b style="color:var(--calm)">Calm</b>, <b style="color:var(--sport)">Sport</b> or <b style="color:var(--deep)">Deep / futuristic</b>, or None / mixed. Then say whether it is clearly that feeling or only a bit. Ratings save as you go; the coloured ring on a dot is your rating (dashed = a bit).</p>
   <div class="bar">
+    <span class="note">Pool:</span>
+    <button id="lib-main" aria-pressed="true">Current (plain + blocks)</button>
+    <button id="lib-stack" aria-pressed="false">Octave stacks</button>
+    <button id="lib-frame" aria-pressed="false">Layered textures (new)</button>
     <span class="note">Drive:</span>
     <button id="rise" aria-pressed="true">Rising</button>
     <button id="evolving" aria-pressed="false">Evolving</button>
     <button id="stop">Stop</button>
     <span style="flex:1"></span>
-    <span class="legend"><span><i style="background:var(--accent)"></i>Plain synth</span><span><i style="background:var(--blocks);border-radius:2px"></i>Blocks (FM, noise, grit, pulse)</span></span>
+    <span class="legend"><span><i style="background:var(--accent)"></i>Plain synth</span><span><i style="background:transparent;border:2px solid var(--calm)"></i>Calm</span><span><i style="background:transparent;border:2px solid var(--sport)"></i>Sport</span><span><i style="background:transparent;border:2px solid var(--deep)"></i>Deep / futuristic</span><span><i style="background:var(--blocks);border-radius:2px"></i>Blocks (FM, noise, grit, pulse)</span></span>
     <button id="copy">Copy marks</button>
   </div>
   <div class="mapwrap">
@@ -70,16 +97,27 @@ button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink
   </div>
   <section class="detail" id="detail"><p>Pick a dot to hear it. Up = higher pitch (Hz), right = brighter. Dots close together still differ audibly on at least one trait: spectrum, pitch, inharmonicity, roughness or pulsing.</p></section>
 </main>
-<script src="synth.js"></script><!-- out/synth.js, published next to the page with out/library.json -->
+<script src="synth.js"></script><!-- out/synth.js, published next to the page with out/library.json (sound-map pool sounds) and out/octaves/ -->
 <script>
 const METRICS = [['S', 'Sharpness', 'acum'], ['R', 'Roughness', 'asper'], ['F', 'Pulsing', ''], ['C', 'Crowding', 'pairs']]
 let lib, ctx, current, selected = null, mode = 'rise'
 const cache = new Map()
 let marks = {}
+// Feeling ratings: one db doc per rater and sound (ratings/<viewer id>_<sound id>), so Claude can read them back; browser storage if no db.
+const FEELINGS = [['calm', 'Calm'], ['sport', 'Sport'], ['deep', 'Deep / futuristic'], ['none', 'None / mixed']]
+let feel = {}, db = null, me = null
+const feelKey = () => `feel:${lib?.created ?? ''}`
+async function rate(id, change) {
+  const next = { ...(feel[id] ?? { strength: 'clear' }), ...change }; feel[id] = next; render()
+  if (db && me) { try { await db.doc(`ratings/${me}_${id}`).set({ sound: id, feeling: next.feeling ?? null, strength: next.strength, by: me, library: lib.created, at: new Date().toISOString() }) } catch { status('Could not save to the shared store; kept in this browser.') } }
+  try { localStorage.setItem(feelKey(), JSON.stringify(feel)) } catch {}
+}
+function status(text) { const s = document.getElementById('savestate'); if (s) s.textContent = text }
 const marksKey = () => `marks:${lib?.created ?? ''}`  // marks belong to one library: a new run makes new sounds
 const save = () => { try { localStorage.setItem(marksKey(), JSON.stringify(marks)) } catch {} }
 const centre = e => { const b = e.desc.bands.map(v => v * v), s = b.reduce((a, v) => a + v, 0) || 1; return b.reduce((a, v, i) => a + v * i, 0) / s }
-const X = e => Math.min(1, Math.max(0, (centre(e) - 1) / 5)), Y = e => Math.min(1, Math.max(0, Math.log(e.rootHz / 80) / Math.log(200 / 80)))
+// Across: spectral centre 0-4 (stacks sit low, under 1); up: pitch 40-200 Hz (stacks start from 41 Hz).
+const X = e => Math.min(1, Math.max(0, centre(e) / 4)), Y = e => Math.min(1, Math.max(0, Math.log(e.rootHz / 40) / Math.log(200 / 40)))
 
 // The drive through the app's chain (granular player, pedal-following filter, swell), the same render the full-drive check judged.
 function drive(e) {
@@ -115,11 +153,15 @@ function describe(e) {
   if (e.desc.inharm > .25) tags.push('inharmonic')
   if (e.desc.R > .12) tags.push('textured')
   if (e.desc.F > .15) tags.push('pulsing')
+  if (e.voice.kind === 'stack') { const st = e.voice.stack, names = ['plain', 'strings', 'hollow', 'glass', 'sparkle', 'air', 'choir', 'strings pad', 'cello', 'electric', 'plain synth', 'blocks']
+    return `Octave stack · ${Math.round(e.rootHz)} Hz · ${Math.round(st.layers)} layers (${st.timbres.slice(0, Math.round(st.layers)).map(t => names[Math.round(t)]).join(', ')})${tags.length ? ' · ' + tags.join(', ') : ''}` }
   return `${e.voice.kind === 'blocks' ? 'Blocks' : 'Plain synth'} · ${Math.round(e.rootHz)} Hz${tags.length ? ' · ' + tags.join(', ') : ''}`
 }
 
 function settings(e) {
   const f = e.fx, fx = `filter ${Math.round(f.tone)} Hz Q ${f.res.toFixed(1)}${f.drift ? ' drifting' : ''} · ${f.tremDepth > .02 ? (f.pump ? 'pump' : 'swell') + ` ${f.tremDepth.toFixed(2)} at ${f.tremRate.toFixed(2)} Hz · ` : ''}reverb ${f.reverb.toFixed(2)}`
+  if (e.voice.kind === 'stack') { const st = e.voice.stack
+    return `layer fall ${st.fall.toFixed(2)} · swell ${st.depth.toFixed(2)} · fifths ${st.fifth.toFixed(2)} · shimmer ${st.shimmer.toFixed(2)} · width ${st.spread.toFixed(2)} · low peak ${Math.round(st.peakHz)} Hz +${st.peakDb.toFixed(1)} dB · low-pass ${Math.round(st.cutoff)} Hz · ${fx}` }
   if (e.voice.kind === 'blocks') {
     const s = e.voice.shape, on = []
     if (s.fmMix > 0) on.push(`FM ${s.fmMix.toFixed(2)} (ratio ${s.fmRatio.toFixed(1)}, index ${s.fmIndex.toFixed(1)})`)
@@ -145,9 +187,13 @@ function showDetail(e) {
     <p>${e.from ? `Grown from your sound <b style="color:var(--ink)">${e.from}</b>.` : 'Grown from a random start.'} Found in round ${e.gen}. Sound ${e.id}.</p>
     <div class="meters">${meters}</div>
     <div class="settings">${settings(e)}</div>
+    <div class="bar feel" role="group" aria-label="Feeling">${FEELINGS.map(([k, label]) => `<button data-feel="${k}" aria-pressed="${feel[e.id]?.feeling === k}">${label}</button>`).join('')}
+      <span style="flex:1"></span><button data-strength="clear" aria-pressed="${(feel[e.id]?.strength ?? 'clear') === 'clear'}">Clear</button><button data-strength="bit" aria-pressed="${feel[e.id]?.strength === 'bit'}">A bit</button></div>
     <div class="bar"><button id="markbad" aria-pressed="${bad}">${bad ? 'Marked bad' : 'Mark as bad'}</button>
     <input id="why" placeholder="Why? (optional)" value="${(marks[e.id] || '').replace(/"/g, '&quot;')}" style="font:inherit;flex:1;min-width:0;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)"></div>`
   document.getElementById('markbad').onclick = () => { if (marks[e.id] !== undefined) delete marks[e.id]; else marks[e.id] = document.getElementById('why').value || 'bad'; save(); render(); showDetail(e) }
+  d.querySelectorAll('[data-feel]').forEach(b => b.onclick = async () => { await rate(e.id, { feeling: feel[e.id]?.feeling === b.dataset.feel ? null : b.dataset.feel }); showDetail(e) })
+  d.querySelectorAll('[data-strength]').forEach(b => b.onclick = async () => { await rate(e.id, { strength: b.dataset.strength }); showDetail(e) })
   document.getElementById('why').onchange = ev => { if (marks[e.id] !== undefined) { marks[e.id] = ev.target.value || 'bad'; save() } }
 }
 
@@ -159,11 +205,12 @@ function render() {
     b.className = ['dot', e.voice.kind === 'blocks' ? 'blocks' : '', marks[e.id] !== undefined ? 'bad' : '', selected === e.id ? 'on' : ''].join(' ')
     b.style.left = `${X(e) * 100}%`; b.style.bottom = `${Y(e) * 100}%`
     b.dataset.id = e.id; b.setAttribute('aria-label', describe(e)); b.title = describe(e)
+    if (feel[e.id]?.feeling) { b.dataset.feel = feel[e.id].feeling; b.dataset.strength = feel[e.id].strength }
     map.appendChild(b)
   }
-  const last = lib.log.at(-1), n = Object.keys(marks).length, blocks = lib.sounds.filter(e => e.voice.kind === 'blocks').length
-  document.getElementById('stats').innerHTML = `<span>tried <b>${last.tried.toLocaleString()}</b></span><span>passed guardrail <b>${last.passed.toLocaleString()}</b></span><span>kept <b>${lib.sounds.length}</b> (plain ${lib.sounds.length - blocks}, blocks ${blocks})</span><span>marked bad <b>${n}</b></span>`
-  document.getElementById('yaxis').innerHTML = [200, 160, 125, 100, 80].map(hz => `<span>${hz}</span>`).join('')
+  const last = lib.log.at(-1), n = Object.keys(marks).length, count = kind => lib.sounds.filter(e => e.voice.kind === kind).length
+  document.getElementById('stats').innerHTML = `<span>tried <b>${last.tried.toLocaleString()}</b></span><span>passed guardrail <b>${last.passed.toLocaleString()}</b></span><span>kept <b>${lib.sounds.length}</b> (${['plain', 'blocks', 'stack'].filter(k => count(k)).map(k => `${k} ${count(k)}`).join(', ')})</span><span>marked bad <b>${n}</b></span><span>rated <b>${lib.sounds.filter(e => feel[e.id]?.feeling).length}</b> / ${lib.sounds.length}</span><span id="savestate">${db && me ? 'saving to the shared store' : 'saving in this browser only'}</span>`
+  document.getElementById('yaxis').innerHTML = [200, 130, 90, 60, 40].map(hz => `<span>${hz}</span>`).join('')
 }
 
 document.getElementById('map').onclick = ev => {
@@ -181,5 +228,45 @@ document.getElementById('copy').onclick = async ev => {
   try { await navigator.clipboard.writeText(text); ev.target.textContent = 'Copied' } catch { ev.target.textContent = 'Copy failed: select the list below'; document.getElementById('detail').innerHTML = `<pre style="white-space:pre-wrap">${text}</pre>` }
   setTimeout(() => ev.target.textContent = 'Copy marks', 1500)
 }
-fetch('library.json').then(r => r.json()).then(data => { lib = data; try { marks = JSON.parse(localStorage.getItem(marksKey()) || '{}') } catch {} render() })
+let connected = false
+function loadLib(file) {
+  stop(); selected = null; document.getElementById('detail').innerHTML = '<p>Pick a dot to hear it.</p>'
+  for (const [id, f] of [['lib-main', 'library.json'], ['lib-stack', 'library.stack.json'], ['lib-frame', 'library.frame.json']]) document.getElementById(id).setAttribute('aria-pressed', f === file)
+  fetch(file).then(r => r.json()).then(data => {
+    lib = data; marks = {}; feel = {}
+    try { marks = JSON.parse(localStorage.getItem(marksKey()) || '{}') } catch {}
+    try { feel = JSON.parse(localStorage.getItem(feelKey()) || '{}') } catch {}
+    render(); if (!connected) { connected = true; connect() } else if (db && me) resubscribe()
+  })
+}
+document.getElementById('lib-main').onclick = () => loadLib('library.json')
+document.getElementById('lib-stack').onclick = () => loadLib('library.stack.json')
+document.getElementById('lib-frame').onclick = () => loadLib('library.frame.json')
+loadLib('library.json')
+async function connect() {
+  const [d, u] = await Promise.all([window.claude?.use?.('db') ?? null, window.claude?.use?.('user') ?? null])
+  const id = u ? await u.id() : null
+  if (!d || !id) return
+  db = d; me = id
+  db.collection('ratings').where('by', '==', me).onSnapshot(snap => {
+    lastSnap = snap
+    apply(snap)
+  }, () => status('Shared store unavailable; saving in this browser only.'))
+}
+let lastSnap = null
+function apply(snap) {  // one subscription for all libraries; each rating names its library
+  for (const doc of snap.docs) { const r = doc.data(); if (r && r.library === lib.created) feel[r.sound] = { feeling: r.feeling, strength: r.strength } }
+  render(); const e = lib.sounds.find(x => x.id === selected); if (e) showDetail(e)
+}
+function resubscribe() { if (lastSnap) apply(lastSnap) }
+function loadSet(dir, el, modes) {
+  Promise.all([fetch(`${dir}/report.json`).then(r => r.json()), fetch(`${dir}/sounds.json`).then(r => r.json())]).then(([rows, sounds]) => {
+    const label = { rise: 'Rising', evolving: 'Evolving' }
+    const line = (s, mode) => { const r = rows.find(r => r.id === s.id && r.mode === mode); return r ? `${label[mode]}: sharpness ${r.S.toFixed(2)}, roughness ${r.R.toFixed(2)}, pulsing ${r.F.toFixed(2)} · ${r.passes ? 'passes' : '<b style="color:var(--bad)">fails</b>'} the guardrail${r.click ? ` · ${r.click.wraps} octave wraps, sharpest jump ${r.click.ratio}× the clip's usual (1 = no click)` : ''}` : '' }
+    document.getElementById(el).innerHTML = sounds.map(s => `<div class="card"><h3>${s.name}</h3><p class="note">${s.idea}.</p>
+      ${modes.map(m => `<span class="note">${label[m]}</span><audio controls preload="none" src="${dir}/${s.id}.${m}.wav"></audio>`).join('')}
+      <div class="settings">${modes.map(m => line(s, m)).join('<br>')}</div></div>`).join('')
+  }).catch(() => { document.getElementById(el).innerHTML = '<p>Clips not published with this page.</p>' })
+}
+loadSet('octaves', 'oct', ['rise', 'evolving'])
 </script>

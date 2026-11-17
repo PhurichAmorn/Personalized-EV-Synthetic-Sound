@@ -56,7 +56,7 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Sound-map search (phase 1, `source-map-v4`, `SoundMapDiscovery`): selectable per session
+### Sound-map search (phase 1, `source-map-regions-1`, `RegionMapDiscovery`): selectable per session
 
 Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
 fixed preset set. Personalize sound now has a search selector: *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`, the default; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
@@ -68,9 +68,16 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   v1 (2026-11-16) was 90 plain-synth sounds in a pitch x sharpness x texture grid; its one session ended on a near-copy of the listener's
   own Cinematic pad (octave-band distance 0.13), which led to v2. v2 (233 sounds, 2026-11-17) played every sound dry (no chorus, vibrato or
   body EQ) with the app's small too-similar steps; the listener heard most sounds as alike and plain, which led to v3: chorus, engine vibrato
-  (up to 20 cents) and body EQ are searched per sound, and every "distinct" step is larger (chorus and vibrato count as traits).
-- **Session.** Rising only. 20 direct choices with the tuning search's answers (Prefer A / B, Both good, Neither). Pairs 1-3: six sounds spread as
-  far apart as the pool allows (farthest-point in feature space from a random first sound). Pairs 4-5: playoff of the opening winners.
+  (up to 20 cents) and body EQ are searched per sound, and every "distinct" step is larger (chorus and vibrato count as traits). In the
+  v3 pool 61% of sounds had over 10 cents of vibrato and a session sounded ghostly (2026-11-17), so v4 (118 sounds) caps vibrato at 8 cents
+  and starts half of new sounds dry (vibrato median 3.1 cents).
+- **Session, regions (current, 2026-11-17).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
+  region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
+  region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the
+  best region (70%) or the runner-up; two Neither answers open the next region. Pair 20 and shortlist as below. Reason: the random start and
+  rim-first opening made sessions feel random and could start in an odd corner; the listener asked for about 10 pairs of broad clues first.
+- **Session, v5 (kept in code as `SoundMapDiscovery`).** Rising only. 20 direct choices with the tuning search's answers (Prefer A / B, Both good, Neither). Pairs 1-3: six sounds spread
+  around the middle ring of the pool (v4 and before: as far apart as the whole pool allows, from a random first sound). Pairs 4-5: playoff of the opening winners.
   Pairs 6-19: the champion against the unheard pool sound with the highest Thompson-sampled utility, never a near-copy of the champion (backend
   check on spectrum, pitch, inharmonicity, roughness and pulsing; the app's spectrum-and-pitch check is used for the tuning search only). Winner stays: a challenger that wins becomes champion and defends next. Pair 20 plays the shortlist's #1
   against #2 as they stand, so the last answer decides which of the top two leads. The shortlist is in model order among sounds heard at
@@ -86,6 +93,8 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   On the v2 pool (233 sounds, 2026-11-17): pick in the listener's top 5% in 22% of sessions vs 25% for random challengers (+-5%), top 10% in
   40% vs 39%. Still a tie: 20 pairs hear under a tenth of the pool, and the pair policy is the open question below.
   On the v3 pool (99 sounds, 2026-11-17): 26% vs 28% (+-5%), top 10% 42% vs 45%; a tie.
+  On the v4 pool (118 sounds, 400 per condition, 2026-11-17): regions 26% top 5% (+-4%), top 10% 44%, median rank 12%; v5 23%, 37%, 15%;
+  random challengers 18%, 35%, 15%. First version ahead of random on top 10%; still to be checked by listeners.
 - **Not built (phase 2).** Growing new sounds around the listener's favourites between pairs (mutation + the same guardrail).
 - **Open question: pair design (deferred, 2026-11-17).** Champion vs challenger ("winner stays", added after the first session) is one
   choice, kept for now. The alternative to discuss: pairs chosen to learn the listener's taste, which need not include the favourite (e.g. two
