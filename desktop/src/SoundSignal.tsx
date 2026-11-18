@@ -60,9 +60,11 @@ export default function SoundSignal({ analyser, soundDebug, onClose }: { analyse
   }, [soundDebug])
 
   useEffect(() => {
-    let frame = 0
-    const draw = () => {
+    let frame = 0, last = 0
+    const draw = (now: number) => {
       frame = requestAnimationFrame(draw)
+      if (now - last < 50) return  // 20 fps: the sound's 50 ms drive steps share this thread
+      last = now
       canvases.current.forEach((canvas, panel) => {
         if (!canvas) return
         const ratio = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight
@@ -127,13 +129,13 @@ function waveform(g: CanvasRenderingContext2D, w: number, h: number, s: Store) {
 /** Log-spaced bands, falling slowly, with peak-hold ticks. */
 function bars(g: CanvasRenderingContext2D, w: number, h: number, s: Store) {
   const info = s.info, high = info ? Math.min(HIGH, info.rate / 2) : HIGH, gap = 3, size = (w - gap * (BANDS - 1)) / BANDS, floor = h - 16
+  const fill = g.createLinearGradient(0, floor, 0, 6); fill.addColorStop(0, '#3a3a3a'); fill.addColorStop(1, '#f2f2f2')
   for (let b = 0; b < BANDS; b++) {
     let top = -120
     if (info) { const from = Math.floor(band(b, BANDS, high) / info.hz), to = Math.max(from + 1, Math.floor(band(b + 1, BANDS, high) / info.hz)); for (let i = from; i < to && i < info.db.length; i++) top = Math.max(top, info.db[i]) }
     s.bars[b] = Math.max(norm(top), s.bars[b] - .015); s.holds[b] = Math.max(s.bars[b], s.holds[b] - .004)
     const x = b * (size + gap), y = floor - s.bars[b] * (floor - 6)
-    const fill = g.createLinearGradient(0, floor, 0, 6); fill.addColorStop(0, '#3a3a3a'); fill.addColorStop(1, '#f2f2f2')
-    g.shadowColor = '#ffffff'; g.shadowBlur = 6; g.fillStyle = fill; g.fillRect(x, y, size, floor - y)
+    g.shadowBlur = 0; g.fillStyle = fill; g.fillRect(x, y, size, floor - y)
     g.shadowColor = GLOW; g.fillStyle = GLOW; g.fillRect(x, floor - s.holds[b] * (floor - 6) - 2, size, 2)
   }
   for (const f of [100, 1000, 10000]) if (f < high) text(g, f >= 1000 ? `${f / 1000}k` : `${f}`, Math.log(f / LOW) / Math.log(high / LOW) * w, h - 2, 'center')
@@ -155,7 +157,7 @@ function plate(g: CanvasRenderingContext2D, w: number, h: number, s: Store) {
   g.fillStyle = '#121212'; g.fillRect(ox, 0, size, size)
   if (s.field) g.drawImage(s.field, ox, 0, size, size)
   const shake = info && s.mode.length ? Math.min(1, Math.max(0, (info.level + 70) / 50)) * .02 : 0
-  g.fillStyle = '#f4efe2'; g.shadowColor = '#f4efe2'; g.shadowBlur = 2
+  g.fillStyle = '#f4efe2'; g.shadowBlur = 0  // no glow: 2600 blurred dots per frame stalled the sound
   for (let p = 0; p < SAND; p++) {
     let x = s.sand[2 * p], y = s.sand[2 * p + 1]
     const move = shake * Math.min(1.5, Math.abs(z(x, y)))

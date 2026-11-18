@@ -43,14 +43,15 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
   const semitones = -10 - launchDepth + (mode === 'steady' ? 9 : 11) * travel * pitchRegister + (mode === 'evolving' ? 4 * (1 - Math.exp(-highSpeed / 80)) : 0)
   return {
     cycleSpeed: mode === 'evolving' ? .25 + .75 * Math.max(pedal, power) : 1,
-    loopHold: mode === 'evolving' && Number.isFinite(input.speedKmh) && input.speedKmh >= 100 ? 1 : 0,
+    // Evolving parks its rising sweeps above 100 km/h and while coasting or regenerating (sweeping up while slowing sounded wrong, 2026-11-18).
+    loopHold: mode === 'evolving' && ((Number.isFinite(input.speedKmh) && input.speedKmh >= 100) || (pedal < .03 && power < .01)) ? 1 : 0,
     rate: Math.pow(2, semitones / 12), semitones,
     bodyGain: 1,
     padGain: .65 + .2 * propulsion,
     glassGain: .1 + propulsion * .25 + .08 * acceleration,
     airGain: 1,
     cutoff: 1300 + 900 * propulsion - 200 * regen + 350 * acceleration,
-    driveGain: input.running && !input.starting && !stale ? activity * (.9 * presence * (1 - .6 * quietCruise) + .12 * regen) : 0,
+    driveGain: input.running && !input.starting && !stale ? activity * (.9 * presence * (1 - .6 * quietCruise) + .06 * regen) : 0,  // regen halved (-6 dB): heard as too loud, 2026-11-18
     propulsion, regen,
   }
 }

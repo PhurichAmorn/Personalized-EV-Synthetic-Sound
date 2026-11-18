@@ -120,4 +120,4 @@ export function stackStems(p: StackParams): Float32Array[][] {
 }
 
 /** The fixed after-player stage (granular-processor EngineStage config fields). */
-export const stackStage = (p: StackParams) => ({ resonances: [[p.peakHz, p.peakDb, .8]] as [number, number, number][], lowpassHz: p.cutoff })
+export const stackStage = (p: StackParams) => ({ resonances: [[p.peakHz, p.peakDb, .8]] as [number, number, number][], lowpassHz: p.cutoff, lowpassFollow: true })  // follow: the low-pass moves with pitch; fixed, rising octave layers sounded stalled (2026-11-18)

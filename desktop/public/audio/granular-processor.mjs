@@ -120,6 +120,7 @@ export class EngineStage {
       return biquad(1+alpha*A,-2*Math.cos(w),1-alpha*A,1+alpha/A,-2*Math.cos(w),1-alpha/A)
     }),...(config.lowpassHz?[(()=>{const w=2*Math.PI*config.lowpassHz/sampleRate,alpha=Math.sin(w)/(2*.707),c=Math.cos(w)
       return biquad((1-c)/2,1-c,(1-c)/2,1+alpha,-2*c,1-alpha)})()]:[])]
+    this.lowRate=1  // lowpassFollow: cutoff = lowpassHz x playback rate, coefficients updated when the rate moves 0.5%
     this.state=[0,1].map(()=>this.filters.map(()=>[0,0,0,0]))
     const k=sampleRate/44100
     this.rooms=[0,1].map(side=>({combs:[557,593,641,677].map(d=>({buffer:new Float64Array(Math.round((d+side*17)*k)),index:0,low:0})),
@@ -140,6 +141,10 @@ export class EngineStage {
       this.to=1+this.config.rasp*(.15*random+alternate)  // mostly the regular half-order alternation (tonal growl); fully random sounded noisy (tone-to-noise 17 vs 34 dB) and wobbly
     }
     const gain=this.config.rasp?this.from+(this.to-this.from)*(.5-.5*Math.cos(Math.PI*this.cycle)):1
+    if(this.config.lowpassFollow&&this.config.lowpassHz&&Math.abs(rate/this.lowRate-1)>.005) {
+      this.lowRate=rate;const w=2*Math.PI*Math.min(this.fs*.45,this.config.lowpassHz*rate)/this.fs,alpha=Math.sin(w)/(2*.707),c=Math.cos(w),a0=1+alpha
+      this.filters[this.filters.length-1]={b:[(1-c)/2/a0,(1-c)/a0,(1-c)/2/a0],a:[-2*c/a0,(1-alpha)/a0]}
+    }
     const out=[left*gain,right*gain]
     for(let c=0;c<2;c++) for(let f=0;f<this.filters.length;f++) {
       const {b,a}=this.filters[f],s=this.state[c][f],x=out[c]
