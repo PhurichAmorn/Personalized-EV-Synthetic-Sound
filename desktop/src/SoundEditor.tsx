@@ -6,7 +6,7 @@ import SteadySource, { type SourceHandle } from './SteadySource'
 import type { GranularMode } from './granularPlayer'
 import { LabPlayer } from './labEngine'
 import { isLiveRecipe, liveSound } from './levels'
-import { liveStems } from './voiceCache'
+import { liveStems, ownStems } from './voiceCache'
 import { simulatedDrive } from './simulatedDrive'
 import type { DiscoveryCandidate } from './SourceSearch'
 // Sound Lab page loads on first open: the BeamNG overlay and a plain drive never download it.
@@ -47,6 +47,8 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
   // GS plays the driver's sound (newest saved final, kept across restarts) in the GS mode; the stock source only before any session.
   const my = state.mySound
   const mine = my && isLiveRecipe(my.recipe) ? { id: my.id, label: my.label, recipe: my.recipe, urls: [], traces: {} } : null
+  // Load the driver's own sound at app start (from disk after its first build), so GS and BeamNG never wait for a build.
+  useEffect(() => { if (mine) void ownStems(mine.recipe).catch(() => {}) }, [mine?.id])
   const startSound = (refresh = false, motion = granularMode) => {
     if (mine) { onSourceSelected?.(); void audition(mine, 'driving', motion) }
     else source.current?.start(refresh)
@@ -88,6 +90,7 @@ export function useCarSound(state: State, onCommand: Command, personalizeOpen: b
   }, [state.running, state.starting, personalizeOpen, state.mySound?.id])
   return {
     gs, mode, start: () => start(),
+    select: (next: GranularMode) => { setMode(next); start(next) },
     cycle: () => { const next = mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'; setMode(next); start(next) },
     theme: (name: string) => { setGs(false); ref.current?.stop(); void onCommand('theme', { name }) },
     stop: () => ref.current?.stop(),

@@ -5,6 +5,7 @@ import SoundSignal from './SoundSignal'
 import type { SoundDebug } from './Diagnostics'
 import NavRail from './NavRail'
 import type { State } from './App'
+import { playWelcome } from './welcomeSound'
 
 type Props = {
   state: State
@@ -75,13 +76,9 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
   const [soundLabOpen, setSoundLabOpen] = useState(initialSoundLab)
   const [showInputs, setShowInputs] = useState(false)
   const [customizerOpen, setCustomizerOpen] = useState(false)
-  // Sound signal panel: opened from the header (SIGNAL) or View > Sound signal; polls the backend synth only while open.
+  // Sound signal panel: opened from the header (SIGNAL); polls the backend synth only while open.
   const [signalOpen, setSignalOpen] = useState(false)
   const [soundDebug, setSoundDebug] = useState<SoundDebug | null>(null)
-  useEffect(() => {
-    const stop = window.__TAURI__?.event.listen('toggle-sound-signal', () => setSignalOpen(open => !open))
-    return () => { void stop?.then(off => off()) }
-  }, [])
   useEffect(() => {
     if (!signalOpen) return
     void onCommand('debugVisible', { value: true })
@@ -132,7 +129,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
   }, [customizerOpen])
   const connected = !!state.controllerName
   const startVehicleFromButton = async () => {
-    if (!state.running) car.stop()
+    if (!state.running) { car.stop(); playWelcome() }  // welcome choir on the click itself, not after the backend answers
     await onCommand('toggle')
   }
   const status = state.soundSweepActive ? 'AUDIO DEBUG' : state.starting ? 'STARTING' : state.running ? 'READY' : 'STANDBY'
@@ -165,12 +162,8 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <div className="dashboard-brand"><strong>EV SOUND LAB</strong><small>DRIVE SIMULATOR</small></div>
         <div className="header-spacer" />
         <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : 'SOUND'}</span>
-        <div className="theme-buttons" role="group" aria-label="Sound theme">
-          <div className="theme-option"><button className={'theme-button' + (car.gs ? ' active' : '')} aria-pressed={car.gs} disabled={state.search.active || state.soundSweepActive} onClick={car.start}>GS</button><button className="theme-recipe" aria-label={`Next granular mode, currently ${car.mode}`} title={`Change mode: ${car.mode}`} disabled={state.search.active || state.soundSweepActive} onClick={car.cycle}><span aria-hidden="true">⏭</span><small>{car.mode === 'steady' ? 'Steady' : car.mode === 'rise' ? 'Rise' : 'Evolving'}</small></button></div>
-          {state.soundThemes.map(name => <div className="theme-option" key={name}>
-            <button className={'theme-button ' + name.toLowerCase() + (name === state.soundTheme && !car.gs ? ' active' : '')} aria-label={`${name} sound, ${state.soundRecipeSelection[name]}`} aria-pressed={name === state.soundTheme && !car.gs} disabled={state.search.active || state.soundSweepActive || state.sourceDiscovery?.active} onClick={() => car.theme(name)}>{name}</button>
-            <button className="theme-recipe" aria-label={`Change ${name} sound recipe, currently ${state.soundRecipeSelection[name]}`} title={`Change tune: ${state.soundRecipeSelection[name]}`} disabled={state.search.active || state.soundSweepActive || state.sourceAudition} onClick={() => onCommand('recipeCycle', { name })}><span aria-hidden="true">⏭</span><small>{state.soundRecipeSelection[name]}</small></button>
-          </div>)}
+        <div className="theme-buttons" role="group" aria-label="Sound motion">
+          {(['rise', 'evolving'] as const).map(mode => <div className="theme-option" key={mode}><button className={'theme-button' + (car.gs && car.mode === mode ? ' active' : '')} aria-pressed={car.gs && car.mode === mode} disabled={state.search.active || state.soundSweepActive} onClick={() => car.select(mode)}>{mode === 'rise' ? 'Rising' : 'Evolving'}</button></div>)}
         </div>
         {!!state.mySounds?.length && <select className="vehicle-selector" aria-label="GS sound: final pick of a session" title="GS sound" value={state.mySound?.session ?? ''} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('mySound', { id: event.target.value })}>{state.mySounds.map(s => <option key={s.session} value={s.session}>{s.created.slice(5, 16).replace('T', ' ')} · {s.label || 'sound'}</option>)}</select>}
         <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
@@ -202,7 +195,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
           {showInputs && <div className="input-options"><label><input type="checkbox" checked={state.controllerEnabled} onChange={event => onCommand('controllerEnabled', { value: event.target.checked })} /> Controller enabled</label><select aria-label="Controller" onChange={event => onCommand('controller', { id: Number(event.target.value) })}><option value="-1">Automatic</option>{state.availableControllers.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}</select></div>}
         </div>
         <div className={'controls-spacer' + (searchPanel ? ' has-search-panel' : '')}>{searchPanel && <div className="dashboard-search-slot">{searchPanel}</div>}</div>
-        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.starting ? 'STARTING' : state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button></>}</div>
+        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button></>}</div>
       </section>
       {(error || state.audioError || sourceAudioError) && <div role="alert" className="dashboard-error">{error || state.audioError || sourceAudioError}</div>}
       <SoundEditor onAudioError={setSourceAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />
