@@ -4,7 +4,8 @@ import { roomImpulse } from './plainSource'
  * 2026-11-18): a female choir on a steady Dmaj9 chord (D5 strongest; F#5, A5, D6; F#4, A4 below; C#6, E6 shimmer), each note sung by
  * a wide ensemble (+-20-40 cents), fully wide stereo, soft breath above 8 kHz, a 1.5 s swell and a long hall decay. Its pitch does not
  * glide; the lift comes from the swell, and here also from the notes entering low to high. Plain WebAudio, built at once. */
-export function playWelcome(volume = .16) { void playRecorded().then(played => { if (!played) synthChoir(volume) }) }
+export function playWelcome(volume = .11)  // .16 heard as a little too loud (2026-11-18)
+ { void playRecorded().then(played => { if (!played) synthChoir(volume) }) }
 
 /** A recorded welcome (owner's licensed clip, e.g. Envato "Heaven Choir") if present at public/audio/welcome.wav or .mp3:
  * the first 2.5 s with a fade-out. Git-ignored: a licensed sound file must not go into the public repo. */
@@ -31,7 +32,8 @@ function synthChoir(volume: number) {
   soft.type = 'lowpass'; soft.frequency.value = 5500; soft.Q.value = .5
   dry.gain.value = .45; wet.gain.value = .9  // the reference's decay is mostly hall
   soft.connect(out); out.connect(dry); out.connect(reverb); reverb.connect(wet); dry.connect(audio.destination); wet.connect(audio.destination)
-  out.gain.setValueAtTime(0, now); out.gain.linearRampToValueAtTime(volume, now + swell); out.gain.setValueAtTime(volume, now + 1.3)
+  // Exponential swell (slow start, then up), not a straight line: from -60 dB to full.
+  out.gain.setValueAtTime(volume * .001, now); out.gain.exponentialRampToValueAtTime(volume, now + swell * 2); out.gain.setValueAtTime(volume, now + 1.3)
   out.gain.exponentialRampToValueAtTime(.0001, release)
   // Voice: harmonics falling as 1/n^1.3, vowel peak at 1.2 kHz, low-pass 5.5 kHz: matched to the reference's octave bands within
   // about 2 dB (spectral centre 1090 vs 1104 Hz, offline numpy render of this design, 2026-11-18).

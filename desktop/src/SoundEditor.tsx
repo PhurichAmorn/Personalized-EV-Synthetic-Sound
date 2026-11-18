@@ -62,7 +62,7 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
   const backendReady = typeof state.sourceAudition === 'boolean' && typeof state.motorLoad === 'number'
   return <section className={"sound-editor" + (embedded ? " sound-editor-embedded" : "")} hidden={!active || embedded} aria-label="Sound Lab">
     {active && <>
-      {!embedded && <Suspense fallback={null}><SoundLab onStart={stopAll} stopToken={labStop} /></Suspense>}
+      {!embedded && <Suspense fallback={null}><SoundLab state={state} onCommand={onCommand} onStart={stopAll} stopToken={labStop} /></Suspense>}
       {backendReady && !state.search.active && !state.soundSweepActive && createPortal(<SourceSearch hidden={!personalizeOpen} discovery={state.sourceDiscovery} onCommand={onCommand} onContext={() => lab.playing ? lab.context() : source.current?.auditionContext() ?? { input: 'live', style: granularMode }} mode={granularMode} onModeChange={onModeChange} playing={sourcePlaying || labPlaying} running={state.running && !state.starting} activity={state.power > .01 || ((state.motorLoad ?? 0) < -.01 && state.speed > 1)} onStop={stopAll} onAudition={audition} />, discoveryContainer)}
       {backendReady && !state.search.active && !state.soundSweepActive ? <><SteadySource onError={onAudioError} granularMode={granularMode} ref={source} onPlay={() => { onSourceSelected?.(); setSourcePlaying(true); setLabStop(value => value + 1); stopLab() }} onPlayingChange={setSourcePlaying} driving={driving} /></> : <p className="sound-editor-error">{!backendReady ? 'Restart EV Sound Lab to load live source support.' : 'Stop the experiment or audio debug sweep to try the source renderer.'}</p>}
     </>}

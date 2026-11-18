@@ -4,6 +4,7 @@ import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
 import { describeSound, isLiveRecipe, isTuningRecipe, tooSimilar, type LiveRecipe } from './levels'
 import { liveStems } from './voiceCache'
+import { playWelcome } from './welcomeSound'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
@@ -15,7 +16,6 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [readyAudition, setReadyAudition] = useState<string | null>(null)
   const auditionSequence = useRef(0)
   const [error, setError] = useState('')
-  const [finishConfirm, setFinishConfirm] = useState(false)
   const [pendingFinal, setPendingFinal] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [ratings, setRatings] = useState<Record<string, number>>({})
@@ -65,7 +65,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   }
   // Pair 1 asks Rising vs Evolving (same sound), so the session starts with one button.
   const begin = async () => {
-    onStop()
+    onStop(); if (!running) playWelcome()  // the session starts the car too: same welcome as the START button
     const vehicle = await onCommand('vehicleStart') as { running?: boolean; starting?: boolean } | null
     if (!vehicle?.running && !vehicle?.starting) return
     onModeChange('rise'); await onCommand('sourceDiscoveryStart', { search })
@@ -96,10 +96,9 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   useEffect(() => { if (!playing) setNowPlaying(null) }, [playing])
   const preparing = discovery?.active && (discovery.busy || pairReady !== (revision ?? null))
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
-    <section className="panel p-4 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}{discovery?.active && <button type="button" className="control" onClick={() => setFinishConfirm(true)}>Finish</button>}</div></div>
+    <section className="panel p-3 source-search-comparison">
+      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}</div></div>
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
-      {finishConfirm && discovery?.active && <div className="mt-3 space-y-3" role="alert"><p className="text-sm">Finish now? You are at step {discovery.step ?? discovery.completed} of {discovery.totalSteps ?? 20}. The remaining pairs are skipped and the finalists come only from what you have rated so far.</p><div className="flex flex-wrap gap-2"><button type="button" className="control" autoFocus onClick={() => setFinishConfirm(false)}>Keep going</button><button type="button" className="control" onClick={() => { setFinishConfirm(false); onStop(); setAudition(null); void onCommand('sourceDiscoveryFinish') }}>Finish now</button></div></div>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {discovery && !discovery.active ? <p className="mt-3 text-sm text-neutral-300" role="status">{discovery.finalists?.length ? `Session complete · ${discovery.step ?? discovery.completed} comparisons.${discovery.final ? '' : ' Choose your final sound from your shortlist below.'}` : discovery.completed ? `Session finished after ${discovery.completed} comparisons.` : 'Start a session to compare sources.'}</p> : discovery?.active ? <>
         {nowPlaying && playing && <p className="mt-3 text-sm text-neutral-200" role="status">▶ Now playing: <strong>{nowPlaying.label}</strong></p>}
@@ -120,7 +119,6 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
                 <output>{value ?? '–'}</output>
               </label>
             })()}
-            <details className="text-xs text-neutral-400"><summary>Source recipe</summary><pre className="source-recipe-json">{JSON.stringify(candidate.recipe, null, 2)}</pre></details>
           </div>)}
         </div>
         {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending} onClick={() => setChoice(value)}>{label}</button>)}<button type="button" className="control" disabled={!choice || pending} onClick={() => void submitChoice()}>Save choice · next</button></div>

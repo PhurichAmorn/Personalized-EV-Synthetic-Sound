@@ -11,7 +11,7 @@ const traceLab = new LabPlayer()
 type Command = <T = unknown>(name: string, payload?: Record<string, unknown>) => Promise<T | null>
 export type HistoryPreview = { session?: string; candidate?: string; status?: 'rendering' | 'ready' | 'error'; url?: string; error?: string }
 type Row = { id: string; created: string; completed: number; final: string | null; finalists: number; done: boolean; starred?: boolean }
-type Saved = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; ratings?: number[]; audio_descriptor?: number[] }
+type Saved = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; ratings?: number[]; audio_descriptor?: number[]; origin?: { kind?: string; move?: string; motion?: string; summary?: string } }
 type Session = {
   id: string; created: string; final: string | null
   // rating_source: 'rating-1-7' (legacy and normal pairs) or 'choice' (parent check). Sessions before 2026-11-10 have no rating_source and are 1-7.
@@ -23,6 +23,44 @@ type Session = {
 const BANDS = ['<100', '100', '180', '300', '500', '800', '1.2k', '1.8k', '2.6k', '4k', '6.5k', '12k+']
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) // the computer's own clock and zone
 const short = (id: string) => id.slice(0, 6)
+// Texture style of a layered sound, as the search groups them (= map_style in experiment/source_search.py).
+const STYLES: Record<string, number[]> = { electric: [9, 10, 11], strings: [1, 7, 8], glass: [3, 4], choir: [6], plain: [0, 2] }
+function styleOf(recipe: SourceRecipe | LiveRecipe) {
+  const voice = (recipe as { voice?: { kind: string; stack?: { layers: number; timbres: number[] } } }).voice
+  if (voice?.kind !== 'stack' || !voice.stack) return null
+  const layers = voice.stack.timbres.slice(0, voice.stack.layers)
+  const count = Object.entries(STYLES).map(([name, family]) => [layers.filter(t => family.includes(t)).length, name] as const).sort((a, b) => b[0] - a[0])
+  return 2 * count[0][0] >= layers.length && count[0][0] > count[1][0] ? count[0][1] : 'blend'
+}
+const OPPOSITE: Record<string, string> = { brighter: 'darker', darker: 'brighter', deeper: 'higher', higher: 'deeper', fuller: 'thinner', thinner: 'fuller', smoother: 'shimmer', shimmer: 'smoother', 'body+': 'body-', 'body-': 'body+' }
+/** Why each pair's sounds were played: a returning winner, or where a new sound came from (and, for fine-tune variations, the move
+ * credit that led there: a won move +1 and its opposite -1, as the search counts it). */
+function pairReasons(session: Session) {
+  const credit: Record<string, number> = {}, out: Record<string, string>[] = []
+  let lastWinner: { id: string; pair: number } | null = null
+  session.history.forEach((row, index) => {
+    const reasons: Record<string, string> = {}
+    for (const id of row.pair) {
+      const c = session.candidates[id], origin = c?.origin ?? {}, style = c ? styleOf(c.recipe) : null, tag = style ? ` · ${style}` : ''
+      if (lastWinner?.id === id) { reasons[id] = `Your pick from pair ${lastWinner.pair}, defending`; continue }
+      const move = origin.move && origin.move !== 'original' ? origin.move : null
+      reasons[id] = origin.kind === 'motion' ? `Same sound, ${origin.motion === 'evolving' ? 'Evolving' : 'Rising'}`
+        : origin.kind === 'opening' ? `Opening: typical sound${tag}`
+        : origin.kind === 'region' ? `Styles compete${tag}`
+        : origin.kind === 'challenger' ? `Challenger from your leading styles${tag}`
+        : origin.kind === 'variation' ? (move ? `${move} version of your pick${move.split('+').some(m => (credit[m] ?? 0) > 0) ? ` · '${move.split('+').filter(m => (credit[m] ?? 0) > 0).join("', '")}' won before` : ''}` : 'The original of your pick')
+        : origin.summary ?? ''
+    }
+    out.push(reasons)
+    if (row.winner) {
+      lastWinner = { id: row.winner, pair: index + 1 }
+      for (const id of row.pair) for (const m of (session.candidates[id]?.origin?.move ?? '').split('+').filter(m => m && m !== 'original')) {
+        const sign = id === row.winner ? 1 : -1; credit[m] = (credit[m] ?? 0) + sign; if (OPPOSITE[m]) credit[OPPOSITE[m]] = (credit[OPPOSITE[m]] ?? 0) - sign
+      }
+    }
+  })
+  return out
+}
 const isLive = isLiveRecipe  // built and played in the app, not rendered offline
 // Source settings shown in the trace: level/tuning base, or a sound-map voice (plain synth or blocks shape + controls).
 const settingsOf = (r: LiveRecipe): object => 'base' in r ? r.base : r.voice ? (r.voice.kind === 'blocks' ? { voice: 'blocks', ...r.voice.shape, ...r.voice.controls } : r.voice.kind === 'stack' ? { voice: 'stack', ...r.voice.stack } : r.voice.plain) : r.plain ?? {}
@@ -66,10 +104,11 @@ export default function TraceHistory({ command, preview }: { command: Command; p
   return <div className={'history-layout' + (detail ? ' with-detail' : '')}>
     <section className="panel history-list" aria-label="Saved sessions">
       <h2 className="text-xl">Sound trace</h2>
-      {rows.length === 0 && <p className="text-sm text-neutral-400">No saved sessions yet. Sound discovery sessions save here automatically.</p>}
-      {rows.map(row => <button key={row.id} className={'control history-item' + (session?.id === row.id ? ' selected' : '')} aria-pressed={session?.id === row.id} onClick={() => void open(row.id)}>
+      {/* Only finished sessions are listed; unfinished ones stay on disk. */}
+      {!rows.some(row => row.final || row.done) && <p className="text-sm text-neutral-400">No saved sessions yet. Sound discovery sessions save here automatically.</p>}
+      {rows.filter(row => row.final || row.done).map(row => <button key={row.id} className={'control history-item' + (session?.id === row.id ? ' selected' : '')} aria-pressed={session?.id === row.id} onClick={() => void open(row.id)}>
         <strong>{row.starred && <span className="history-star" aria-label="Starred">★ </span>}{when(row.created)}</strong>
-        <span>{row.completed} comparisons · {row.final ? 'favorite chosen' : row.done ? 'finalists ranked' : 'in progress'}</span>
+        <span>{row.completed} comparisons · {row.final ? 'favorite chosen' : 'finalists ranked'}</span>
       </button>)}
     </section>
     <section className="panel history-trace" aria-label="Session trace">
@@ -81,11 +120,29 @@ export default function TraceHistory({ command, preview }: { command: Command; p
               : <button className="icon-button danger" title="Delete session" aria-label="Delete session" onClick={() => setConfirmDelete(true)}><img src="/icons/trash.svg" alt="" /></button>}
           </div>
         </div>
-        <div className="history-steps">
-          {session.history.map((row, index) => <div className="history-step" key={index}>
-            <h3>Pair {index + 1}{row.rating_source === 'choice' ? ` · ${row.choice === 'equal' ? 'liked equally' : row.choice === 'good' ? 'both good' : row.choice === 'neither' ? 'neither' : `Sound ${row.choice} preferred`}` : ''}</h3>
-            {[['A', 0], ['B', 1]].map(([slot, i]) => { const id = row.pair[i as number]; return <div key={slot as string}>{soundRow(id, row.rating_source === 'choice' ? `Sound ${slot}${row.winner === id ? ' · preferred' : ''}` : `Sound ${slot} · rated ${row.ratings?.[slot as 'A' | 'B']}/7`)}{row.origin_by_candidate?.[id] && <p className="text-xs text-neutral-400">{row.origin_by_candidate[id]}</p>}</div> })}
-          </div>)}
+        <div className="history-steps history-tree">
+          {(() => {
+            // Tree: the chosen sound continues down the trunk; the other sound branches off to the side and ends there.
+            // A sound that was not the previous pick but wins starts a new trunk segment ("new pick").
+            const reasons = pairReasons(session)
+            return session.history.map((row, index) => {
+              const label = (id: string) => `Sound ${row.pair[0] === id ? 'A' : 'B'}`
+              const sound = (id: string, kept: boolean) => <div className={'tree-sound' + (kept ? ' kept' : ' dropped')}>
+                {soundRow(id, row.rating_source === 'choice' ? `${label(id)}${kept && row.winner ? ' · ★ chosen' : ''}` : `${label(id)} · rated ${row.ratings?.[label(id).slice(-1) as 'A' | 'B']}/7`)}
+                <p className="history-why">{reasons[index][id] || row.origin_by_candidate?.[id]}</p></div>
+              const trunk = row.winner ? [row.winner] : row.choice === 'good' ? row.pair : []
+              const branch = row.pair.filter(id => !trunk.includes(id))
+              const fresh = row.winner && index > 0 && session.history[index - 1].winner !== row.winner
+              const answer = row.choice === 'neither' ? 'neither liked' : row.choice === 'good' ? 'both good' : row.choice === 'equal' ? 'liked equally' : ''
+              return <div className={'tree-node' + (fresh ? ' fresh' : '')} key={index}>
+                <h3>Pair {index + 1}{fresh ? ' · new pick' : ''}{answer ? ` · ${answer}` : ''}</h3>
+                <div className="tree-row">
+                  <div className="tree-trunk">{trunk.map(id => <div key={id}>{sound(id, true)}</div>)}{!trunk.length && <p className="history-why">— no pick —</p>}</div>
+                  <div className="tree-branch">{branch.map(id => <div key={id}>{sound(id, false)}</div>)}</div>
+                </div>
+              </div>
+            })
+          })()}
           {session.playoff_history.map((row, index) => <div className="history-step" key={'p' + index}>
             <h3>Final round {index + 1} · {row.choice === 'equal' ? 'liked equally' : `Sound ${row.choice} preferred`}</h3>
             {row.pair.map((id, i) => <div key={id}>{soundRow(id, `Sound ${'AB'[i]}${row.winner === id ? ' · preferred' : ''}`)}</div>)}

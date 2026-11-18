@@ -61,7 +61,7 @@ function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, s
       ? shownCharge > 0 ? 180 - 45 * Math.min(1, shownCharge) : 180 + 180 * fraction
       : circleStart + circleSweep * fraction
     const needleColor = '#e5e5e5'
-    return <svg viewBox="-15 0 290 430" className="cluster-gauge cluster-circle-gauge" role="img" aria-label={isPower ? 'Circular power and regeneration gauge' : 'Circular speed gauge'}>
+    return <svg viewBox="-15 38 290 297" className="cluster-gauge cluster-circle-gauge" role="img" aria-label={isPower ? 'Circular power and regeneration gauge' : 'Circular speed gauge'}>
       {isPower
         ? <><path d={circleArc(180, 360, circleRadius)} className="circle-gauge-track circle-gauge-power-track" />
           {fraction > 0 && <path d={circleArc(180, 180 + 180 * fraction, circleRadius)} className="circle-gauge-active" />}
