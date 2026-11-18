@@ -1266,11 +1266,13 @@ class RegionMapDiscovery(SoundMapDiscovery):
     def _load(self):
         fresh=self.pool is None;super()._load()
         if fresh:
-            label,typical=map_regions(np.array([s['unit'] for s in self.pool]))
-            self.region={s['id']:int(k) for s,k in zip(self.pool,label)};self.typical=[self.pool[i] for i in typical]
+            label,typical=self._regions()
+            self.region={s['id']:int(k) for s,k in zip(self.pool,label)};self.typical=[self.pool[i] for i in typical];self.n_regions=len(typical)
+    def _regions(self):return map_regions(np.array([s['unit'] for s in self.pool]))
+    region_names=None  # names per region for the export (styles); None: numbered
     def _region_record(self,rows):
         """Wins and losses per region over all answers: Both good is a win for both sounds' regions, Neither a loss for both."""
-        w,l=np.zeros(MAP_REGIONS),np.zeros(MAP_REGIONS);reg=lambda i:self.region[self.candidates[i]['recipe']['cell']]
+        w,l=np.zeros(self.n_regions),np.zeros(self.n_regions);reg=lambda i:self.region[self.candidates[i]['recipe']['cell']]
         for r in rows:
             a,b=r['pair']
             if r['choice']=='good':w[reg(a)]+=1;w[reg(b)]+=1
@@ -1279,9 +1281,9 @@ class RegionMapDiscovery(SoundMapDiscovery):
         return w,l
     def _map_rows(self):return self._choices()[self.motion_pairs:]  # answers after the Rising vs Evolving pair
     def focus_regions(self,rows=None):
-        """Regions in order of win rate (posterior mean); the first two plus one more per two Neither answers after the region stage."""
+        """Regions in order of win rate (posterior mean, Beta(2,2) prior); the first two plus one more per two Neither answers after the region stage."""
         rows=self._map_rows() if rows is None else rows;w,l=self._region_record(rows)
-        order=[int(k) for k in np.lexsort((-(w+l),-(w+1)/(w+l+2)))]
+        order=[int(k) for k in np.lexsort((-(w+l),-(w+2)/(w+l+4)))]  # prior 2 wins + 2 losses: a region with 2 lucky wins must not outrank one with 18-5 (2026-11-18)
         return order[:2+sum(r['choice']=='neither' for r in rows[MAP_EXPLORE:])//2]
     def _proposals(self):
         mp=self.motion_pairs
@@ -1293,13 +1295,20 @@ class RegionMapDiscovery(SoundMapDiscovery):
             if step==0:  # Evolving: each region's typical sound among those that also pass in Evolving
                 left=[min([s for s in space if self.region[s['id']]==self.region[t['id']]] or [t],key=lambda s:np.linalg.norm(s['unit']-t['unit'])) for t in self.typical];order=[]
                 while left:
-                    a=left.pop(0);b=max(left,key=lambda s:np.linalg.norm(s['unit']-a['unit']));left.remove(b);order+=[a,b]
+                    a=left.pop(0)
+                    if left:b=max(left,key=lambda s:np.linalg.norm(s['unit']-a['unit']));left.remove(b)
+                    else:b=max([s for s in space if s not in order and s is not a],key=lambda s:np.linalg.norm(s['unit']-a['unit']))  # odd region count: the sound most unlike the last one
+                    order+=[a,b]
+                while len(order)<2*MAP_OPENING:  # fewer regions than opening slots: the unheard sound most unlike those already in, and its opposite
+                    rest=[s for s in space if s not in order]
+                    a=max(rest,key=lambda s:min(np.linalg.norm(s['unit']-o['unit']) for o in order));rest.remove(a)
+                    order+=[a,max(rest,key=lambda s:np.linalg.norm(s['unit']-a['unit']))]
                 self.opening=[self._add_sound(s,'opening',f"Opening: region {self.region[s['id']]+1} ({s['id']})") for s in order]
             self.rematch=self.opening[2*step:2*step+2];return []
         if step<MAP_EXPLORE:
             w,l=self._region_record(rows);heard={i for r in self._choices() for i in r['pair']}|self.excluded;self._sample()
             pair=[]
-            for k in sorted(range(MAP_REGIONS),key=lambda k:-self.rng.betavariate(w[k]+1,l[k]+1)):
+            for k in sorted(range(self.n_regions),key=lambda k:-self.rng.betavariate(w[k]+1,l[k]+1)):
                 left=[s for s in space if self.region[s['id']]==k and self._id(map_recipe(s,self.motion)) not in heard]
                 if left:pair.append(max(left,key=lambda s:self._sampled(map_recipe(s,self.motion))))
                 if len(pair)==2:break
@@ -1314,7 +1323,7 @@ class RegionMapDiscovery(SoundMapDiscovery):
         return options
     def export(self):
         data=super().export();w,l=self._region_record(self._map_rows())
-        data.update(regions={'count':MAP_REGIONS,'explore':MAP_EXPLORE,'focus':[k+1 for k in self.focus_regions()],
+        data.update(regions={'count':self.n_regions,'names':self.region_names,'explore':MAP_EXPLORE,'focus':[k+1 for k in self.focus_regions()],
                              'wins':w.astype(int).tolist(),'losses':l.astype(int).tolist(),
                              'by_sound':{i:self.region[c['recipe']['cell']]+1 for i,c in self.candidates.items() if c['recipe'].get('cell') in self.region}})
         data['note']=data['note'].replace('Sound-map search (phase 1, v5).','Sound-map search (phase 1, regions v1). The pool is split into '
@@ -1322,4 +1331,32 @@ class RegionMapDiscovery(SoundMapDiscovery):
             '(Thompson sample of region win rates), each played by the model\'s best guess in that region. Pairs '
             f'{MAP_EXPLORE+1}-19: winner stays, challengers from the best region ({MAP_FOCUS:.0%}) or the runner-up; two Neither answers open the '
             'next region. Below: the v5 description, of which pair 20, the challenger rule, model and shortlist still apply.')
+        return data
+
+# Styles (2026-11-18): five texture families of the layered (stack) voice, = tools/sound_map/generate.py STYLES (stackVoice.ts STACK_TEXTURES ids).
+MAP_STYLES={'electric':(9,10,11),'strings':(1,7,8),'glass':(3,4),'choir':(6,),'plain':(0,2)}
+def map_style(sound):
+    """Texture family with the most layers of a stack sound (first in MAP_STYLES on a tie); None for other voices."""
+    if sound['voice']['kind']!='stack':return None
+    st=sound['voice']['stack'];layers=st['timbres'][:st['layers']]
+    return max(MAP_STYLES,key=lambda name:sum(t in MAP_STYLES[name] for t in layers))
+
+class StyleMapDiscovery(RegionMapDiscovery):
+    """Regions session with the pool's texture styles as regions (instead of k-means): pairs 1-3 play each style's most typical sound,
+    pairs 4-10 compare styles, pairs 11-19 stay in the best style (MAP_FOCUS) or the runner-up. The model also learns the style
+    (one-hot, beside the 9 traits). Styles with no pool sound are left out."""
+    policy='source-map-styles-1'
+    feature_names=MAP_FEATURE_NAMES+[f'style:{n}' for n in MAP_STYLES]
+    def _regions(self):
+        names=[n for n in MAP_STYLES if any(map_style(s)==n for s in self.pool)]
+        if len(names)<2:return super()._regions()  # not a layered pool: k-means regions
+        self.region_names=names;label=np.array([names.index(map_style(s)) if map_style(s) in names else 0 for s in self.pool]);units=np.array([s['unit'] for s in self.pool])
+        typical=[int(min(np.flatnonzero(label==k),key=lambda i:np.linalg.norm(units[i]-units[label==k].mean(0)))) for k in range(len(names))]
+        return label,typical
+    def _features(self,recipe):
+        style=map_style(self.by_cell[recipe['cell']]);return np.concatenate([super()._features(recipe),[float(style==n) for n in MAP_STYLES]])
+    def export(self):
+        data=super().export()
+        data['note']=data['note'].replace(f'The pool is split into {self.n_regions} regions (k-means on the 9 traits).',
+            f'The pool is split by texture style ({", ".join(self.region_names or [])}); the model also learns the style.')
         return data

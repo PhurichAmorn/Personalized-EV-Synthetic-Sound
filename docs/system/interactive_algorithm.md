@@ -74,7 +74,13 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
 - **Layered pool (current app pool, 2026-11-18).** `experiment/sound_map_pool.json` = `tools/sound_map/saved/layered_pool.json`: 61 octave-stack
   sounds (3-5 layers, each one texture, no air, no chorus, pulsing limit 0.2). Checked in Evolving too (`drive.py pool`): 59 pass; the
   other 2 play only in Rising sessions.
-- **Session, regions (current, 2026-11-17).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
+- **Session, styles (current, 2026-11-18; `StyleMapDiscovery`, policy `source-map-styles-1`).** The regions session with the pool's texture
+  styles as regions instead of k-means: electric, strings, glass, choir, plain (a stack sound's style = the family with most of its layers;
+  `tools/sound_map/generate.py --style` grows one style's library). Pairs 1-3 play each style's most typical sound (with fewer than six
+  styles the remaining slots take the sounds most unlike those already played). The model also learns the style (one-hot beside the 9
+  traits). Region ranking uses a Beta(2,2) prior so a style with two lucky wins does not outrank one with 18-5. Styles with no pool sound
+  are left out; the current 61-sound pool has only electric (47), strings (12) and plain (2): the per-style pools fill the rest.
+- **Session, regions (2026-11-17, kept as `RegionMapDiscovery`).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
   region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
   region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the
   best region (70%) or the runner-up; two Neither answers open the next region. Pair 20 and shortlist as below. Reason: the random start and

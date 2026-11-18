@@ -721,6 +721,22 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             data=d.export();self.assertEqual(data['policy'],'source-map-regions-1');self.assertEqual(data['regions']['focus'][0],liked+1)
             d.close()
         self.assertEqual(openings[0],openings[1])  # every listener hears the same six typical sounds first
+    def test_styles_open_with_every_style_then_focus_on_the_liked_style(self):
+        from experiment.source_search import StyleMapDiscovery,MAP_OPENING,MAP_EXPLORE,map_style
+        import random as stdrandom
+        d=StyleMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(3)
+        style=lambda i:map_style(d.by_cell[d.candidates[i]['recipe']['cell']])
+        self.assertGreaterEqual(len(d.region_names),2);liked='strings' if 'strings' in d.region_names else d.region_names[1]
+        opened=set()
+        for n in range(20):
+            self.assertEqual(len(d.pair),2,d.error)
+            if n<MAP_OPENING:opened|={style(i) for i in d.pair}
+            if MAP_EXPLORE<=n<19:self.assertTrue(any(d.region_names[d.region[d.candidates[i]['recipe']['cell']]] in [d.region_names[k] for k in d.focus_regions()] for i in d.pair))
+            a,b=d.pair;d.feedback(choice='A' if style(a)==liked else 'B' if style(b)==liked else 'A')
+        self.assertEqual(opened,set(d.region_names))  # the opening plays every style
+        data=d.export();self.assertEqual(data['policy'],'source-map-styles-1');self.assertEqual(data['regions']['names'][data['regions']['focus'][0]-1],liked)
+        self.assertEqual(len(d._features(d.candidates[d.pair[0]]['recipe'] if d.pair else next(iter(d.candidates.values()))['recipe'])),len(d.feature_names))
+        d.close()
     def test_map_recipe_matches_the_app_type(self):
         from experiment.source_search import load_map_pool,map_recipe
         _,pool=load_map_pool();r=map_recipe(pool[0])
