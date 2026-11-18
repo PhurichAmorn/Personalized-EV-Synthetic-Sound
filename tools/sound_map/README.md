@@ -40,6 +40,8 @@ python tools/sound_map/drive.py labelled   # full-drive self-check; must print "
 python tools/sound_map/generate.py 40      # 40 rounds x 140 sounds, about 12 min on 16 cores; out/library.json is rewritten every round
 python tools/sound_map/drive.py library    # full-drive check of every kept sound; writes experiment/sound_map_pool.json for the app
 python tools/sound_map/drive.py pool       # Evolving check of the pool; sounds that pass may be used when the driver picks Evolving in pair 1
+# phase 2: checked variations of every pool sound (one move each), written into the pool file (about 1 h with 14 workers):
+LIMIT_F=0.2 python tools/sound_map/variations.py experiment/sound_map_pool.json
 # style libraries (5 texture families: electric, strings, glass, choir, plain; at least half the layers of that family), one per run:
 LIMIT_F=0.2 SEED=11 LIBRARY=library.style-strings.json python tools/sound_map/generate.py 20 --style strings
 LIMIT_F=0.2 LIBRARY=library.style-strings.json POOL=$PWD/tools/sound_map/out/pool.style-strings.json python tools/sound_map/drive.py library

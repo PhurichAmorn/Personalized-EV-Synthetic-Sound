@@ -81,6 +81,15 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   styles the remaining slots take the sounds most unlike those already played). The model also learns the style (one-hot beside the 9
   traits). Region ranking uses a Beta(2,2) prior so a style with two lucky wins does not outrank one with 18-5, and ignores pairs within one style. Styles with no pool sound
   are left out; the current 61-sound pool is mostly electric and blend: the per-style pools fill the rest.
+- **Phase 2: fine-tuning (2026-11-18, in `StyleMapDiscovery`).** Pairs 17-19 put the champion against checked variations of it; pair 20
+  stays the top-two confirmation. A variation is a pool sound with one named move (brighter, darker, deeper, higher, fuller, thinner,
+  smoother, shimmer, body+, body-, two layer swaps) or a bright/pitch combination, made offline by `tools/sound_map/variations.py`
+  and kept only if it passes the quick guardrail and the full Rising drive check (Evolving stored and used to gate Evolving sessions)
+  and is 0.3-1.5 'distinct' steps from its parent: audibly different, still the same sound. Nothing is generated during a session.
+  Move trends: a variation that wins gives +1 to its moves and -1 to their opposites; one that loses -1. The next variation is the one
+  whose moves have the best trend, then the model's Thompson sample. When a variation becomes champion, pairs continue with its
+  parent's other variations (one level deep; combinations cover two-step moves). Changes are not shown to the listener; the export has
+  `phase2` (move trends, variations heard). Without variations in the pool the pairs fall back to phase-1 challengers.
 - **Session, regions (2026-11-17, kept as `RegionMapDiscovery`).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
   region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
   region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the

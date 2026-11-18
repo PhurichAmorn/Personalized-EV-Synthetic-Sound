@@ -740,6 +740,31 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         data=d.export();self.assertEqual(data['policy'],'source-map-styles-1');self.assertEqual(data['regions']['names'][data['regions']['focus'][0]-1],liked)
         self.assertEqual(len(d._features(d.candidates[d.pair[0]]['recipe'] if d.pair else next(iter(d.candidates.values()))['recipe'])),len(d.feature_names))
         d.close()
+    def test_phase2_fine_tunes_the_champion_with_its_variations(self):
+        import copy,json,tempfile,random as stdrandom
+        from experiment.source_search import StyleMapDiscovery,MAP_POOL,STYLE_PAIRS,MAP_FINE_PAIRS
+        data=json.loads(Path(MAP_POOL).read_text())
+        for sound in data['sounds']:  # fake checked variations: same sound, a little brighter / darker / deeper
+            sound['variations']=[]
+            for move,dS,dRoot in (('brighter',.08,0),('darker',-.08,0),('deeper',0,-.1),('brighter+deeper',.08,-.1)):
+                v=copy.deepcopy(sound);v.pop('variations',None);v.update(id=f"{sound['id']}-{move}",parent=sound['id'],move=move,rootHz=sound['rootHz']*(1+dRoot))
+                v['drive']['S']+=dS;v['driveEvolving']=dict(v.get('driveEvolving',v['drive']));v['fx']['tone']*=1+dS;v['voice']['stack']['rootHz']*=1+dRoot  # a different recipe
+                sound['variations'].append(v)
+        path=Path(tempfile.mkdtemp())/'pool.json';path.write_text(json.dumps(data))
+        d=StyleMapDiscovery(renderer=lambda recipe:None,pool_path=path);d.start('rise');d.rng=stdrandom.Random(4)
+        move=lambda i:d.by_cell[d.candidates[i]['recipe']['cell']].get('move') or ''
+        first=STYLE_PAIRS-1-MAP_FINE_PAIRS
+        for n in range(20):
+            self.assertEqual(len(d.pair),2,d.error);a,b=d.pair
+            if first<=n<STYLE_PAIRS-1:  # pairs 17-19: one side is a variation of the other's sound
+                self.assertTrue(any(d.candidates[i]['origin']['kind']=='variation' for i in d.pair),[d.candidates[i]['origin'] for i in d.pair])
+                parents={d.by_cell[d.candidates[i]['recipe']['cell']].get('parent') or d.candidates[i]['recipe']['cell'] for i in d.pair}
+                self.assertEqual(len(parents),1)
+            choice='A' if 'brighter' in move(a) else 'B' if 'brighter' in move(b) else 'A'
+            d.feedback(choice=choice)
+        self.assertGreater(d.move_trends().get('brighter',0),0)  # the liked move gathers credit
+        self.assertIn('brighter',move(d.champion));self.assertIn('phase2',d.export())
+        d.close()
     def test_map_recipe_matches_the_app_type(self):
         from experiment.source_search import load_map_pool,map_recipe
         _,pool=load_map_pool();r=map_recipe(pool[0])

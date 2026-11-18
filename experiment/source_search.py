@@ -1337,6 +1337,9 @@ class RegionMapDiscovery(SoundMapDiscovery):
 # Styles (2026-11-18): five texture families of the layered (stack) voice, = tools/sound_map/generate.py STYLES (stackVoice.ts STACK_TEXTURES ids).
 MAP_STYLES={'electric':(9,10,11),'strings':(1,7,8),'glass':(3,4),'choir':(6,),'plain':(0,2)}
 MAP_STYLE_NAMES=(*MAP_STYLES,'blend')
+MAP_FINE_PAIRS=3  # phase 2: pairs 17-19 fine-tune the champion with its checked variations (pair 20 stays the top-two confirmation)
+MAP_OPPOSITE={'brighter':'darker','darker':'brighter','deeper':'higher','higher':'deeper','fuller':'thinner','thinner':'fuller',
+              'smoother':'shimmer','shimmer':'smoother','body+':'body-','body-':'body+'}
 def map_style(sound):
     """Texture family of at least half the layers and more than any other family (= generate.style_of), else 'blend'; None for other voices.
     Blend is kept as its own style: the owner's favourite of 2026-11-18 was one (hollow, strings, plain, plain synth, electric)."""
@@ -1351,6 +1354,39 @@ class StyleMapDiscovery(RegionMapDiscovery):
     (one-hot, beside the 9 traits). Blend (no family leads) is a style of its own. Styles with no pool sound are left out."""
     policy='source-map-styles-1'
     feature_names=MAP_FEATURE_NAMES+[f'style:{n}' for n in MAP_STYLE_NAMES]
+    def _load(self):
+        fresh=self.pool is None;super()._load()
+        if fresh:  # phase 2: checked variations of each pool sound (tools/sound_map/variations.py), playable but never in the phase-1 space
+            lim=self.pool_meta['limits']
+            for parent in self.pool:
+                for v in parent.get('variations',[]):
+                    v['unit']=map_unit(v);self.by_cell[v['id']]=v;self.region[v['id']]=self.region[parent['id']]
+                    if all(v['driveEvolving'][k]<=lim[k] for k in 'SRF'):self.evolving_ok.add(v['id'])
+    def move_trends(self):
+        """Phase 2: +1 for each move of a variation that won (and -1 for its opposite), -1 for each move of one that lost."""
+        trend={}
+        for r in self._choices():
+            if not r.get('winner'):continue
+            for i in r['pair']:
+                move=self.by_cell.get(self.candidates[i]['recipe']['cell'],{}).get('move')
+                for m in (move.split('+') if move else []):
+                    sign=1 if i==r['winner'] else -1;trend[m]=trend.get(m,0)+sign
+                    if m in MAP_OPPOSITE:trend[MAP_OPPOSITE[m]]=trend.get(MAP_OPPOSITE[m],0)-sign
+        return trend
+    def _proposals(self):
+        options=super()._proposals()
+        if self.rematch or not STYLE_PAIRS-1-MAP_FINE_PAIRS<=self.completed<STYLE_PAIRS-1 or self.champion is None:return options
+        # Phase 2 (pairs 17-19): the champion against a variation of it (or of its parent, when the champion is itself a variation);
+        # moves that have been winning go first, then the model's Thompson sample. Winner stays as before.
+        here=self.by_cell[self.candidates[self.champion]['recipe']['cell']];parent=self.by_cell.get(here.get('parent'),here)
+        heard={i for r in self._choices() for i in r['pair']}|self.excluded;trend=self.move_trends();self._sample()
+        left=[v for v in [parent,*parent.get('variations',[])] if v['id']!=here['id'] and (self.motion=='rise' or v['id'] in self.evolving_ok)
+              and self._id(map_recipe(v,self.motion)) not in heard]
+        if not left:return options  # no variations (pool without phase 2): the phase-1 challenger
+        score=lambda v:(sum(trend.get(m,0) for m in v['move'].split('+')) if v.get('move') else 0,self._sampled(map_recipe(v,self.motion)))
+        left.sort(key=score,reverse=True)
+        return [(map_recipe(v,self.motion),{'kind':'variation','cell':v['id'],'from':parent['id'],'move':v.get('move','original'),
+                 'summary':f"Variation of {parent['id']}: {v.get('move','original')}"}) for v in left]
     def _regions(self):
         names=[n for n in MAP_STYLE_NAMES if any(map_style(s)==n for s in self.pool)]
         if len(names)<2:return super()._regions()  # not a layered pool: k-means regions
@@ -1360,7 +1396,9 @@ class StyleMapDiscovery(RegionMapDiscovery):
     def _features(self,recipe):
         style=map_style(self.by_cell[recipe['cell']]);return np.concatenate([super()._features(recipe),[float(style==n) for n in MAP_STYLE_NAMES]])
     def export(self):
-        data=super().export()
+        data=super().export();data['phase2']={'pairs':MAP_FINE_PAIRS,'move_trends':self.move_trends(),
+            'variations_heard':{i:{'parent':self.by_cell[c['recipe']['cell']].get('parent'),'move':self.by_cell[c['recipe']['cell']].get('move')}
+                                for i,c in self.candidates.items() if self.by_cell.get(c['recipe'].get('cell'),{}).get('move')}}
         data['note']=data['note'].replace(f'The pool is split into {self.n_regions} regions (k-means on the 9 traits).',
             f'The pool is split by texture style ({", ".join(self.region_names or [])}); the model also learns the style.')
         return data
