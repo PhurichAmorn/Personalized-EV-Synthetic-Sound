@@ -86,7 +86,6 @@ def library_sound(entry):
 if __name__ == '__main__':
     what = sys.argv[1] if len(sys.argv) > 1 else 'labelled'
     prepare()
-    if not os.path.exists('drive.mjs'): subprocess.run(['node', os.path.join(HERE, 'build.mjs')], check=True)
     os.makedirs(TMP, exist_ok=True)
     with Pool(int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))) as pool:
         if what == 'labelled':

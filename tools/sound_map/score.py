@@ -12,7 +12,7 @@ OUT = os.path.join(HERE, 'out')
 def prepare():
     """Build the synth bundles and render the labelled sounds once; everything runs inside out/."""
     os.makedirs(OUT, exist_ok=True); os.chdir(OUT)
-    if not os.path.exists('synth.mjs'): subprocess.run(['node', os.path.join(HERE, 'build.mjs')], check=True)
+    subprocess.run(['node', os.path.join(HERE, 'build.mjs')], check=True)  # always: a bundle left from before a git pull runs old synth code
     if not os.path.exists('manifest.json'): subprocess.run(['node', 'labelled.mjs'], check=True)
 
 

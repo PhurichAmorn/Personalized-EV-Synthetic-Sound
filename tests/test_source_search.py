@@ -725,7 +725,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         from experiment.source_search import load_map_pool,map_recipe
         _,pool=load_map_pool();r=map_recipe(pool[0])
         self.assertEqual(set(r),{'version','kind','seed','motion','cell','voice','fx'})  # = MapRecipe in desktop/src/levels.ts
-        self.assertIn("kind: 'map'",Path('desktop/src/levels.ts').read_text());self.assertIn(r['voice']['kind'],('plain','blocks'))
+        self.assertIn("kind: 'map'",Path('desktop/src/levels.ts').read_text());self.assertIn(r['voice']['kind'],('plain','blocks','stack'))  # = MapVoice in desktop/src/mapVoice.ts
         self.assertEqual((r['fx']['follow'],r['fx']['size']),(1,2.5))  # as the full-drive check played it
     def test_winner_stays_and_the_last_pair_confirms_the_top_two(self):
         from experiment.source_search import SoundMapDiscovery,MAP_OPENING,MAP_PLAYOFF
