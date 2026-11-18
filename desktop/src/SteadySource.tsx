@@ -115,7 +115,7 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
     const audio = context.current
     if (!audio) return
     const input = inputMode === 'simulated' ? simulatedDrive(audio.currentTime - simulationStart.current) : inputRef.current
-    const target = inputMode !== 'manual' ? drivingSoundTargets(input ?? { running: false, starting: false, speedKmh: 0, throttle: 0, motorLoad: null }, inputMode === 'driving' && performance.now() - receivedAt.current > 750, response, granularMode, travel.current) : { ...climbTargets(value), driveGain: 1, loopHold: 0, cycleSpeed: 1 }
+    const target = inputMode !== 'manual' ? drivingSoundTargets(input ?? { running: false, starting: false, speedKmh: 0, throttle: 0, motorLoad: null }, inputMode === 'driving' && performance.now() - receivedAt.current > 750, response, granularMode, travel.current) : { ...climbTargets(value), driveGain: 1, loopHold: 0, cycleSpeed: 1, stage: 0 }
     const set = (param: AudioParam, value: number, smoothing = .15) => {
       if (immediate) param.setValueAtTime(value, audio.currentTime)
       else smoothParameter(param, value, audio.currentTime, smoothing)
@@ -139,6 +139,7 @@ export default function SteadySource({ blocked, onPlay, driving, onPlayingChange
         set(source.evolution, index < 3 && granularMode === 'evolving' && !authored ? 1 : 0, .05)
         set(source.cycleSpeed, index < 3 && !authored ? target.cycleSpeed : 1)
         set(source.loopHold, index < 3 ? target.loopHold : 0, .05)
+        set(source.stage, index < 3 && !authored ? target.stage : 0, .35)
       }
     })
     current.granularMode = granularMode

@@ -64,14 +64,14 @@ export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mo
   body.peaking(fx.bodyHz, 1.5, fx.bodyDb)
   const vibGain = fx.vibDepth / 1731 / (2 * Math.PI * fx.vibRate), wetC = .25 * fx.chorus, dryC = 1 - wetC
   const motion = { response: 'exponential' as const, travel: 1 }
-  const p = { rate: 0, evolve: mode === 'evolving' ? 1 : 0, cycle: 0, hold: 0, cutoff: 0, gain: 0 }, t = { ...p }
+  const p = { rate: 0, evolve: mode === 'evolving' ? 1 : 0, cycle: 0, hold: 0, stage: 0, cutoff: 0, gain: 0 }, t = { ...p }
   let driveTarget = 0, gainSmooth = smooth(.05)
   const out = new Float32Array(2 * N), gains: number[] = []
   for (let n = 0; n < N; n++) {
     if (n % STEP === 0) {  // driveRig, every 50 ms
       const target = drivingSoundTargets(simulatedDrive(n / FS), false, motion.response, mode, motion.travel)
       t.rate = fx.peakHz ? Math.min(target.rate, fx.peakHz / rootHz) : target.rate
-      t.cycle = target.cycleSpeed; t.hold = target.loopHold
+      t.cycle = target.cycleSpeed; t.hold = target.loopHold; t.stage = target.stage
       t.cutoff = Math.min(20000, Math.max(200, fx.tone * 2 ** (fx.follow * (2 * target.propulsion - 1))))
       const env = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < driveTarget)
       driveTarget = target.driveGain; t.gain = env.gain; gainSmooth = smooth(env.smoothing)
@@ -79,11 +79,11 @@ export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mo
       gains.push(p.gain)
     }
     p.rate += (t.rate - p.rate) * smooth(.35); p.cycle += (t.cycle - p.cycle) * smooth(.15)
-    p.hold += (t.hold - p.hold) * smooth(.05); p.gain += (t.gain - p.gain) * gainSmooth
+    p.hold += (t.hold - p.hold) * smooth(.05); p.stage += (t.stage - p.stage) * smooth(.35); p.gain += (t.gain - p.gain) * gainSmooth
     p.cutoff += (t.cutoff - p.cutoff) * smooth(.15)
     if (n % BLOCK === 0) low.lowpass(p.cutoff * 2 ** ((fx.drift ? 1100 * Math.sin(2 * Math.PI * n / FS / 14) : 0) / 1200), fx.res)
     const time = n / FS
-    let l = player.sample(p.rate, p.hold, p.evolve, p.cycle), r = player.right
+    let l = player.sample(p.rate, p.hold, p.evolve, p.cycle, p.stage), r = player.right
     const vibDelay = .012 + vibGain * Math.sin(2 * Math.PI * fx.vibRate * time)
     l = vib[0].run(l, vibDelay); r = vib[1].run(r, vibDelay)
     const phase = fx.tremRate * time % 1

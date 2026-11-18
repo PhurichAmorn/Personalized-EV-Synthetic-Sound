@@ -97,6 +97,7 @@ export function driveRig(rig: Rig, motion: Pick<Motion, 'mode' | 'travel' | 'res
     set(player.playbackRate, fx.peakHz && current.rootHz ? Math.min(target.rate, fx.peakHz / current.rootHz) : target.rate, .35)
     set(player.evolution, motion.mode === 'evolving' ? 1 : 0, .05)
     set(player.cycleSpeed, target.cycleSpeed, .15)
+    set(player.stage, target.stage, .35)
     set(player.loopHold, target.loopHold, .05)
   }
   const envelope = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < current.driveTarget)

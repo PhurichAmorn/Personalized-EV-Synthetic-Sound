@@ -5,6 +5,7 @@ export class GranularPlayer {
   readonly loopHold: AudioParam
   readonly evolution: AudioParam
   readonly cycleSpeed: AudioParam
+  readonly stage: AudioParam
   onended: (() => void) | null = null
   private readonly node: AudioWorkletNode
   private stopped = false
@@ -15,6 +16,7 @@ export class GranularPlayer {
     this.loopHold = this.node.parameters.get('hold')!
     this.evolution = this.node.parameters.get('evolve')!
     this.cycleSpeed = this.node.parameters.get('cycleSpeed')!
+    this.stage = this.node.parameters.get('stage')!
     this.node.port.postMessage({ type: 'buffer', samples: [buffer.getChannelData(0), buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1))] })
     this.node.port.onmessage = () => this.onended?.()
   }
