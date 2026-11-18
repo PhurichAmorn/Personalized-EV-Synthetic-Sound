@@ -44,7 +44,7 @@ STACK_CHOICES = {'stLayers': [3, 4, 5], 'stSeed': list(range(6)), **{f'stT{k}': 
 # depth comes from the layers (chorus only added copies of the same sound).
 STACK_GENES['stTwinkle'] = (3, 16, 0)
 FRAME_TEXTURES = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]  # no 5 air (wind noise); clicky sparkle is dropped by LIMIT_F=0.2: marks 2026-11-18
-# Styles (2026-11-18): five texture families. A sound's style is the family of at least half its layers ('mixed' otherwise).
+# Styles (2026-11-18): five texture families. A sound's style is the family of at least half its layers ('blend' otherwise).
 # --style NAME grows a stack library of that style only (loose rule: the other layers may be any texture).
 # ponytail: counts layers, not their loudness; weight by layer level if a quiet layer is heard to decide the style.
 STYLES = {'electric': [9, 10, 11], 'strings': [1, 7, 8], 'glass': [3, 4], 'choir': [6], 'plain': [0, 2]}
@@ -103,11 +103,11 @@ def crossover(a, b):
 
 
 def style_of(g):
-    """Texture family of at least half the layers of a stack genome and more than any other family, else 'mixed' (None for other voices)."""
+    """Texture family of at least half the layers of a stack genome and more than any other family, else 'blend' (None for other voices)."""
     if g['voice'] != 'stack': return None
     layers = [g[f'stT{k}'] for k in range(g['stLayers'])]
     count = sorted(((sum(t in family for t in layers), name) for name, family in STYLES.items()), reverse=True)
-    return count[0][1] if 2 * count[0][0] >= len(layers) and count[0][0] > count[1][0] else 'mixed'
+    return count[0][1] if 2 * count[0][0] >= len(layers) and count[0][0] > count[1][0] else 'blend'
 
 
 def styled(g):

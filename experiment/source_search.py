@@ -1275,6 +1275,7 @@ class RegionMapDiscovery(SoundMapDiscovery):
         w,l=np.zeros(self.n_regions),np.zeros(self.n_regions);reg=lambda i:self.region[self.candidates[i]['recipe']['cell']]
         for r in rows:
             a,b=r['pair']
+            if reg(a)==reg(b):continue  # same region: says nothing about which region (a 2026-11-18 session ended with electric 14-14 from such pairs)
             if r['choice']=='good':w[reg(a)]+=1;w[reg(b)]+=1
             elif r['choice']=='neither':l[reg(a)]+=1;l[reg(b)]+=1
             elif r.get('winner'):w[reg(r['winner'])]+=1;l[reg(b if r['winner']==a else a)]+=1
@@ -1335,26 +1336,29 @@ class RegionMapDiscovery(SoundMapDiscovery):
 
 # Styles (2026-11-18): five texture families of the layered (stack) voice, = tools/sound_map/generate.py STYLES (stackVoice.ts STACK_TEXTURES ids).
 MAP_STYLES={'electric':(9,10,11),'strings':(1,7,8),'glass':(3,4),'choir':(6,),'plain':(0,2)}
+MAP_STYLE_NAMES=(*MAP_STYLES,'blend')
 def map_style(sound):
-    """Texture family with the most layers of a stack sound (first in MAP_STYLES on a tie); None for other voices."""
+    """Texture family of at least half the layers and more than any other family (= generate.style_of), else 'blend'; None for other voices.
+    Blend is kept as its own style: the owner's favourite of 2026-11-18 was one (hollow, strings, plain, plain synth, electric)."""
     if sound['voice']['kind']!='stack':return None
     st=sound['voice']['stack'];layers=st['timbres'][:st['layers']]
-    return max(MAP_STYLES,key=lambda name:sum(t in MAP_STYLES[name] for t in layers))
+    count=sorted(((sum(t in fam for t in layers),name) for name,fam in MAP_STYLES.items()),reverse=True)
+    return count[0][1] if 2*count[0][0]>=len(layers) and count[0][0]>count[1][0] else 'blend'
 
 class StyleMapDiscovery(RegionMapDiscovery):
     """Regions session with the pool's texture styles as regions (instead of k-means): pairs 1-3 play each style's most typical sound,
     pairs 4-10 compare styles, pairs 11-19 stay in the best style (MAP_FOCUS) or the runner-up. The model also learns the style
-    (one-hot, beside the 9 traits). Styles with no pool sound are left out."""
+    (one-hot, beside the 9 traits). Blend (no family leads) is a style of its own. Styles with no pool sound are left out."""
     policy='source-map-styles-1'
-    feature_names=MAP_FEATURE_NAMES+[f'style:{n}' for n in MAP_STYLES]
+    feature_names=MAP_FEATURE_NAMES+[f'style:{n}' for n in MAP_STYLE_NAMES]
     def _regions(self):
-        names=[n for n in MAP_STYLES if any(map_style(s)==n for s in self.pool)]
+        names=[n for n in MAP_STYLE_NAMES if any(map_style(s)==n for s in self.pool)]
         if len(names)<2:return super()._regions()  # not a layered pool: k-means regions
         self.region_names=names;label=np.array([names.index(map_style(s)) if map_style(s) in names else 0 for s in self.pool]);units=np.array([s['unit'] for s in self.pool])
         typical=[int(min(np.flatnonzero(label==k),key=lambda i:np.linalg.norm(units[i]-units[label==k].mean(0)))) for k in range(len(names))]
         return label,typical
     def _features(self,recipe):
-        style=map_style(self.by_cell[recipe['cell']]);return np.concatenate([super()._features(recipe),[float(style==n) for n in MAP_STYLES]])
+        style=map_style(self.by_cell[recipe['cell']]);return np.concatenate([super()._features(recipe),[float(style==n) for n in MAP_STYLE_NAMES]])
     def export(self):
         data=super().export()
         data['note']=data['note'].replace(f'The pool is split into {self.n_regions} regions (k-means on the 9 traits).',

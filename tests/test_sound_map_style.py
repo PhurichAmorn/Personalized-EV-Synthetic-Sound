@@ -16,7 +16,7 @@ class StyleTest(unittest.TestCase):
                 genome = g.styled(g.mutate(g.styled(g.random_genome('stack'))))
                 self.assertEqual(g.style_of(genome), name)
         g.STYLE = None
-        self.assertEqual(g.style_of({'voice': 'stack', 'stLayers': 4, 'stT0': 9, 'stT1': 1, 'stT2': 3, 'stT3': 6, 'stT4': 0}), 'mixed')
+        self.assertEqual(g.style_of({'voice': 'stack', 'stLayers': 4, 'stT0': 9, 'stT1': 1, 'stT2': 3, 'stT3': 6, 'stT4': 0}), 'blend')
         self.assertGreaterEqual(g.gap({'bands': [0] * 8, 'pitch': 0, 'inharm': 0, 'R': 0, 'F': 0, 'style': 'choir'},
                                       {'bands': [0] * 8, 'pitch': 0, 'inharm': 0, 'R': 0, 'F': 0, 'style': 'glass'}), 1)
 

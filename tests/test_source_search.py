@@ -734,6 +734,9 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             if MAP_EXPLORE<=n<19:self.assertTrue(any(d.region_names[d.region[d.candidates[i]['recipe']['cell']]] in [d.region_names[k] for k in d.focus_regions()] for i in d.pair))
             a,b=d.pair;d.feedback(choice='A' if style(a)==liked else 'B' if style(b)==liked else 'A')
         self.assertEqual(opened,set(d.region_names))  # the opening plays every style
+        same=[r for r in d._map_rows() if d.region[d.candidates[r['pair'][0]]['recipe']['cell']]==d.region[d.candidates[r['pair'][1]]['recipe']['cell']]]
+        w,l=d._region_record(d._map_rows());w2,l2=d._region_record([r for r in d._map_rows() if r not in same])
+        self.assertEqual((w.tolist(),l.tolist()),(w2.tolist(),l2.tolist()))  # pairs within one style do not count for or against it
         data=d.export();self.assertEqual(data['policy'],'source-map-styles-1');self.assertEqual(data['regions']['names'][data['regions']['focus'][0]-1],liked)
         self.assertEqual(len(d._features(d.candidates[d.pair[0]]['recipe'] if d.pair else next(iter(d.candidates.values()))['recipe'])),len(d.feature_names))
         d.close()

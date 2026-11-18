@@ -45,7 +45,7 @@ export default function TraceHistory({ command, preview }: { command: Command; p
   const collapse = () => { stopLive(); setSound(null); void command('historyPreviewClear') }
   const playLive = (id: string, recipe: LiveRecipe) => {
     const { plain, fx, mode, travel } = liveSound(recipe)
-    void liveStems(recipe).then(voices => traceLab.play(id, voices, fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel)).then(() => setLivePlaying(true))
+    void traceLab.play(id, liveStems(recipe), fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel).then(started => { if (started) setLivePlaying(true) })
   }
   const star = async (id: string, value: boolean) => { await command('historyStar', { id, value }); void refresh() }
   const starred = !!rows.find(row => row.id === session?.id)?.starred

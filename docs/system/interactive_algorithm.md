@@ -6,7 +6,7 @@ The search should help a listener find a sound character they prefer, then allow
 
 This document keeps the search goal beside a concise description of the implemented policy so agents can see both intended behavior and current limits. It is not a session-by-session log. Update it when feedback, search stages, candidate representation, or the research goal changes materially; routine UI or parameter edits alone do not require changes.
 
-The primary Personalize sound interface now runs source discovery, described below. The earlier session-flow sections describe the retained native-profile search; its form is shown only for an already active legacy session. New native-profile sessions use the current probe mapping. Older saved sessions keep their stored algorithm and profile mapping when resumed. Sessions remain local under `experiment_data/interactive/`.
+The primary Personalize sound interface now runs source discovery, described below. The earlier session-flow sections describe the legacy native-profile search, kept as a baseline in `experiment/legacy/` (UI: `desktop/src/legacy/`); the app can no longer start a new one. New native-profile sessions use the current probe mapping. Older saved sessions keep their stored algorithm and profile mapping when resumed. Sessions remain local under `experiment_data/interactive/`.
 
 ## Session flow
 
@@ -75,11 +75,12 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   sounds (3-5 layers, each one texture, no air, no chorus, pulsing limit 0.2). Checked in Evolving too (`drive.py pool`): 59 pass; the
   other 2 play only in Rising sessions.
 - **Session, styles (current, 2026-11-18; `StyleMapDiscovery`, policy `source-map-styles-1`).** The regions session with the pool's texture
-  styles as regions instead of k-means: electric, strings, glass, choir, plain (a stack sound's style = the family with most of its layers;
+  styles as regions instead of k-means: electric, strings, glass, choir, plain, and blend (a stack sound's style = the family of at least half
+  its layers and more than any other; otherwise blend, kept because the owner's favourite of 2026-11-18 was one;
   `tools/sound_map/generate.py --style` grows one style's library). Pairs 1-3 play each style's most typical sound (with fewer than six
   styles the remaining slots take the sounds most unlike those already played). The model also learns the style (one-hot beside the 9
-  traits). Region ranking uses a Beta(2,2) prior so a style with two lucky wins does not outrank one with 18-5. Styles with no pool sound
-  are left out; the current 61-sound pool has only electric (47), strings (12) and plain (2): the per-style pools fill the rest.
+  traits). Region ranking uses a Beta(2,2) prior so a style with two lucky wins does not outrank one with 18-5, and ignores pairs within one style. Styles with no pool sound
+  are left out; the current 61-sound pool is mostly electric and blend: the per-style pools fill the rest.
 - **Session, regions (2026-11-17, kept as `RegionMapDiscovery`).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
   region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
   region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the

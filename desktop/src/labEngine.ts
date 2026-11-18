@@ -115,17 +115,25 @@ export class LabPlayer {
   private timer = 0
   private input: 'live' | 'simulated' = 'live'
   private mode: GranularMode = 'rise'
+  private request = 0  // every play/stop bumps it; a play still waiting (stems, worklet) when a newer one starts gives up
   volume = .7
   get playing() { return !!this.rig }
-  async play(id: string, stems: Float32Array[][], fx: Fx, rootHz: number, input: 'live' | 'simulated', live: () => { input: DrivingInput | undefined; stale: boolean }, simulated: (t: number) => DrivingInput, mode: GranularMode = 'rise', travel = 1) {
-    this.stop(); this.mode = mode
+  /** stems may still be building (a promise): the wait happens here, so a click on another sound meanwhile cancels this one.
+   * Before (2026-11-18), a sound that finished building late started a second rig nobody drove: it played on, deaf to the pedal.
+   * Returns false when a newer play or a stop came first. */
+  async play(id: string, stems: Float32Array[][] | Promise<Float32Array[][]>, fx: Fx, rootHz: number, input: 'live' | 'simulated', live: () => { input: DrivingInput | undefined; stale: boolean }, simulated: (t: number) => DrivingInput, mode: GranularMode = 'rise', travel = 1) {
+    this.stop(); const request = this.request
     if (!this.audio) {
       this.audio = new AudioContext(); this.analyser = this.audio.createAnalyser(); this.analyser.fftSize = 2048; this.analyser.connect(this.audio.destination)
     }
     const context = this.audio
-    await context.resume(); await granularWorklet(context)
+    let voices: Float32Array[][]
+    try { voices = await stems; await context.resume(); await granularWorklet(context) }
+    catch (problem) { if (request !== this.request) return false; throw problem }  // a stale failure must not stop the newer sound
+    if (request !== this.request) return false
+    this.mode = mode
     const motion = { mode, travel, response: 'exponential' as const }
-    const rig = buildRig(context, sourceAudioBuffers(context, stems), mode, this.analyser!)
+    const rig = buildRig(context, sourceAudioBuffers(context, voices), mode, this.analyser!)
     applyFx(rig, fx, rootHz, true)
     this.rig = rig; this.candidateId = id; this.input = input
     const step = (immediate = false) => {
@@ -138,7 +146,7 @@ export class LabPlayer {
     return true as const
   }
   stop() {
-    window.clearInterval(this.timer)
+    this.request++; window.clearInterval(this.timer)
     const rig = this.rig; this.rig = null; this.candidateId = null
     if (rig && this.audio) { rig.master.gain.setTargetAtTime(0, this.audio.currentTime, .03); window.setTimeout(rig.dispose, 200) }
   }

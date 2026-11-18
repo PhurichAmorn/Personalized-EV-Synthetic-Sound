@@ -632,3 +632,11 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .lab-head { position: sticky; top: 0; z-index: 20; margin: -20px -24px 0; padding: 14px 24px 12px; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
 @media (max-width: 720px) { .lab-head { margin: -16px -16px 0; padding: 12px 16px; } }
 
+
+/* Podium loading panel and confetti (SourceSearch.tsx) */
+.source-search-ranking { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.source-search-favourites { position: relative; overflow: hidden; }
+.confetti { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.confetti i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; opacity: 0; animation: confetti-fall linear forwards; }
+@keyframes confetti-fall { 0% { opacity: 1; translate: 0 0; } 100% { opacity: 0; translate: 0 420px; rotate: 540deg; } }
+@media (prefers-reduced-motion: reduce) { .confetti { display: none; } }
