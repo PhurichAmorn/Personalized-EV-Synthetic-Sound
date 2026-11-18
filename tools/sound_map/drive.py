@@ -133,7 +133,7 @@ if __name__ == '__main__':
             # Frozen pool for the app's sound-map search (experiment/source_search.py SoundMapDiscovery): only what a session needs.
             pool = {'created': lib.get('created'), 'source': 'tools/sound_map library (generate.py + drive.py library)', 'limits': lib['limits'],
                     'distinct': lib.get('distinct'), 'sounds': [{'id': e['id'], 'from': e.get('from'), 'voice': e['voice'], 'fx': library_sound(e)[1],
-                    'rootHz': e['rootHz'], 'metrics': e['metrics'], 'desc': e['desc'], 'drive': {k: v for k, v in e['drive']['rise'].items() if k != 'at'},
+                    'rootHz': e['rootHz'], 'style': e.get('style'), 'metrics': e['metrics'], 'desc': e['desc'], 'drive': {k: v for k, v in e['drive']['rise'].items() if k != 'at'},
                     'driveEvolving': {k: v for k, v in e['drive']['evolving'].items() if k != 'at'}} for e in kept]}  # Evolving sessions use sounds that pass here too
             json.dump(pool, open(POOL, 'w'), indent=0)
             print(f'pool for the app: {len(kept)} sounds -> {POOL}')

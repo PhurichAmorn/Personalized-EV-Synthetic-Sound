@@ -44,6 +44,11 @@ STACK_CHOICES = {'stLayers': [3, 4, 5], 'stSeed': list(range(6)), **{f'stT{k}': 
 # depth comes from the layers (chorus only added copies of the same sound).
 STACK_GENES['stTwinkle'] = (3, 16, 0)
 FRAME_TEXTURES = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]  # no 5 air (wind noise); clicky sparkle is dropped by LIMIT_F=0.2: marks 2026-11-18
+# Styles (2026-11-18): five texture families. A sound's style is the family of at least half its layers ('mixed' otherwise).
+# --style NAME grows a stack library of that style only (loose rule: the other layers may be any texture).
+# ponytail: counts layers, not their loudness; weight by layer level if a quiet layer is heard to decide the style.
+STYLES = {'electric': [9, 10, 11], 'strings': [1, 7, 8], 'glass': [3, 4], 'choir': [6], 'plain': [0, 2]}
+STYLE = None
 GENES = {**PLAIN_GENES, **BLOCK_GENES, **FX_GENES, **STACK_GENES}
 VOICE_GENES = {'plain': list(PLAIN_GENES) + list(FX_GENES), 'blocks': list(BLOCK_GENES) + list(FX_GENES), 'stack': list(STACK_GENES) + list(FX_GENES)}
 NO_CHORUS = set()  # voices that never get chorus (--textures all: stack)
@@ -95,6 +100,23 @@ def mutate(g, sigma=.12):
 
 def crossover(a, b):
     return {k: (a if rng.random() < .5 else b).get(k, a.get(k)) for k in a.keys() | b.keys()} if a['voice'] == b['voice'] else dict(a)
+
+
+def style_of(g):
+    """Texture family of at least half the layers of a stack genome and more than any other family, else 'mixed' (None for other voices)."""
+    if g['voice'] != 'stack': return None
+    layers = [g[f'stT{k}'] for k in range(g['stLayers'])]
+    count = sorted(((sum(t in family for t in layers), name) for name, family in STYLES.items()), reverse=True)
+    return count[0][1] if 2 * count[0][0] >= len(layers) and count[0][0] > count[1][0] else 'mixed'
+
+
+def styled(g):
+    """With --style: switch random other-texture layers to the style's textures until the sound is of that style."""
+    if STYLE is None: return g
+    g, family = dict(g), STYLES[STYLE]
+    others = [k for k in rng.permutation(g['stLayers']) if g[f'stT{k}'] not in family]
+    while style_of(g) != STYLE: g[f'stT{others.pop()}'] = int(rng.choice(family))
+    return g
 
 
 def used(g):
@@ -182,7 +204,7 @@ def insert(archive, entry):
 
 def config():
     """Settings two libraries must share to be merged (merge.py) or resumed."""
-    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE}
+    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE, **({'style': STYLE} if STYLE else {})}
 
 
 def gap(a, b):
@@ -190,7 +212,8 @@ def gap(a, b):
     spectrum = float(np.hypot.reduce(np.array(a['bands']) - np.array(b['bands'])) / np.sqrt(2))
     return max(spectrum / DISTINCT['spectrum'], abs(a['pitch'] - b['pitch']) / DISTINCT['pitch'], abs(a['inharm'] - b['inharm']) / DISTINCT['inharm'],
                abs(a['R'] - b['R']) / DISTINCT['R'], abs(a['F'] - b['F']) / DISTINCT['F'],
-               abs(a.get('chorus', 0) - b.get('chorus', 0)) / DISTINCT['chorus'], abs(a.get('vib', 0) - b.get('vib', 0)) / DISTINCT['vib'])
+               abs(a.get('chorus', 0) - b.get('chorus', 0)) / DISTINCT['chorus'], abs(a.get('vib', 0) - b.get('vib', 0)) / DISTINCT['vib'],
+               float(a.get('style') != b.get('style')))  # another style is always distinct
 
 
 def evaluate(genomes, pool, tmp='tmp'):
@@ -217,11 +240,15 @@ def seeds():
 
 if __name__ == '__main__':
     prepare()
+    if '--style' in sys.argv:  # one style's library: layered textures only (implies --voices stack --textures all)
+        STYLE = sys.argv[sys.argv.index('--style') + 1]
+        if STYLE not in STYLES: raise SystemExit(f'--style: one of {", ".join(STYLES)}')
+        VOICES[:] = ['stack']
     if '--voices' in sys.argv: VOICES[:] = sys.argv[sys.argv.index('--voices') + 1].split(',')
-    if '--textures' in sys.argv:  # frame: every layer any texture; the plain and blocks genes evolve inside stacks too; no chorus
+    if '--textures' in sys.argv or STYLE:  # frame: every layer any texture; the plain and blocks genes evolve inside stacks too; no chorus
         STACK_CHOICES.update({f'stT{k}': FRAME_TEXTURES for k in range(5)}); NO_CHORUS.add('stack')
         VOICE_GENES['stack'] = [k for k in VOICE_GENES['stack'] if k != 'chorus'] + [k for k in PLAIN_GENES if k != 'rootHz'] + [k for k in BLOCK_GENES if k != 'rootRatio']
-    args = [a for a in sys.argv[1:] if not a.startswith('--') and a not in VOICES and a != 'all']
+    args = [a for a in sys.argv[1:] if not a.startswith('--') and a not in VOICES and a != 'all' and a not in STYLES]
     generations, size, fresh = int(args[0]) if args else 40, 140, .15  # fresh: share of each round that is new random sounds
     archive, log, tried, passed, first = [], [], 0, 0, 0
     created = time.strftime('%Y-%m-%d %H:%M')  # identifies this library (the page keeps marks per library)
@@ -236,19 +263,19 @@ if __name__ == '__main__':
         for gen in range(first, generations + 1):
             start = time.time()
             if gen == 0:
-                genomes = (seeds() if '--seeds' in sys.argv else []) + [random_genome() for _ in range(size)]
+                genomes = (seeds() if '--seeds' in sys.argv else []) + [styled(random_genome()) for _ in range(size)]
             else:
                 pick = lambda: archive[rng.integers(len(archive))]['genome']
-                genomes = [random_genome() if rng.random() < fresh else mutate(crossover(pick(), pick()) if rng.random() < .25 else pick()) for _ in range(size)]
+                genomes = [styled(random_genome() if rng.random() < fresh else mutate(crossover(pick(), pick()) if rng.random() < .25 else pick())) for _ in range(size)]
             added = replaced = 0
             for g, (m, d) in zip(genomes, evaluate([{k: v for k, v in g.items() if k != 'seed'} for g in genomes], pool)):
                 tried += 1
                 margin = min(1 - m[k] / LIMITS[k] for k in LIMITS)
                 if margin <= 0: continue
                 passed += 1
-                desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': g['chorus'], 'vib': g['vibDepth']}
+                desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': g['chorus'], 'vib': g['vibDepth'], 'style': style_of(g)}
                 entry = {'id': hashlib.sha1(json.dumps(g, sort_keys=True).encode()).hexdigest()[:10], 'genome': g, 'voice': voice_of(g),
-                         'fx': fx_of(g), 'rootHz': root_hz(g), 'metrics': m, 'desc': desc, 'margin': margin, 'gen': gen, 'from': g.get('seed')}
+                         'fx': fx_of(g), 'rootHz': root_hz(g), 'style': style_of(g), 'metrics': m, 'desc': desc, 'margin': margin, 'gen': gen, 'from': g.get('seed')}
                 result = insert(archive, entry)
                 added += result == 'added'; replaced += result == 'replaced'
             log.append({'gen': gen, 'tried': tried, 'passed': passed, 'kept': len(archive), 'added': added, 'replaced': replaced,
