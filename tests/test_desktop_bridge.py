@@ -23,7 +23,6 @@ class DesktopBridgeTest(unittest.TestCase):
 
     def tearDown(self):
         self.controller.search.close()
-        self.controller.experiment.close()
         self.controller.shutdown()
 
     def test_source_audition_mutes_native_audio_and_restores_volume(self):

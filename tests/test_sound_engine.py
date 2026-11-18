@@ -118,7 +118,7 @@ class SoundEngineTests(unittest.TestCase):
         self.assertLess(spectrum[f > 1000].sum() / spectrum.sum(), .4)
 
     def test_character_layers_change_timbre_without_clicks_or_clipping(self):
-        from experiment.live_search import CHARACTER_CONTROLS, CHARACTER_OPENING, profile_for
+        from experiment.legacy.live_search import CHARACTER_CONTROLS, CHARACTER_OPENING, profile_for
         from audio import SOUND_THEMES
         engine = SoundEngine()
         rendered = []

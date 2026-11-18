@@ -6,8 +6,8 @@ import unittest
 import numpy as np
 from scipy.io.wavfile import read
 
-from experiment.recipes import recipe_ids
-from tools.render_recipe_review import render_review
+from experiment.legacy.recipes import recipe_ids
+from experiment.legacy.render_recipe_review import render_review
 
 
 class RecipeReviewTest(unittest.TestCase):

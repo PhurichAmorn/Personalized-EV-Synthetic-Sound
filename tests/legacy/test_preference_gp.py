@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from experiment.preference_gp import select_query
+from experiment.legacy.preference_gp import select_query
 
 
 class PreferenceGPTest(unittest.TestCase):
@@ -33,7 +33,7 @@ class PreferenceGPTest(unittest.TestCase):
 
     def test_zero_variance_and_failed_fit_keep_incumbent(self):
         pool = [[0.], [.5], [1.]]
-        with patch('experiment.preference_gp._kernel', side_effect=lambda a, b: np.zeros((len(a), len(b)))):
+        with patch('experiment.legacy.preference_gp._kernel', side_effect=lambda a, b: np.zeros((len(a), len(b)))):
             self.assertEqual(select_query(pool, [[0.]], [[1.]], ['equal'], [.5], incumbent=1), (1, 0))
-        with patch('experiment.preference_gp.np.linalg.cholesky', side_effect=np.linalg.LinAlgError):
+        with patch('experiment.legacy.preference_gp.np.linalg.cholesky', side_effect=np.linalg.LinAlgError):
             self.assertEqual(select_query(pool, [[0.]], [[1.]], ['B'], [.5], incumbent=1), (1, 0))

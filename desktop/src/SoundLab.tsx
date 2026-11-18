@@ -8,6 +8,7 @@ import { drivingSoundTargets, type SoundResponse } from './drivingSoundMapping'
 import { NO_BRIGHTNESS, CANDIDATE_SOUNDS, VARIANTS, CHARACTER, FAIR_FX, PITCH_STEP, STARTING_SOUNDS, SYNTH_TRIES, TUNING_DEFAULT, tunedSound, type Tuning } from './levels'
 import { applyFx, buildRig, clamp, driveRig, FX_DEFAULT, FX_OFF, granularWorklet, manualInput, type Fx, type Motion } from './labEngine'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from './simulatedDrive'
+import { drawColumn } from './OverlayGraphs'
 
 /** Sound Lab bench: plain base source -> granular player (driving motion) -> transformation effects.
  * Sound B plays an original style's source through the same chain, for comparison. Nothing is saved. */
@@ -485,13 +486,7 @@ function Scope({ analyser, active, view }: { analyser: RefObject<AnalyserNode | 
       node!.getFloatFrequencyData(freq); node!.getFloatTimeDomainData(samples)
       const binHz = node!.context.sampleRate / 4096
       if (view === 'spectrogram') {
-        // Scroll left 2 px, paint the new column: log frequency up, brightness = level.
-        draw.drawImage(element, 2 * (window.devicePixelRatio || 1), 0, element.width - 2 * (window.devicePixelRatio || 1), element.height, 0, 0, width - 2, height)
-        for (let y = 0; y < height; y++) {
-          const hz = 40 * 300 ** ((height - y) / height), db = freq[Math.round(hz / binHz)] ?? -140
-          const level = clamp((db + 110) / 80, 0, 1)
-          draw.fillStyle = `hsl(${30 + 30 * level} 90% ${level * 62}%)`; draw.fillRect(width - 2, y, 2, 1)
-        }
+        drawColumn(element, hz => freq[Math.round(hz / binHz)] ?? -140, 2)  // shared with the overlay graph
       } else {
         draw.fillStyle = '#101010'; draw.fillRect(0, 0, width, height)
         draw.strokeStyle = '#2b2b2b'; draw.beginPath()

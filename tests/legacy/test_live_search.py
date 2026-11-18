@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QCoreApplication
 from audio import SOUND_THEMES
-from experiment.recipes import (PROBE_GROUP_FIELDS, mode_bounds, recipe_bounds, recipe_controls,
+from experiment.legacy.recipes import (PROBE_GROUP_FIELDS, mode_bounds, recipe_bounds, recipe_controls,
                                 recipe_ids, recipe_profile, probe_profile, recipe_probe_groups)
-from experiment.live_search import (LiveSearch, CONTROLS, GP_CONTROLS, COMFORT_CONTROLS,
+from experiment.legacy.live_search import (LiveSearch, CONTROLS, GP_CONTROLS, COMFORT_CONTROLS,
                                     CHARACTER_CONTROLS, profile_for, preset_profile_for,
                                     preset_controls_for)
 
@@ -219,7 +219,7 @@ class LiveSearchTest(unittest.TestCase):
         self.search.start('Pilot', 'Deep')
         self.search.choose('A'); self.search.rate('A', 5)
         self.search.choose('B'); self.search.rate('B', 4)
-        with patch('experiment.live_search.os.replace', side_effect=OSError('disk full')):
+        with patch('experiment.legacy.live_search.os.replace', side_effect=OSError('disk full')):
             self.search.next()
         self.assertEqual(self.search.data['completed'], 0)
         self.assertEqual(self.search.ratingA, 5)
@@ -306,7 +306,7 @@ class LiveSearchTest(unittest.TestCase):
             self.assertTrue(original.isdisjoint(self.search.data['pair'].values()))
 
     def test_gp_runs_probe_tune_combine_challenge_and_refine_stages(self):
-        with patch('experiment.live_search.secrets.randbits', return_value=12345):
+        with patch('experiment.legacy.live_search.secrets.randbits', return_value=12345):
             self.search.start('Pilot', 'Deep', 'gp_preference')
         expected = ['mode_character', 'register', 'tone', 'response',
                     'tune_register', 'tune_tone', 'tune_response', 'tune_regen',
@@ -320,7 +320,7 @@ class LiveSearchTest(unittest.TestCase):
         self.assertEqual(self.search.checkpoint, 'cap')
 
     def test_gp_combine_and_branch_challenge_cross_recipe_families(self):
-        with patch('experiment.live_search.secrets.randbits', return_value=12345):
+        with patch('experiment.legacy.live_search.secrets.randbits', return_value=12345):
             self.search.start('Pilot', 'Sport', 'gp_preference')
         for _ in range(14):
             self.search.choose('A'); self.search.choose('B')
@@ -337,7 +337,7 @@ class LiveSearchTest(unittest.TestCase):
         self.assertIn('probe-branch-challenge', {candidate['kind'] for candidate in challenge})
 
     def test_gp_ties_leave_features_unresolved_and_continue_with_model(self):
-        with patch('experiment.live_search.secrets.randbits', return_value=12345):
+        with patch('experiment.legacy.live_search.secrets.randbits', return_value=12345):
             self.search.start('Pilot', 'Comfort', 'gp_preference')
         for _ in range(20):
             self.search.choose('A'); self.search.choose('B')
@@ -533,7 +533,7 @@ class LiveSearchTest(unittest.TestCase):
 
     def test_gp_retry_preserves_third_rating_and_uses_explicit_control_order(self):
         from unittest.mock import patch
-        from experiment.preference_gp import select_query
+        from experiment.legacy.preference_gp import select_query
         self.search.start('Pilot', 'Sport', 'gp_preference')
         for score in ('A', 'B', 'equal', 'B', 'A', 'B'):
             self.search.choose('A'); self.search.choose('B')
@@ -547,8 +547,8 @@ class LiveSearchTest(unittest.TestCase):
         self.search.ratePreference('equal')
         original_pair = dict(self.search.data['pair'])
         original_incumbent = self.search.data['incumbent']
-        with patch('experiment.live_search.select_query', wraps=select_query) as query, patch(
-                'experiment.live_search.os.replace', side_effect=OSError('disk full')):
+        with patch('experiment.legacy.live_search.select_query', wraps=select_query) as query, patch(
+                'experiment.legacy.live_search.os.replace', side_effect=OSError('disk full')):
             self.search.next()
             pool, xa, xb, outcomes, anchor = query.call_args.args
             self.assertEqual(pool[0], [self.search.data['probe_controls'][key]

@@ -18,12 +18,12 @@ import uuid
 from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer
 from audio import AUDIO_SOURCE_FILES, SOUND_THEMES
 from audio import OrderSoundConfig
-from experiment.recipes import (PROBE_GROUP_FIELDS, PROBE_GROUPS, PROBE_VERSION, RECIPE_LISTENING_GAIN,
+from experiment.legacy.recipes import (PROBE_GROUP_FIELDS, PROBE_GROUPS, PROBE_VERSION, RECIPE_LISTENING_GAIN,
                                 RECIPE_NAMES, mode_bounds, recipe_bounds, recipe_controls,
                                 recipe_ids, recipe_probe_groups, probe_profile, recipe_profile)
-from experiment.preference_gp import select_query
+from experiment.legacy.preference_gp import select_query
 
-DATA_ROOT = Path(__file__).resolve().parents[1] / 'experiment_data' / 'interactive'
+DATA_ROOT = Path(__file__).resolve().parents[2] / 'experiment_data' / 'interactive'
 # Normalized exploratory controls; physical mappings are frozen in each session.
 CONTROLS = ('register', 'motion', 'richness', 'depth', 'brightness', 'texture', 'effort', 'regen')
 GP_CONTROLS = ('harmonic_mix', 'pitch_trajectory', 'amplitude_trajectory', 'spectral_balance')
@@ -364,14 +364,14 @@ class LiveSearch(QObject):
                  mode=mode, vehicle=self.controller.selectedVehicle, vehicle_snapshot=asdict(self.controller.car),
                  created=now(), seed=seed,
                  sound_config=asdict(self.controller.audio.order_synth.config),
-                 dsp_hashes={name: hashlib.sha256((Path(__file__).resolve().parents[1] / name).read_bytes()).hexdigest()
+                 dsp_hashes={name: hashlib.sha256((Path(__file__).resolve().parents[2] / name).read_bytes()).hexdigest()
                              for name in AUDIO_SOURCE_FILES},
                  base=base, control_keys=list(control_keys),
                  bounds={key: [0., 1.] for key in control_keys}, completed=0, block_end=20,
                  status='active', checkpoint='', candidates={}, history=[], auditions=[], survivors=[],
                  playing=None, favorite=None)
         d['dsp_hashes']['experiment/recipes.py'] = hashlib.sha256(
-            (Path(__file__).resolve().parents[1] / 'experiment/recipes.py').read_bytes()).hexdigest()
+            (Path(__file__).resolve().parents[2] / 'experiment/legacy/recipes.py').read_bytes()).hexdigest()
         controls = {key: .5 for key in control_keys}
         d['baseline_controls'] = deepcopy(controls)
         d['probe_version'] = PROBE_VERSION

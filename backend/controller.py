@@ -61,9 +61,7 @@ class SimulatorController(QObject):
         self._sweep_last_tick = None
         self.sweep_rpm = 1000.0
         self.sweep_throttle = 20.0
-        from experiment.experiment_manager import ExperimentManager
-        self._experiment = ExperimentManager(self, self)
-        from experiment.live_search import LiveSearch
+        from experiment.legacy.live_search import LiveSearch
         self._search = LiveSearch(self, self)
 
     speed = Property(float, lambda self: self._telemetry_value('speed_m_s', self.car.speed / 3.6) * 3.6, notify=changed)
@@ -85,7 +83,6 @@ class SimulatorController(QObject):
     speedGaugeMaximum = Property(float, lambda self: 300.0 if self.car.max_speed > 220 else 220.0, notify=vehicleChanged)
     selectedVehicle = Property(str, lambda self: self.car.name, notify=vehicleChanged)
     soundThemes = Property('QStringList', lambda self: list(SOUND_THEMES), constant=True)
-    experiment = Property(QObject, lambda self: self._experiment, constant=True)
     search = Property(QObject, lambda self: self._search, constant=True)
     soundSweepActive = Property(bool, lambda self: self.sweep_timer.isActive(), notify=sessionChanged)
     selectedSoundTheme = Property(str, lambda self: self.sound_theme, notify=soundThemeChanged)
@@ -287,8 +284,6 @@ class SimulatorController(QObject):
 
     @Slot()
     def toggle(self):
-        if self._experiment.state in ('edit', 'rendering', 'compare', 'saved'):
-            return
         if self.soundSweepActive:
             return
         if self.running:

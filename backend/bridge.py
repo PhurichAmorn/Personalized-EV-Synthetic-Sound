@@ -62,7 +62,6 @@ class DesktopBridge:
                 'pairRecipes': {slot: s.data['candidates'][ident].get('recipe_name', '')
                                 for slot, ident in s.data.get('pair', {}).items()} if s.data else {},
             },
-            'experiment': {'state': c.experiment.state, 'error': c.experiment.error},
         }
 
     @staticmethod

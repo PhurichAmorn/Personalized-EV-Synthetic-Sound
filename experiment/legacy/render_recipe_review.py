@@ -1,6 +1,6 @@
 """Render six recipe previews under identical pilot driving inputs.
 
-Run: .venv/bin/python tools/render_recipe_review.py [output directory]
+Run: .venv/bin/python experiment/legacy/render_recipe_review.py [output directory]
 WAVs use unnormalized PCM16; metrics are digital signal proxies, not ISO loudness.
 """
 
@@ -11,9 +11,9 @@ import sys
 import numpy as np
 from scipy.io.wavfile import write
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from audio import SoundEngine
-from experiment.recipes import RECIPE_NAMES, recipe_controls, recipe_profile
+from experiment.legacy.recipes import RECIPE_NAMES, recipe_controls, recipe_profile
 
 
 SCENARIOS = {

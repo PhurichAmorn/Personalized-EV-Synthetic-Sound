@@ -219,7 +219,6 @@ class Sidecar:
         self.audio_monitor.close()
         self.gamepad.close()
         self.controller.search.close()
-        self.controller.experiment.close()
         self.controller.shutdown()
 
 

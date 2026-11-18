@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Confirm from './Confirm'
 import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
 import { describeSound, isLiveRecipe, isTuningRecipe, tooSimilar, type LiveRecipe } from './levels'
@@ -162,11 +163,9 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
         <button type="button" className="control" onClick={() => setPendingFinal(candidate.id)}>Choose this sound</button>
       </div>)}</div> : <button type="button" className="control mt-4" onClick={() => setShowMore(true)}>Show more ({discovery.finalists.length - 3})</button>)}
     </section>)}
-    {pendingFinal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="panel max-w-md p-6" role="dialog" aria-modal="true" aria-label="Confirm final sound">
-      <h2 className="text-xl">Are you sure this is your final sound?</h2>
-      <p className="my-4 text-sm text-neutral-300">You picked #{discovery!.finalists!.findIndex(c => c.id === pendingFinal) + 1}. It will be saved as the result of this session.</p>
-      <div className="flex flex-wrap gap-2"><button type="button" className="control" autoFocus onClick={() => setPendingFinal(null)}>Go back</button><button type="button" className="control" onClick={() => { const id = pendingFinal; setPendingFinal(null); onStop(); setAudition(null); void onCommand('sourceDiscoveryFinish', { id }) }}>Yes, save it</button></div>
-    </div></div>}
+    {pendingFinal && <Confirm title="Are you sure this is your final sound?" text={<>You picked #{discovery!.finalists!.findIndex(c => c.id === pendingFinal) + 1}. It will be saved as the result of this session.</>}>
+      <button type="button" className="control" autoFocus onClick={() => setPendingFinal(null)}>Go back</button><button type="button" className="control" onClick={() => { const id = pendingFinal; setPendingFinal(null); onStop(); setAudition(null); void onCommand('sourceDiscoveryFinish', { id }) }}>Yes, save it</button>
+    </Confirm>}
   </div>
 }
 

@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from audio import SOUND_RECIPES, SoundEngine
-from experiment.recipes import (
+from experiment.legacy.recipes import (
     PROBE_GROUP_FIELDS, PROBE_GROUPS, RECIPE_BASES, RECIPE_NAMES, mode_bounds, probe_profile, recipe_probe_groups,
     recipe_bounds, recipe_controls, recipe_ids, recipe_profile,
 )

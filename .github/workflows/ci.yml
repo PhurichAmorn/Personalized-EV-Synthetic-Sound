@@ -39,6 +39,9 @@ jobs:
           code=${PIPESTATUS[0]}
           grep -E '^(ERROR|FAIL):|^[A-Za-z.]*(Error|Exception)\b' test.log | sort | uniq | head -40 | sed 's/^/::error::/'
           exit $code
+      - name: Frontend tests
+        working-directory: desktop
+        run: npm test
       - name: Frontend build
         working-directory: desktop
         run: npm run build
