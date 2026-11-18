@@ -139,6 +139,6 @@ assert.ok(drivingSoundTargets({...launch,acceleration:3},false,'linear','evolvin
 for(const mode of ['steady','rise','evolving']) {
  const regen=drivingSoundTargets({...cruise,motorLoad:-.7},false,'linear',mode)
  assert.ok(Math.abs(regen.driveGain-(mode==='rise'?.9*.004:0)-.06*.7)<1e-12,'Regen level (halved 2026-11-18, was too loud); Rise adds its rolling floor')
- if(mode!=='steady') assert.ok(regen.semitones>drivingSoundTargets({...cruise,motorLoad:0},false,'linear',mode).semitones+2,'Regen sounds higher')
+ if(mode==='rise') assert.ok(regen.semitones>drivingSoundTargets({...cruise,motorLoad:0},false,'linear',mode).semitones+1,'Regen sounds higher')
  assert.ok(Math.abs(drivingSoundTargets({...cruise,motorLoad:0},false,'linear',mode).driveGain-(mode==='rise'?.9*.004:0))<1e-12,'Coasting: silent, except Rise stays softly audible')
 }

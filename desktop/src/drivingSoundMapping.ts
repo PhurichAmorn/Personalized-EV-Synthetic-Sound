@@ -46,7 +46,7 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
   // A little launch depth tapers away without raising the upper pitch endpoint.
   const launchDepth = 1 * (1 - pitchRegister) ** 2
   const semitones = -10 - launchDepth + (mode === 'steady' ? 9 : mode === 'rise' ? 13 : 11) * travel * pitchRegister + (mode === 'evolving' ? 4 * (1 - Math.exp(-highSpeed / 80)) : 0)
-    + (mode === 'steady' ? 0 : 6 * regen)  // regen sounds higher: up to +6 semitones (2026-11-18)
+    + (mode === 'steady' ? 0 : (mode === 'rise' ? 6 : 0) * regen)  // regen sounds higher in Rising (up to +6 semitones); none in Evolving (+6, +3, +2 too high, 2026-11-18)
   return {
     cycleSpeed: mode === 'evolving' ? .25 + .75 * Math.max(pedal, power) : 1,
     // No parking: Evolving's sweeps follow speed stages (stage below); parked sweeps were heard as a stall (2026-11-18).
