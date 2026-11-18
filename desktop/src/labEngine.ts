@@ -6,10 +6,12 @@ import { sourceAudioBuffers } from './sourceDesigner'
 
 /** Shared audio engine: plain stems -> one granular player per stem (driving motion) -> transformation effects.
  * Sound Lab and source discovery both play through this, so a session sounds exactly like the lab. */
+import { trendGains, type StackTrend } from './stackVoice'
 export type Fx = { tone: number; follow: number; bodyHz: number; bodyDb: number; chorus: number; reverb: number; size: number; tremRate: number; tremDepth: number; rasp: number; vibDepth: number; vibRate: number
   pump: number; res: number  // pump 1: tremolo becomes a sidechain-style duck (sudden dip, slow swell); res: low-pass resonance (Q)
   peakHz?: number  // comfort cap: highest note (Hz) the drive may reach
   stage?: { resonances: [number, number, number][]; lowpassHz: number }  // fixed after-player stage of a 'stack' map voice (mapStage)
+  trend?: StackTrend  // per-player drive trends of a 'stack' map voice with roles (mapTrend)
   drift?: number }  // 1: low-pass breathes +-1100 cents on a 14 s cycle (Dark ambience)
 export type Motion = { mode: 'source' | GranularMode; travel: number; response: SoundResponse; input: 'drive' | 'manual'; position: number; pedal: number }
 // Starts near the original styles' warmth: their chorus and room, a gentle body bump at 450 Hz.
@@ -39,11 +41,12 @@ export function buildRig(context: AudioContext, sources: AudioBuffer[], mode: Mo
   lfo.connect(lfoDepth); lfoDepth.connect(trem.gain); lfo.start()
   const drift = context.createOscillator(), driftDepth = context.createGain()
   drift.frequency.value = 1 / 14; driftDepth.gain.value = 0; drift.connect(driftDepth); driftDepth.connect(low.detune); drift.start()
-  players.forEach(player => player.connect(vib)); vib.connect(trem); trem.connect(body); body.connect(low); low.connect(chorus.input); chorus.output.connect(drive)
+  const stemGains = players.map(() => context.createGain())  // one level per player: roles follow the drive differently (fx.trend)
+  players.forEach((player, i) => { player.connect(stemGains[i]); stemGains[i].connect(vib) }); vib.connect(trem); trem.connect(body); body.connect(low); low.connect(chorus.input); chorus.output.connect(drive)
   drive.connect(dry); dry.connect(master); drive.connect(convolver); convolver.connect(wet); wet.connect(master); master.connect(analyser)
   const startedAt = context.currentTime + .03
   players.forEach(player => player.start(startedAt))
-  const rig = { players, granular, vib, vibLfo, vibDepth, trem, lfo, lfoDepth, drift, driftDepth, body, low, chorus, drive, dry, wet, master, startedAt, driveTarget: 0, size: 0, engineKey: '', rootHz: 0, pump: 0,
+  const rig = { players, stemGains, granular, vib, vibLfo, vibDepth, trem, lfo, lfoDepth, drift, driftDepth, body, low, chorus, drive, dry, wet, master, startedAt, driveTarget: 0, size: 0, engineKey: '', rootHz: 0, pump: 0,
     setRoom(seconds: number) {
       // A new convolver per decay: reassigning .buffer is not allowed in every WebKit version.
       const next = context.createConvolver(), [left, right] = roomImpulse(context.sampleRate, seconds)
@@ -54,7 +57,7 @@ export function buildRig(context: AudioContext, sources: AudioBuffer[], mode: Mo
     dispose() {
       try { players.forEach(player => player.stop(context.currentTime)); lfo.stop(); vibLfo.stop(); drift.stop() } catch { /* already stopped */ }
       players.forEach(player => player.disconnect())
-      ;[vib, vibLfo, vibDepth, drift, driftDepth, trem, lfo, lfoDepth, body, low, drive, dry, wet, master, convolver].forEach(node => node.disconnect()); chorus.dispose()
+      ;[...stemGains, vib, vibLfo, vibDepth, drift, driftDepth, trem, lfo, lfoDepth, body, low, drive, dry, wet, master, convolver].forEach(node => node.disconnect()); chorus.dispose()
     } }
   return rig
 }
@@ -100,6 +103,8 @@ export function driveRig(rig: Rig, motion: Pick<Motion, 'mode' | 'travel' | 'res
     set(player.stage, target.stage, .35)
     set(player.loopHold, target.loopHold, .05)
   }
+  const levels = fx.trend ? trendGains(fx.trend, input.speedKmh, target.propulsion) : null
+  current.stemGains.forEach((gain, i) => set(gain.gain, levels ? levels[i] : 1, .35))
   const envelope = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < current.driveTarget)
   current.driveTarget = target.driveGain
   set(current.drive.gain, envelope.gain, envelope.smoothing)

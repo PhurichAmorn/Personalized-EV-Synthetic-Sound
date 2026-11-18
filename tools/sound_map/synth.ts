@@ -3,7 +3,7 @@
 // blocks has no partial list there, so the check reads its partials off the loop's spectrum.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { plainPartials, EXTRAS_OFF, type PlainParams } from '../../desktop/src/plainSource'
-import { mapStems, mapStage, mapRootHz, type MapVoice } from '../../desktop/src/mapVoice'
+import { mapStems, mapStage, mapRootHz, mapTrend, type MapVoice } from '../../desktop/src/mapVoice'
 // @ts-expect-error plain JS module shared with the AudioWorklet
 import { EngineStage } from '../../desktop/public/audio/granular-processor.mjs'
 
@@ -11,7 +11,8 @@ const [batch, outDir] = process.argv.slice(2)
 mkdirSync(outDir, { recursive: true })
 for (const { id, voice } of JSON.parse(readFileSync(batch, 'utf8')) as { id: string; voice: MapVoice }[]) {
   const stems = mapStems(voice)
-  let loop = Float32Array.from(stems[0][0], (v, i) => v + stems[1][0][i] + stems[2][0][i])
+  const full = mapTrend(voice)?.full ?? [1, 1, 1]  // roles: the quick check judges the sound with every player at its full-drive level
+  let loop = Float32Array.from(stems[0][0], (v, i) => v * full[0] + stems[1][0][i] * full[1] + stems[2][0][i] * full[2])
   const stage = mapStage(voice)
   if (stage) {  // stack: its fixed after-player stage at the loop's own pitch (approximate: in the drive it stays put while pitch moves)
     const engine = new EngineStage({ baseHz: mapRootHz(voice), rasp: 0, cabin: 0, ...stage }, 48000), out = new Float32Array(loop.length)

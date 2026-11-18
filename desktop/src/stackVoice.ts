@@ -24,8 +24,17 @@ export type StackParams = {
   spread: number        // stereo width: how far apart the two ears start (no detuning)
   peakHz: number; peakDb: number; cutoff: number  // after-player stage
   twinkle?: number      // sparkle: bell pings per loop
+  trend?: StackTrend    // roles (2026-11-18): body / middle / top players each follow the drive their own way; absent = the old layout and one level for all
   plain?: Partial<PlainParams>                                // texture 10: the plain synth voice (its rootHz is set per layer)
   blocks?: { shape: SourceShape; controls: SourceControls }  // texture 11: the blocks voice (its rootRatio is set per layer)
+}
+/** Per player (stem): its level at rest and at full drive (0-1), and what drives it: 0 = the pedal, 1 = the speed. Body = lowest layer,
+ * middle = layers between, top = highest layer plus fifths and shimmer. So a sound can keep a steady body while its top opens with speed. */
+export type StackTrend = { rest: [number, number, number]; full: [number, number, number]; mix: [number, number, number] }
+/** Level of each player now, from the speed (km/h) and the pedal (0-1 propulsion). */
+export function trendGains(t: StackTrend, speedKmh: number, propulsion: number): number[] {
+  const speed = Math.max(0, Math.min(1, speedKmh / 120)), pedal = Math.max(0, Math.min(1, propulsion))
+  return [0, 1, 2].map(i => { const u = t.mix[i] * speed + (1 - t.mix[i]) * pedal; return t.rest[i] + (t.full[i] - t.rest[i]) * u })
 }
 export const STACK_TEXTURES = ['plain', 'strings', 'hollow', 'glass', 'sparkle', 'air', 'choir', 'strings pad', 'cello', 'electric', 'plain synth', 'blocks']
 const FAMILY: Record<number, [SourceFamily, number]> = { 6: ['vocal', 1], 7: ['bowed', 1], 8: ['orchestra', .6], 9: ['evolution', .45] }  // family, register
@@ -104,7 +113,8 @@ export function stackStems(p: StackParams): Float32Array[][] {
   }
   const layers = Math.max(1, Math.min(5, Math.round(p.layers)))
   for (let k = 0; k < layers; k++) {
-    const f = grid(p.rootHz * 2 ** k), level = p.fall ** k, stem = k === 0 ? 0 : k < 3 ? 1 : 2, cycles = swell[k]
+    const f = grid(p.rootHz * 2 ** k), level = p.fall ** k, cycles = swell[k]
+    const stem = k === 0 ? 0 : p.trend ? (k === layers - 1 ? 2 : 1) : k < 3 ? 1 : 2  // with roles the top layer is the top player, whatever the layer count
     const t = Math.round(p.timbres[k] ?? 0), loop = t >= TIMBRES.length ? texture(t, f, p, k) : null
     if (loop) {  // as loud as a plain layer at this level (RMS level/sqrt 2), with the layer's own swell
       const rms = Math.sqrt(loop[0].reduce((s, v) => s + v * v, 0) / FRAMES) || 1, scale = level / Math.SQRT2 / rms

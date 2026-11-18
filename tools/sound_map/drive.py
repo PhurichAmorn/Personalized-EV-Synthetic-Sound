@@ -17,6 +17,7 @@ from score import FS, SPL, HERE, fluctuation, prepare
 from generate import LIMITS, LIBRARY
 
 MODES = ('rise', 'evolving')
+DRIVE_LIMITS = LIMITS
 GATE = ('rise',)     # modes that decide pass/fail. Evolving is recorded only: it rejects the kept Pure tone (pulsing 0.46, two crossfaded voices)
 STEP = FS // 20      # drive control step (50 ms)
 AUDIBLE = .3         # drive gain (after the envelope's square root) above which a moment counts
@@ -68,7 +69,7 @@ def measure(job):
 
 def verdict(per_mode, modes=GATE):
     """Failing (metric, mode) pairs in the given modes; empty means pass."""
-    return [f'{k} {m[k]:.2f} > {LIMITS[k]} ({mode}, {m["at"][k]:.0f} s)' for mode, m in per_mode.items() if mode in modes for k in LIMITS if k in m and m[k] > LIMITS[k]]  # C is a settings measure: same on the drive
+    return [f'{k} {m[k]:.2f} > {DRIVE_LIMITS[k]} ({mode}, {m["at"][k]:.0f} s)' for mode, m in per_mode.items() if mode in modes for k in DRIVE_LIMITS if k in m and m[k] > DRIVE_LIMITS[k]]  # C is a settings measure: same on the drive
 
 
 def check_all(sounds, pool):

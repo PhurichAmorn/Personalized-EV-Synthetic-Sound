@@ -5,10 +5,11 @@
 // Returns left then right (pre-reverb, drive gain held at 1) and the drive gain every 50 ms step.
 // ponytail: the app plays each of the three stems in its own granular player; here they are summed into one player (grain alignment
 // differs slightly). Run one player per stem if the check must match the app sample for sample.
-import { mapStems, mapRootHz, mapStage, type MapVoice } from '../../desktop/src/mapVoice'
+import { mapStems, mapRootHz, mapStage, mapTrend, type MapVoice } from '../../desktop/src/mapVoice'
 import { drivingSoundTargets, responseRiseSeconds } from '../../desktop/src/drivingSoundMapping'
 import { driveEnvelopeTarget } from '../../desktop/src/audioAutomation'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from '../../desktop/src/simulatedDrive'
+import { trendGains, type StackTrend } from '../../desktop/src/stackVoice'
 import { SEARCH_FIXED } from '../../desktop/src/levels'
 import type { Fx } from '../../desktop/src/labEngine'
 // @ts-expect-error plain JS module shared with the AudioWorklet
@@ -52,14 +53,19 @@ export function driveSound(voice: MapVoice, fx: Partial<Fx>, mode: 'rise' | 'evo
   // Left stems into both ears, as the check was calibrated (2026-11-16): with width on, the right stem is a few cents sharp, and the
   // L+R mix the check measures turned that stereo spread into beating nobody hears (Sparkle, Bright aah read as pulsing).
   const left = sum(0)
-  return render([left, left], mapRootHz(voice), { ...SEARCH_FIXED, ...fx } as Fx, mode, mapStage(voice))
+  const trend = mapTrend(voice)  // roles: one player per stem, each at its own level (as the app's per-player gains), not one summed player
+  return render([left, left], mapRootHz(voice), { ...SEARCH_FIXED, ...fx } as Fx, mode, mapStage(voice), trend && { trend, stems: stems.map(stem => stem[0]) })
 }
 
 /** stage: optional after-player stage (EngineStage config: fixed resonances, low-pass), as the app's engine and cello use. */
-export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mode: 'rise' | 'evolving', stage?: { resonances: [number, number, number][]; lowpassHz: number }) {
-  const player = new SourceLoopEngine([left, right], FS)
-  if (stage) player.setEngine({ baseHz: rootHz, rasp: fx.rasp, cabin: 0, ...stage })
-  else if (fx.rasp > 0) player.setEngine({ baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 })
+export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mode: 'rise' | 'evolving', stage?: { resonances: [number, number, number][]; lowpassHz: number }, roles?: { trend: StackTrend; stems: Float32Array[] }) {
+  const players = (roles ? roles.stems.map(stem => [stem, stem]) : [[left, right]]).map(source => {
+    const engine = new SourceLoopEngine(source, FS)
+    if (stage) engine.setEngine({ baseHz: rootHz, rasp: fx.rasp, cabin: 0, ...stage })
+    else if (fx.rasp > 0) engine.setEngine({ baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 })
+    return engine
+  })
+  const level = players.map(() => 1), levelTarget = players.map(() => 1)
   const vib = [new Delay(), new Delay()], chorus = [new Delay(), new Delay()], body = new Biquad(), low = new Biquad()
   body.peaking(fx.bodyHz, 1.5, fx.bodyDb)
   const vibGain = fx.vibDepth / 1731 / (2 * Math.PI * fx.vibRate), wetC = .25 * fx.chorus, dryC = 1 - wetC
@@ -74,6 +80,7 @@ export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mo
       t.cycle = target.cycleSpeed; t.hold = target.loopHold; t.stage = target.stage
       t.cutoff = Math.min(20000, Math.max(200, fx.tone * 2 ** (fx.follow * (2 * target.propulsion - 1))))
       const env = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < driveTarget)
+      if (roles) { const g = trendGains(roles.trend, simulatedDrive(n / FS).speedKmh, target.propulsion); g.forEach((v, i) => levelTarget[i] = v); if (n === 0) g.forEach((v, i) => level[i] = v) }
       driveTarget = target.driveGain; t.gain = env.gain; gainSmooth = smooth(env.smoothing)
       if (n === 0) Object.assign(p, t)  // first step is immediate
       gains.push(p.gain)
@@ -83,7 +90,9 @@ export function render([left, right]: Float32Array[], rootHz: number, fx: Fx, mo
     p.cutoff += (t.cutoff - p.cutoff) * smooth(.15)
     if (n % BLOCK === 0) low.lowpass(p.cutoff * 2 ** ((fx.drift ? 1100 * Math.sin(2 * Math.PI * n / FS / 14) : 0) / 1200), fx.res)
     const time = n / FS
-    let l = player.sample(p.rate, p.hold, p.evolve, p.cycle, p.stage), r = player.right
+    for (let i = 0; i < level.length; i++) level[i] += (levelTarget[i] - level[i]) * smooth(.35)
+    let l = 0, r = 0
+    players.forEach((player, i) => { const v = player.sample(p.rate, p.hold, p.evolve, p.cycle, p.stage); l += v * (roles ? level[i] : 1); r += player.right * (roles ? level[i] : 1) })
     const vibDelay = .012 + vibGain * Math.sin(2 * Math.PI * fx.vibRate * time)
     l = vib[0].run(l, vibDelay); r = vib[1].run(r, vibDelay)
     const phase = fx.tremRate * time % 1

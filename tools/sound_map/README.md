@@ -40,6 +40,11 @@ python tools/sound_map/drive.py labelled   # full-drive self-check; must print "
 python tools/sound_map/generate.py 40      # 40 rounds x 140 sounds, about 12 min on 16 cores; out/library.json is rewritten every round
 python tools/sound_map/drive.py library    # full-drive check of every kept sound; writes experiment/sound_map_pool.json for the app
 python tools/sound_map/drive.py pool       # Evolving check of the pool; sounds that pass may be used when the driver picks Evolving in pair 1
+# roles (2026-11-18): stack sounds carry per-player trends (body / middle / top: level at rest, at full drive, pedal-or-speed mix).
+# generate.py prints a coverage table at the end and writes <library>.trials.jsonl (every try, passed or not: data to learn safe settings from).
+# Sparkle (texture 4) is no longer generated: its pings clicked (softer start, full tail and slow bloom did not help).
+# app pool from the per-style libraries (12 diverse per style + 12 blends from the old pool):
+python tools/sound_map/build_pool.py experiment/sound_map_pool.json saved/pool.style-electric.json saved/pool.style-strings.json saved/pool.style-glass.json saved/pool.style-choir.json saved/pool.style-plain.json --blends old_pool.json
 # phase 2: checked variations of every pool sound (one move each), written into the pool file (about 1 h with 14 workers):
 LIMIT_F=0.2 python tools/sound_map/variations.py experiment/sound_map_pool.json
 # style libraries (5 texture families: electric, strings, glass, choir, plain; at least half the layers of that family), one per run:

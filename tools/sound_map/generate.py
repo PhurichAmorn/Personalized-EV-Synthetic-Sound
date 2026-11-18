@@ -43,11 +43,15 @@ STACK_CHOICES = {'stLayers': [3, 4, 5], 'stSeed': list(range(6)), **{f'stT{k}': 
 # air, choir, strings pad, cello, electric, the plain synth voice, the blocks voice); --textures all switches it on. No chorus:
 # depth comes from the layers (chorus only added copies of the same sound).
 STACK_GENES['stTwinkle'] = (3, 16, 0)
-FRAME_TEXTURES = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11]  # no 5 air (wind noise); clicky sparkle is dropped by LIMIT_F=0.2: marks 2026-11-18
+# Roles (2026-11-18, stackVoice.ts StackTrend): the body (lowest layer), middle and top players each have a level at rest, a level at full
+# drive and a mix of what drives them (0 pedal, 1 speed). The full levels set what the quick check judges; the drive check plays the real trends.
+for _r, _name in enumerate(('Body', 'Mid', 'Top')):
+    STACK_GENES.update({f'stRest{_r}': (.05, 1, 0), f'stFull{_r}': (.3, 1, 0), f'stMix{_r}': (0, 1, 0)})
+FRAME_TEXTURES = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11]  # no 5 air (wind noise); no 4 sparkle: its pings clicked in 7 of 9 pool sounds (heard 2026-11-18; softer or longer pings did not help)
 # Styles (2026-11-18): five texture families. A sound's style is the family of at least half its layers ('blend' otherwise).
 # --style NAME grows a stack library of that style only (loose rule: the other layers may be any texture).
 # ponytail: counts layers, not their loudness; weight by layer level if a quiet layer is heard to decide the style.
-STYLES = {'electric': [9, 10, 11], 'strings': [1, 7, 8], 'glass': [3, 4], 'choir': [6], 'plain': [0, 2]}
+STYLES = {'electric': [9, 10, 11], 'strings': [1, 7, 8], 'glass': [3], 'choir': [6], 'plain': [0, 2]}
 STYLE = None
 GENES = {**PLAIN_GENES, **BLOCK_GENES, **FX_GENES, **STACK_GENES}
 VOICE_GENES = {'plain': list(PLAIN_GENES) + list(FX_GENES), 'blocks': list(BLOCK_GENES) + list(FX_GENES), 'stack': list(STACK_GENES) + list(FX_GENES)}
@@ -57,7 +61,7 @@ VOICES = ['plain', 'blocks']  # voices new random sounds use; --voices stack (co
 # inharm 0.25, R 0.1, F 0.15) and the listener heard most sounds as alike (2026-11-17), so every step is larger. Vibrato step
 # 5 cents of the 8-cent range (v4). Chorus and vibrato
 # count as traits so wide or moving sounds are not replaced by dry near-copies. All steps provisional (not yet checked by ear).
-DISTINCT = {'spectrum': .4, 'pitch': 7, 'inharm': .4, 'R': .15, 'F': .2, 'chorus': 1.2, 'vib': 5}
+DISTINCT = {'spectrum': .4, 'pitch': 7, 'inharm': .4, 'R': .15, 'F': .2, 'chorus': 1.2, 'vib': 5, 'trend': .35}  # trend: the biggest change in a player's rest/full level or mix (0-1 each)
 BANDS = [100, 200, 400, 800, 1600, 3200, 6400]  # Hz, as levels.ts soundProfile
 rng = np.random.default_rng(int(os.environ.get('SEED', 1)))  # SEED=2, 3...: a different start per machine (islands, merged by merge.py)
 WORKERS = int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))  # WORKERS=4 on a laptop: slower, stays cool
@@ -129,6 +133,7 @@ def voice_of(g):
         return {'kind': 'stack', 'stack': {'rootHz': round(g['stRoot'] * 5) / 5, 'layers': g['stLayers'], 'timbres': [g[f'stT{k}'] for k in range(5)],
                 'fall': g['stFall'], 'depth': g['stDepth'], 'seed': g['stSeed'], 'fifth': g['stFifth'], 'shimmer': g['stShimmer'],
                 'spread': g['stSpread'], 'peakHz': g['stPeakHz'], 'peakDb': g['stPeakDb'], 'cutoff': g['stCutoff'], 'twinkle': g.get('stTwinkle', 8),
+                **({'trend': {'rest': [g[f'stRest{r}'] for r in range(3)], 'full': [g[f'stFull{r}'] for r in range(3)], 'mix': [g[f'stMix{r}'] for r in range(3)]}} if 'stRest0' in g else {}),
                 **({'plain': {**{k: g[k] for k in PLAIN_GENES}, **{k: g[k] for k in PLAIN_CHOICES}, 'width': 1}} if 10 in used(g) else {}),
                 **({'blocks': {'shape': {k: g[k] for k in BLOCK_GENES if k != 'ensemble'}, 'controls': {'body': .5, 'character': .5, 'ensemble': g['ensemble'], 'movement': 0}}} if 11 in used(g) else {})}}
     if g['voice'] == 'blocks':
@@ -204,7 +209,7 @@ def insert(archive, entry):
 
 def config():
     """Settings two libraries must share to be merged (merge.py) or resumed."""
-    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE, **({'style': STYLE} if STYLE else {})}
+    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE, 'roles': True, **({'style': STYLE} if STYLE else {})}
 
 
 def gap(a, b):
@@ -213,7 +218,21 @@ def gap(a, b):
     return max(spectrum / DISTINCT['spectrum'], abs(a['pitch'] - b['pitch']) / DISTINCT['pitch'], abs(a['inharm'] - b['inharm']) / DISTINCT['inharm'],
                abs(a['R'] - b['R']) / DISTINCT['R'], abs(a['F'] - b['F']) / DISTINCT['F'],
                abs(a.get('chorus', 0) - b.get('chorus', 0)) / DISTINCT['chorus'], abs(a.get('vib', 0) - b.get('vib', 0)) / DISTINCT['vib'],
+               max((abs(x - y) for x, y in zip(a.get('trend', []), b.get('trend', []))), default=0) / DISTINCT['trend'],  # roles: another trend counts as another sound
                float(a.get('style') != b.get('style')))  # another style is always distinct
+
+
+def coverage(archive):
+    """What the library holds: layer counts, and for each player (body, mid, top) how many sounds rise, stay or fall with the drive
+    and what moves it (pedal or speed). A thin row means that kind of sound is missing: run more rounds or another seed."""
+    rows = [e['desc'] for e in archive if 'trend' in e['desc']]
+    if not rows: return 'coverage: no roles in this library'
+    out = ['coverage of %d sounds with roles. layers 3/4/5: %s' % (len(rows), '/'.join(str(sum(d['layers'] == n for d in rows)) for n in (3, 4, 5)))]
+    for r, name in enumerate(('body', 'mid', 'top')):
+        move = [d['trend'][3 + r] - d['trend'][r] for d in rows]
+        out.append('  %s: rises %d, stays %d, falls %d | follows pedal %d, speed %d' % (name, sum(m > .15 for m in move), sum(abs(m) <= .15 for m in move), sum(m < -.15 for m in move),
+                   sum(d['trend'][6 + r] < .5 for d in rows), sum(d['trend'][6 + r] >= .5 for d in rows)))
+    return '\n'.join(out)
 
 
 def evaluate(genomes, pool, tmp='tmp'):
@@ -251,6 +270,7 @@ if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--') and a not in VOICES and a != 'all' and a not in STYLES]
     generations, size, fresh = int(args[0]) if args else 40, 140, .15  # fresh: share of each round that is new random sounds
     archive, log, tried, passed, first = [], [], 0, 0, 0
+    if '--resume' not in sys.argv and os.path.exists(LIBRARY + '.trials.jsonl'): os.remove(LIBRARY + '.trials.jsonl')  # a fresh run starts a fresh log
     created = time.strftime('%Y-%m-%d %H:%M')  # identifies this library (the page keeps marks per library)
     if '--resume' in sys.argv and os.path.exists(LIBRARY):  # continue a saved run (e.g. after a Colab disconnect)
         saved = json.load(open(LIBRARY))
@@ -268,19 +288,24 @@ if __name__ == '__main__':
                 pick = lambda: archive[rng.integers(len(archive))]['genome']
                 genomes = [styled(random_genome() if rng.random() < fresh else mutate(crossover(pick(), pick()) if rng.random() < .25 else pick())) for _ in range(size)]
             added = replaced = 0
+            trials = open(LIBRARY + '.trials.jsonl', 'a')  # every try, passed or not: the data to learn the safe settings from
             for g, (m, d) in zip(genomes, evaluate([{k: v for k, v in g.items() if k != 'seed'} for g in genomes], pool)):
                 tried += 1
                 margin = min(1 - m[k] / LIMITS[k] for k in LIMITS)
+                trials.write(json.dumps({'gen': gen, 'g': {k: round(v, 4) if isinstance(v, float) else v for k, v in g.items()}, 'm': {k: round(v, 4) for k, v in m.items()}, 'pass': margin > 0}) + '\n')
                 if margin <= 0: continue
                 passed += 1
-                desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': g['chorus'], 'vib': g['vibDepth'], 'style': style_of(g)}
+                desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': g['chorus'], 'vib': g['vibDepth'], 'style': style_of(g),
+                        **({'trend': [g[f'st{n}{r}'] for n in ('Rest', 'Full', 'Mix') for r in range(3)], 'layers': g['stLayers']} if 'stRest0' in g else {})}
                 entry = {'id': hashlib.sha1(json.dumps(g, sort_keys=True).encode()).hexdigest()[:10], 'genome': g, 'voice': voice_of(g),
                          'fx': fx_of(g), 'rootHz': root_hz(g), 'style': style_of(g), 'metrics': m, 'desc': desc, 'margin': margin, 'gen': gen, 'from': g.get('seed')}
                 result = insert(archive, entry)
                 added += result == 'added'; replaced += result == 'replaced'
+            trials.close()
             log.append({'gen': gen, 'tried': tried, 'passed': passed, 'kept': len(archive), 'added': added, 'replaced': replaced,
                         'blocks': sum(e['genome']['voice'] == 'blocks' for e in archive), 'seconds': round(time.time() - start, 1)})
             print(log[-1], flush=True)
             json.dump({'created': created, 'limits': LIMITS, 'distinct': DISTINCT, 'config': config(), 'log': log, 'sounds': archive}, open(LIBRARY + '.tmp', 'w'), indent=1)
             os.replace(LIBRARY + '.tmp', LIBRARY)  # never a half-written library if the machine stops mid-save
+    print(coverage(archive), flush=True)
     shutil.rmtree('tmp', ignore_errors=True)

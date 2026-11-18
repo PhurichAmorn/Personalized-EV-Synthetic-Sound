@@ -1,7 +1,7 @@
 import { createPlainVoices, EXTRAS_OFF, type PlainParams } from './plainSource'
 import { renderRecipe } from './sourceRecipe'
 import type { SourceControls, SourceShape } from './sourceDesigner'
-import { stackStems, stackStage, type StackParams } from './stackVoice'
+import { stackStems, stackStage, type StackParams, type StackTrend } from './stackVoice'
 
 /** The source of a sound-map sound (tools/sound_map, SoundMapDiscovery): the plain synth (plainSource.ts) or the generic
  * 'blocks' voice (sourceDesigner.ts: harmonic slope, resonant peaks, FM, noise band, waveshaper, amplitude modulation, inharmonic
@@ -19,3 +19,5 @@ export function mapStems(voice: MapVoice): Float32Array[][] {
 export const mapRootHz = (voice: MapVoice) => voice.kind === 'stack' ? voice.stack.rootHz : voice.kind === 'blocks' ? Math.round(174.8 * (voice.shape.rootRatio ?? 1) * 5) / 5 : voice.plain.rootHz ?? 175
 /** Fixed after-player stage of a voice ('stack' only), applied by the granular players. */
 export const mapStage = (voice: MapVoice) => voice.kind === 'stack' ? stackStage(voice.stack) : undefined
+/** Per-player drive trends of a voice ('stack' with roles only). */
+export const mapTrend = (voice: MapVoice): StackTrend | undefined => voice.kind === 'stack' ? voice.stack.trend : undefined

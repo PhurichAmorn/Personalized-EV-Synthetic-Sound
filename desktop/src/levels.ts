@@ -1,5 +1,5 @@
 import { EXTRAS_OFF, plainPartials, type PlainParams } from './plainSource'
-import { mapRootHz, mapStage, type MapVoice } from './mapVoice'
+import { mapRootHz, mapStage, mapTrend, type MapVoice } from './mapVoice'
 import { FX_DEFAULT, type Fx } from './labEngine'
 import { drivingSoundTargets } from './drivingSoundMapping'
 import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from './simulatedDrive'
@@ -74,8 +74,8 @@ export const tooSimilar = (a: LiveRecipe, b: LiveRecipe) => { const d = pairDist
 export function liveSound(recipe: LiveRecipe) {
   if (isMapRecipe(recipe)) {  // plain: the synth settings; blocks: only rootHz is meaningful (stems come from voiceCache.liveStems)
     const plain = recipe.voice && recipe.voice.kind !== 'plain' ? { rootHz: mapRootHz(recipe.voice) } : recipe.voice?.plain ?? recipe.plain
-    const stage = recipe.voice ? mapStage(recipe.voice) : undefined
-    return { plain: { ...EXTRAS_OFF, air: 0, ...plain } as PlainParams, fx: { ...SEARCH_FIXED, ...recipe.fx, ...(stage ? { stage } : {}) }, mode: recipe.motion, travel: 1 }
+    const stage = recipe.voice ? mapStage(recipe.voice) : undefined, trend = recipe.voice ? mapTrend(recipe.voice) : undefined
+    return { plain: { ...EXTRAS_OFF, air: 0, ...plain } as PlainParams, fx: { ...SEARCH_FIXED, ...recipe.fx, ...(stage ? { stage } : {}), ...(trend ? { trend } : {}) }, mode: recipe.motion, travel: 1 }
   }
   if (!isTuningRecipe(recipe)) return { ...levelSound(recipe), mode: 'rise' as const, travel: 1 }
   const { plain, fx, travel } = tunedSound({ kind: recipe.motion, ...recipe.base, ...recipe.fx }, COMFORT_CAP_HZ)
