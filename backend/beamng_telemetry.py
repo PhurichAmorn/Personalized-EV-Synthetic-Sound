@@ -33,38 +33,42 @@ def decode_ev_sound_packet(packet: bytes) -> dict:
     return fields
 
 
-class TorqueScaler:
-    """Signed motor torque (Nm) -> -1..+1, scaled by the largest drive and regen torque seen so far.
+# Deceleration that reads as full regen on the gauge and in the sound. ponytail: one global value, tuned by ear in
+# BeamNG; make it per car if cars differ a lot.
+REGEN_FULL_G = 0.5
 
-    BeamNG gives no torque limits, and its load field never goes negative, so regen would never sound.
-    The remembered peaks decay slowly toward a floor, so a car or regen-setting change re-scales within minutes.
+
+def regen_from_decel(acceleration_m_s2):
+    """How hard the car slows, 0..1 (REGEN_FULL_G = 1)."""
+    return min(1.0, max(0.0, -acceleration_m_s2 / (REGEN_FULL_G * 9.81)))
+
+
+class TorqueScaler:
+    """Signed motor torque (Nm) -> -1..+1 on fixed scales (no learned peaks).
+
+    Drive: torque / the car's peak torque. Regen (negative torque): how hard the car slows (regen_from_decel), not the
+    motor torque: in one-pedal drive the eSBR300 motor is already at its 100 Nm regen limit on lift-off, and braking only
+    adds friction brakes the torque cannot show, so torque alone would read 100% for both.
     Small torques (noise around zero) and standstill read as exactly 0, and the output is lightly smoothed,
     so the gauges and the regen sound do not flicker.
     """
 
-    def __init__(self, drive_floor=100.0, regen_floor=40.0, forget_s=90.0,
-                 deadband_nm=3.0, deadband_fraction=0.04, still_speed_m_s=0.3, smooth_s=0.12):
-        self.floors = (drive_floor, regen_floor)
-        self.peaks = [drive_floor, regen_floor]
-        self.forget_s = forget_s
+    def __init__(self, deadband_nm=4.0, still_speed_m_s=0.3, smooth_s=0.15):
         self.deadband_nm = deadband_nm
-        self.deadband_fraction = deadband_fraction
         self.still_speed = still_speed_m_s
         self.smooth_s = smooth_s
         self.value = 0.0
         self.started = False
 
-    def update(self, torque, dt, speed=None):
+    def update(self, torque, dt, speed=None, acceleration=0.0, drive_nm=500.0):
         dt = max(0.0, min(dt, 1.0))
-        keep = math.exp(-dt / self.forget_s)
-        self.peaks = [floor + (peak - floor) * keep for floor, peak in zip(self.floors, self.peaks)]
-        side = 0 if torque >= 0 else 1
         still = speed is not None and speed < self.still_speed
-        if still or abs(torque) < max(self.deadband_nm, self.deadband_fraction * self.peaks[side]):
+        if still or abs(torque) < self.deadband_nm:
             raw = 0.0
+        elif torque > 0:
+            raw = min(1.0, torque / drive_nm)
         else:
-            self.peaks[side] = max(self.peaks[side], abs(torque))
-            raw = max(-1.0, min(1.0, torque / self.peaks[side]))
+            raw = -regen_from_decel(acceleration)
         if not self.started or self.smooth_s <= 0 or dt <= 0:
             self.value, self.started = raw, True
         else:

@@ -92,6 +92,8 @@ VEHICLE_CONFIGS = {
         "max_discharge_power_kw": 270.0, "max_charge_power_kw": 150.0,
         "max_regen_torque_nm": 100.0, "max_regen_power_kw": 150.0,  # game motor values (torque at the motor)
         "max_brake_deceleration_g": 0.994, "brake_tire_grip": 1.20,
+        # One-pedal Full (the game default): lift-off asks for the whole 100 Nm regen; recorded coast 87->20 km/h in ~10 s.
+        "lift_off_deceleration_g": 0.17,
         "brake_calibration": "Game-measured 0.994 g (100-0 km/h in 39.6 m)",
         "motor_map_description": "BeamNG eSBR300 electric_300 motor torque curve (game files)",
     },

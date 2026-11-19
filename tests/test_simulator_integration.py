@@ -101,6 +101,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
             self.assertGreater(self.controller.power, .8)
             self.controller.car.motor_torque_nm = -10
             self.controller.car.regen = .1
+            self.controller.car.acceleration_m_s2 = -1.0  # regen reads how hard the car slows
             previous = self.controller.power
             self.tick()
             self.assertGreater(self.controller.power, 0)
@@ -113,6 +114,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
             self.assertGreater(self.controller.charge, 0)
             self.controller.car.motor_torque_nm = 0
             self.controller.car.regen = 0
+            self.controller.car.acceleration_m_s2 = 0.0
             for _ in range(60):
                 self.tick()
             self.assertEqual(self.controller.power, 0)

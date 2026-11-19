@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer, QEvent, Qt
 from audio import DEBUG_THEMES, SOUND_RECIPES, SOUND_THEMES
 from audio import SoundEngine
 from simulation.vehicle_model import VehicleModel, SIMULATOR_PRESETS
-from backend.beamng_telemetry import TorqueScaler
+from backend.beamng_telemetry import TorqueScaler, regen_from_decel
 
 
 class SimulatorController(QObject):
@@ -118,11 +118,11 @@ class SimulatorController(QObject):
         value = lambda key: '' if state.get(key) is None else f'{state[key]:.4f}'
         with open(path, 'a') as handle:
             if fresh:
-                handle.write('t,speed_kmh,throttle,brake,motor_torque,regen_field,regen_torque,motor_load_field,app_signed_load,app_regen,peak_drive,peak_regen\n')
+                handle.write('t,speed_kmh,throttle,brake,motor_torque,regen_field,regen_torque,motor_load_field,app_signed_load,app_regen,acceleration\n')
             handle.write(f"{now:.2f},{state['speed_m_s'] * 3.6:.2f},{value('throttle')},{value('brake')},{value('motor_torque')},"
                          f"{value('regen')},{value('regen_torque')},{value('motor_load')},"
                          f"{'' if self.beamng_signed_load is None else f'{self.beamng_signed_load:.4f}'},{self._regen_level():.4f},"
-                         f"{self.beamng_torque.peaks[0]:.1f},{self.beamng_torque.peaks[1]:.1f}\n")
+                         f"{self.beamng_acceleration:.3f}\n")
 
     def _telemetry_load(self, fallback):
         """Signed motor load -1..+1: scaled real torque if the car reports it, else BeamNG's load field."""
@@ -138,6 +138,8 @@ class SimulatorController(QObject):
         # The packet's "regen" is the regen-mode setting (stays at 100% while coasting), not actual braking torque.
         if self.source_mode == 'BeamNG' and self.beamng_signed_load is not None:
             return max(0.0, -self.beamng_signed_load)
+        if self.source_mode == 'Simulator':
+            return max(0.0, -self._signed_motor_load())
         return self._telemetry_value('regen', self.car.regen)
 
     def _beamng_fresh(self):
@@ -157,7 +159,8 @@ class SimulatorController(QObject):
         self.beamng_previous_sample = (speed, now)
         torque = state.get('motor_torque')
         self.beamng_signed_load = (None if torque is None else
-                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0, speed))
+                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0, speed,
+                                                             self.beamng_acceleration, self.car.max_torque_nm))
         self.beamng_state = state
         self.beamng_received_at = now
         self._record_beamng(now, state)
@@ -347,8 +350,8 @@ class SimulatorController(QObject):
         if self.source_mode == 'BeamNG':
             return max(-1.0, min(1.0, self._telemetry_load(0.0)))
         torque = self.car.motor_torque_nm
-        limit = self.car.max_torque_nm if torque >= 0 else self.car.max_regen_torque_nm
-        return max(-1.0, min(1.0, torque / max(limit, 1e-9)))
+        # Same scales as BeamNG: drive by peak torque, regen by how hard the car slows.
+        return min(1.0, torque / self.car.max_torque_nm) if torque >= 0 else -regen_from_decel(self.car.acceleration_m_s2)
 
     def _update_audio(self):
         if self.soundSweepActive:
@@ -456,7 +459,7 @@ class SimulatorController(QObject):
         if self.source_mode == 'BeamNG':
             self.changed.emit()
             return
-        charge = min(1.0, self.car.regen / max(self.car.max_regen_fraction, 1e-9))
+        charge = regen_from_decel(self.car.acceleration_m_s2) if self.car.motor_torque_nm < 0 else 0.0
         power_target = min(1.0, max(0.0, self.throttle)) if self.car.motor_torque_nm > 0 else 0.0
         current = self.display_power - self.display_charge
         # Both directions pass through zero without lighting both sections.
