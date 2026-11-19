@@ -77,8 +77,10 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     finally { setPending(false) }
   }
   // Final round and parent-check pairs take a direct choice; other pairs use the 1-7 sliders (kept for both, see pairMode).
-  const submitChoice = async () => {
-    if (!discovery || discovery.pair.length !== 2 || !choice) return
+  // One click: an answer is saved at once and the next pair follows (no separate Next button, 2026-11-19).
+  const submitChoice = async (choice: Answer) => {
+    if (!discovery || discovery.pair.length !== 2 || pending) return
+    setChoice(choice)
     // The pick keeps playing while the next pair is prepared, so the listener can keep driving it; Neither stops the sound.
     const pick = choice === 'A' ? discovery.pair[0] : choice === 'B' ? discovery.pair[1] : null
     setPending(true);setAudition(null);auditionSequence.current++
@@ -121,7 +123,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
             })()}
           </div>)}
         </div>
-        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending} onClick={() => setChoice(value)}>{label}</button>)}<button type="button" className="control" disabled={!choice || pending} onClick={() => void submitChoice()}>Save choice · next</button></div>
+        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending} onClick={() => void submitChoice(value)}>{label}</button>)}</div>
         : <div className="source-search-preferences"><button type="button" className="control" disabled={!ready} onClick={() => void feedback()}>Next</button></div>}
         </>}
         {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>Retry preparation</button></p>}
