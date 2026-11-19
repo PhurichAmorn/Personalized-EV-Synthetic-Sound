@@ -12,6 +12,7 @@ export type Fx = { tone: number; follow: number; bodyHz: number; bodyDb: number;
   peakHz?: number  // comfort cap: highest note (Hz) the drive may reach
   stage?: { resonances: [number, number, number][]; lowpassHz: number }  // fixed after-player stage of a 'stack' map voice (mapStage)
   trend?: StackTrend  // per-player drive trends of a 'stack' map voice with roles (mapTrend)
+  gain?: number  // loudness match (tools/sound_map/loudness.py): playback gain so every pool sound starts equally loud
   drift?: number }  // 1: low-pass breathes +-1100 cents on a 14 s cycle (Dark ambience)
 export type Motion = { mode: 'source' | GranularMode; travel: number; response: SoundResponse; input: 'drive' | 'manual'; position: number; pedal: number }
 // Starts near the original styles' warmth: their chorus and room, a gentle body bump at 450 Hz.
@@ -93,7 +94,7 @@ export function driveRig(rig: Rig, motion: Pick<Motion, 'mode' | 'travel' | 'res
   const now = rig.master.context.currentTime, current = rig
   const set = (param: AudioParam, value: number, smoothing: number) => immediate ? param.setValueAtTime(value, now) : smoothParameter(param, value, now, smoothing)
   if (!current.granular) {
-    set(current.drive.gain, 1, .05); set(current.low.frequency, fx.tone, .05); return
+    set(current.drive.gain, fx.gain ?? 1, .05); set(current.low.frequency, fx.tone, .05); return
   }
   const target = drivingSoundTargets(input, stale, motion.response, motion.mode as GranularMode, motion.travel)
   for (const player of current.players as GranularPlayer[]) {
@@ -107,7 +108,7 @@ export function driveRig(rig: Rig, motion: Pick<Motion, 'mode' | 'travel' | 'res
   current.stemGains.forEach((gain, i) => set(gain.gain, levels ? levels[i] : 1, .35))
   const envelope = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < current.driveTarget)
   current.driveTarget = target.driveGain
-  set(current.drive.gain, envelope.gain, envelope.smoothing)
+  set(current.drive.gain, envelope.gain * (fx.gain ?? 1), envelope.smoothing)
   set(current.low.frequency, clamp(fx.tone * 2 ** (fx.follow * (2 * target.propulsion - 1)), 200, 20000), .15)
 }
 

@@ -23,7 +23,7 @@ class DesktopSidecarTest(unittest.TestCase):
             self.assertEqual(read_until(lambda m: m.get('event') == 'hello')['data']['version'], 1)
             process.stdin.write(b'{"id":1,"command":"snapshot","payload":{}}\n')
             reply = read_until(lambda m: m.get('id') == 1)
-            self.assertEqual(reply['result']['vehicle'], 'Compact EV')
+            self.assertEqual(reply['result']['vehicle'], 'BeamNG eSBR300')
             process.stdin.write(b'{"id":3,"command":"unknown","payload":{}}\n')
             self.assertIn('Unknown command', read_until(lambda m: m.get('id') == 3)['error'])
             process.stdin.write(b'{"id":2,"command":"quit","payload":{}}\n')

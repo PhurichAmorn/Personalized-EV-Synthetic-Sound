@@ -75,6 +75,20 @@ VEHICLE_CONFIGS = {
         "lift_off_deceleration_g": 0.0,
         "motor_map_description": "Estimated motor envelope; real 2-speed layout, estimated shifting",
     },
+    "Hirochi SBR4 eSBR300 (BeamNG)": {
+        # The BeamNG car used in the study (fictional vehicle). Published game figures (BeamNG wiki / fan wiki, config
+        # electric_300): single rear motor, 238 kW, 502 Nm, 1536 kg, RWD, 40 kWh pack.
+        "max_power_kw": 238.0, "max_torque_nm": 502.0, "mass_kg": 1536.0, "drive_layout": "RWD",
+        "battery_kwh": 40.0, "battery_type": "Lithium-ion (BeamNG)", "range_km": 0, "range_standard": "not published",
+        # ponytail: top speed, motor ceiling, reduction, tyre radius and regen are estimates; replace with the
+        # electric_300 jbeam values (motor torque curve, gear ratio, regen) read from the game files.
+        "max_speed": 200.0, "max_rpm": 12000.0, "gear_ratio": 7.2, "wheel_radius_m": 0.320,  # forum: "poor acceleration above 200 km/h"
+        "wheelbase_m": 2.60, "cg_height_m": 0.46,
+        "max_regen_torque_nm": 200.0, "max_regen_power_kw": 100.0,
+        "max_brake_deceleration_g": 1.0, "brake_tire_grip": 1.20,
+        "brake_calibration": "Estimated 1.0 g dry braking; unverified",
+        "motor_map_description": "BeamNG eSBR300 peak figures; envelope estimated (no jbeam curve yet)",
+    },
 }
 
 
@@ -82,6 +96,7 @@ VEHICLE_CONFIGS = {
 SIMULATOR_PRESETS = {
     "Compact EV": "Honda e",
     "Performance EV": "Tesla Model 3 Performance (2024 US)",
+    "BeamNG eSBR300": "Hirochi SBR4 eSBR300 (BeamNG)",
 }
 
 

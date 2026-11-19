@@ -35,7 +35,7 @@ def lowpass(x, cutoff, q, period=None):
     return out
 
 
-def play(loop, fx, rate, pedal):
+def play(loop, fx, rate, pedal, raw=False):
     """Approximation of the engine at a fixed pedal: pitch shift, pedal-following low-pass, tremolo/pump.
     Skipped: reverb, chorus, vibrato, rasp (granular-only), body EQ."""
     n = int(FS * SECONDS)
@@ -46,6 +46,7 @@ def play(loop, fx, rate, pedal):
         t = np.arange(n) / FS * fx['tremRate']
         lfo = 2 * (t % 1) - 1 if fx.get('pump') else np.sin(2 * np.pi * t)
         x *= 1 - fx['tremDepth'] / 2 + fx['tremDepth'] / 2 * lfo
+    if raw: return x / .13 * 20e-6 * 10 ** (SPL / 20)  # Pa at the app's own level (rms .13 = SPL); loudness.py
     return x / np.sqrt(np.mean(x ** 2)) * 20e-6 * 10 ** (SPL / 20)  # Pa
 
 

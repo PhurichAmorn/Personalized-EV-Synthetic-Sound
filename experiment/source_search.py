@@ -1371,6 +1371,7 @@ class StyleMapDiscovery(RegionMapDiscovery):
             for i in r['pair']:
                 move=self.by_cell.get(self.candidates[i]['recipe']['cell'],{}).get('move')
                 for m in (move.split('+') if move else []):
+                    m=m.rstrip('2')  # ladder: two steps brighter counts as brighter
                     sign=1 if i==r['winner'] else -1;trend[m]=trend.get(m,0)+sign
                     if m in MAP_OPPOSITE:trend[MAP_OPPOSITE[m]]=trend.get(MAP_OPPOSITE[m],0)-sign
         return trend
@@ -1381,8 +1382,10 @@ class StyleMapDiscovery(RegionMapDiscovery):
         # moves that have been winning go first, then the model's Thompson sample. Winner stays as before.
         here=self.by_cell[self.candidates[self.champion]['recipe']['cell']];parent=self.by_cell.get(here.get('parent'),here)
         heard={i for r in self._choices() for i in r['pair']}|self.excluded;trend=self.move_trends();self._sample()
+        step2=lambda v:(v.get('move') or '').endswith('2') and not (v['move'] or '').startswith('swap')
         left=[v for v in [parent,*parent.get('variations',[])] if v['id']!=here['id'] and (self.motion=='rise' or v['id'] in self.evolving_ok)
-              and self._id(map_recipe(v,self.motion)) not in heard]
+              and self._id(map_recipe(v,self.motion)) not in heard and (not step2(v) or here.get('move')==v['move'][:-1] or not any(w.get('move')==v['move'][:-1] for w in parent.get('variations',[])))]
+        # ladder: 2 steps only after 1 won (or when the parent has no checked first step: then 2 steps is its first)
         if not left:return options  # no variations (pool without phase 2): the phase-1 challenger
         score=lambda v:(sum(trend.get(m,0) for m in v['move'].split('+')) if v.get('move') else 0,self._sampled(map_recipe(v,self.motion)))
         left.sort(key=score,reverse=True)
@@ -1406,6 +1409,8 @@ class StyleMapDiscovery(RegionMapDiscovery):
     def _split_note(self):return f'The pool is split by texture style ({", ".join(self.region_names)}); the model also learns the style.' if self.region_names else None
 
 MAP_GRID=[f'{r}-{b}' for r in ('deep','middle','high') for b in ('dark','bright')]
+MAP_REPEATS={11:'clear',15:'close'}  # completed pairs -> repeat kind: pair 12 replays a clear opening pair, pair 16 the closest call (2026-11-19)
+MAP_REPEAT_GAP=5  # a repeat comes at least 5 pairs after its original, so memory does not decide it
 
 class HeardMapDiscovery(StyleMapDiscovery):
     """StyleMapDiscovery (opening, focus, phase 2 variations) split by what is heard, with no style input to the model. Styles dropped as
@@ -1414,6 +1419,7 @@ class HeardMapDiscovery(StyleMapDiscovery):
     'cell', deep/middle/high body note x dark/bright) is split by its cells; any other pool by k-means on the heard traits."""
     policy='source-map-heard-1'
     feature_names=MAP_FEATURE_NAMES
+    repeats=();_repeat_order=None
     def _regions(self):
         if not all('cell' in s for s in self.pool):return RegionMapDiscovery._regions(self)
         self.region_names=[c for c in MAP_GRID if any(s['cell']==c for s in self.pool)]
@@ -1421,6 +1427,38 @@ class HeardMapDiscovery(StyleMapDiscovery):
         typical=[int(min(np.flatnonzero(label==k),key=lambda i:np.linalg.norm(units[i]-units[label==k].mean(0)))) for k in range(len(self.region_names))]
         return label,typical
     def _split_note(self):return f'The pool is split into a grid ({", ".join(self.region_names)}): body note deep/middle/high x dark/bright.' if self.region_names else None
+    def start(self,motion=None):
+        with self.lock:self.repeats=[];self._repeat_order=None
+        super().start(motion)
+    def _proposals(self):
+        options=super()._proposals()  # first, so the champion still follows the last focus answer
+        kind=MAP_REPEATS.get(self.completed)
+        if self.rematch or kind is None:return options
+        rows=self._choices();done={r['of'] for r in self.repeats}
+        old=[(n,r) for n,r in enumerate(rows) if n<=self.completed-MAP_REPEAT_GAP and n>=self.motion_pairs and n not in done and r.get('winner')
+             and len(set(r['pair']))==2 and not any(r['pair']==x['pair'][::-1] for x in self.repeats)]
+        if kind=='clear':  # an opening pair: its two sounds are the furthest apart in the session
+            old=[(n,r) for n,r in old if n<self.motion_pairs+MAP_OPENING]
+            key=lambda nr:-float(np.linalg.norm(self._unit(self.candidates[nr[1]['pair'][0]]['recipe'])-self._unit(self.candidates[nr[1]['pair'][1]]['recipe'])))
+        else:  # the closest call after the opening: the smallest gap in the model's current taste
+            old=[(n,r) for n,r in old if n>=self.motion_pairs+MAP_OPENING];mean,_=self._posterior()
+            u=lambda i:float(self._features(self.candidates[i]['recipe'])@mean);key=lambda nr:abs(u(nr[1]['pair'][0])-u(nr[1]['pair'][1]))
+        if not old:return options
+        n,row=min(old,key=key)
+        self.repeats.append({'at':self.completed,'of':n,'kind':kind,'pair':row['pair'][::-1]})
+        self._repeat_order=row['pair'][::-1];self.rematch=list(row['pair']);return []
+    def _prepare(self):
+        super()._prepare()
+        if self._repeat_order and set(self.pair)==set(self._repeat_order):self.pair=list(self._repeat_order)  # repeat: A and B swapped
+        self._repeat_order=None
+    def export(self):
+        data=super().export();rows=self._choices()
+        same=lambda a,b:(a['winner'] is not None and a['winner']==b['winner']) or (a['winner'] is None and a['choice']==b['choice'])
+        data['repeats']=[{**r,'first':rows[r['of']]['choice'],'again':rows[r['at']]['choice'],'agree':same(rows[r['of']],rows[r['at']])}
+                         for r in self.repeats if r['at']<len(rows)]
+        data['note']+=(f' Repeats: pairs {", ".join(str(k+1) for k in sorted(MAP_REPEATS))} replay an earlier pair (A and B swapped, at least '
+                       f'{MAP_REPEAT_GAP} pairs later): first a clear opening pair, then the closest call; both answers count, and agreement is exported.')
+        return data
     def focus_regions(self,rows=None):
         """Grid: the best cell first, then the runner-up and every neighbour of the best cell (one step in register or in brightness), so
         the focus stage can cross a cell line where the taste sits near it (soft cells, 2026-11-19). Far cells only via Neither answers."""

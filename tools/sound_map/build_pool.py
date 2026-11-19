@@ -2,12 +2,12 @@
   python tools/sound_map/build_pool.py out.json pool.electric.json pool.strings.json ... [--blends old_pool.json]   (per style)
   python tools/sound_map/build_pool.py out.json pool.body.json ... --grid [--exclude id,id]   (per grid cell: deep/middle/high root x dark/bright)
 Blends are the old pool's sounds whose layer textures do not make one style. --grid keeps only body-led sounds (body loudest over the whole drive, and measured)."""
-import json, sys
+import json, os, sys
 import numpy as np
 from generate import STYLES, BANDS, GRID_ROOTS, body_rule
 from score import PITCHES
 
-PER = 12
+PER = int(os.environ.get('PER', 12))  # sounds per group (cell or style)
 LIM = {'S': 1.3, 'R': 0.3, 'F': 0.2}
 
 def style_of(sound):

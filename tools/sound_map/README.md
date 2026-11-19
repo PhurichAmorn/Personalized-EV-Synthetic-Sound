@@ -48,6 +48,8 @@ python tools/sound_map/build_pool.py experiment/sound_map_pool.json saved/pool.s
 # grid pool (2026-11-19, replaces styles in the session): body-led sounds, 12 per cell of deep/middle/high body note x dark/bright
 LIMIT_F=0.2 SEED=41 LIBRARY=library.body-1.json python tools/sound_map/generate.py 20 --voices stack --textures all --body   # then drive.py library
 python tools/sound_map/build_pool.py experiment/sound_map_pool.json saved/pool.body-*.json --grid
+# then the ladder variations, then loudness matching (fx.gain per sound and variation; the app multiplies its level by it)
+LIMIT_F=0.2 WORKERS=14 python tools/sound_map/variations.py && WORKERS=14 python tools/sound_map/loudness.py
 # phase 2: checked variations of every pool sound (one move each), written into the pool file (about 1 h with 14 workers):
 LIMIT_F=0.2 python tools/sound_map/variations.py experiment/sound_map_pool.json
 # style libraries (5 texture families: electric, strings, glass, choir, plain; at least half the layers of that family), one per run:
