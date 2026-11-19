@@ -53,6 +53,12 @@ FRAME_TEXTURES = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11]  # no 5 air (wind noise); no 4
 # ponytail: counts layers, not their loudness; weight by layer level if a quiet layer is heard to decide the style.
 STYLES = {'electric': [9, 10, 11], 'strings': [1, 7, 8], 'glass': [3], 'choir': [6], 'plain': [0, 2]}
 STYLE = None
+# Body-led (2026-11-19): --body makes the body (lowest layer) the clearly loudest player, so the note heard is always the root and never
+# jumps an octave as the middle or top open with the drive (listener: the root decided nothing when another layer led). Fall at most .7,
+# and the middle and top levels are capped at half the body's, at rest and at full drive (levels between follow, so the whole drive).
+# ponytail: estimated from the settings (fifths and shimmer counted at full level); build_pool.py --grid also checks the measured bands.
+BODY = False
+GRID_ROOTS = (58, 89)  # Hz: deep below 58, middle to 89, high above (thirds of B's 2026-11-19 survivors)
 GENES = {**PLAIN_GENES, **BLOCK_GENES, **FX_GENES, **STACK_GENES}
 VOICE_GENES = {'plain': list(PLAIN_GENES) + list(FX_GENES), 'blocks': list(BLOCK_GENES) + list(FX_GENES), 'stack': list(STACK_GENES) + list(FX_GENES)}
 NO_CHORUS = set()  # voices that never get chorus (--textures all: stack)
@@ -120,6 +126,28 @@ def styled(g):
     g, family = dict(g), STYLES[STYLE]
     others = [k for k in rng.permutation(g['stLayers']) if g[f'stT{k}'] not in family]
     while style_of(g) != STYLE: g[f'stT{others.pop()}'] = int(rng.choice(family))
+    return g
+
+
+def side_levels(n, fall, shimmer, fifth, root):
+    """Level of the middle and the top player relative to the body's, before trends (fifths and shimmer counted at full level)."""
+    return (fall if n > 2 else 0), fall ** (n - 1) * (1 + shimmer) + fifth * sum(fall ** k for k in range(n) if root * 2 ** k >= 220)
+
+
+def body_rule(stack):
+    """A stack voice (mapVoice.ts) whose body is at least twice as loud as the middle and the top, at rest and at full drive."""
+    mid, top = side_levels(stack['layers'], stack['fall'], stack['shimmer'], stack['fifth'], stack['rootHz'])
+    t = stack.get('trend')
+    return bool(t) and all(t[e][0] >= 2 * max(t[e][1] * mid, t[e][2] * top) * (1 - 1e-6) for e in ('rest', 'full'))
+
+
+def body_led(g):
+    """With --body: lower the middle and top levels until the body is at least twice as loud as each, at rest and at full drive."""
+    if not BODY or g['voice'] != 'stack': return g
+    g = dict(g); mid, top = side_levels(g['stLayers'], g['stFall'], g['stShimmer'], g['stFifth'], g['stRoot'])
+    for p in ('stRest', 'stFull'):
+        if mid: g[p + '1'] = min(g[p + '1'], g[p + '0'] / (2 * mid))
+        g[p + '2'] = min(g[p + '2'], g[p + '0'] / (2 * top))
     return g
 
 
@@ -209,7 +237,7 @@ def insert(archive, entry):
 
 def config():
     """Settings two libraries must share to be merged (merge.py) or resumed."""
-    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE, 'roles': True, **({'style': STYLE} if STYLE else {})}
+    return {'limits': LIMITS, 'distinct': DISTINCT, 'voices': VOICES, 'textures': STACK_CHOICES['stT0'], 'safe': SAFE, 'roles': True, **({'style': STYLE} if STYLE else {}), **({'body': True} if BODY else {})}
 
 
 def gap(a, b):
@@ -232,6 +260,10 @@ def coverage(archive):
         move = [d['trend'][3 + r] - d['trend'][r] for d in rows]
         out.append('  %s: rises %d, stays %d, falls %d | follows pedal %d, speed %d' % (name, sum(m > .15 for m in move), sum(abs(m) <= .15 for m in move), sum(m < -.15 for m in move),
                    sum(d['trend'][6 + r] < .5 for d in rows), sum(d['trend'][6 + r] >= .5 for d in rows)))
+    if BODY:  # the session grid: deep / middle / high root x dark / bright (sharpness above the median of that root band)
+        for lo, hi, name in ((0, GRID_ROOTS[0], 'deep'), (*GRID_ROOTS, 'middle'), (GRID_ROOTS[1], 999, 'high')):
+            S = [e['metrics']['S'] for e in archive if lo <= e['rootHz'] < hi]
+            out.append('  %s: %d sounds, sharpness %s' % (name, len(S), '%.2f-%.2f' % (min(S), max(S)) if S else '-'))
     return '\n'.join(out)
 
 
@@ -263,6 +295,7 @@ if __name__ == '__main__':
         STYLE = sys.argv[sys.argv.index('--style') + 1]
         if STYLE not in STYLES: raise SystemExit(f'--style: one of {", ".join(STYLES)}')
         VOICES[:] = ['stack']
+    if '--body' in sys.argv: BODY = True; GENES['stFall'] = (.35, .7, 0)
     if '--voices' in sys.argv: VOICES[:] = sys.argv[sys.argv.index('--voices') + 1].split(',')
     if '--textures' in sys.argv or STYLE:  # frame: every layer any texture; the plain and blocks genes evolve inside stacks too; no chorus
         STACK_CHOICES.update({f'stT{k}': FRAME_TEXTURES for k in range(5)}); NO_CHORUS.add('stack')
@@ -283,10 +316,10 @@ if __name__ == '__main__':
         for gen in range(first, generations + 1):
             start = time.time()
             if gen == 0:
-                genomes = (seeds() if '--seeds' in sys.argv else []) + [styled(random_genome()) for _ in range(size)]
+                genomes = (seeds() if '--seeds' in sys.argv else []) + [body_led(styled(random_genome())) for _ in range(size)]
             else:
                 pick = lambda: archive[rng.integers(len(archive))]['genome']
-                genomes = [styled(random_genome() if rng.random() < fresh else mutate(crossover(pick(), pick()) if rng.random() < .25 else pick())) for _ in range(size)]
+                genomes = [body_led(styled(random_genome() if rng.random() < fresh else mutate(crossover(pick(), pick()) if rng.random() < .25 else pick()))) for _ in range(size)]
             added = replaced = 0
             trials = open(LIBRARY + '.trials.jsonl', 'a')  # every try, passed or not: the data to learn the safe settings from
             for g, (m, d) in zip(genomes, evaluate([{k: v for k, v in g.items() if k != 'seed'} for g in genomes], pool)):

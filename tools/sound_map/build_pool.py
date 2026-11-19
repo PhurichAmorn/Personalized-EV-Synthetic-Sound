@@ -1,9 +1,11 @@
-"""Build the app pool from per-style libraries: PER sounds per style (diverse, farthest-point on the sound traits), plus the best blends.
-  python tools/sound_map/build_pool.py out.json pool.electric.json pool.strings.json ... [--blends old_pool.json]
-Blends are the old pool's sounds whose layer textures do not make one style. Writes the pool file; run variations.py on it next."""
+"""Build the app pool: PER sounds per group (diverse, farthest-point on the sound traits). Run variations.py on it next.
+  python tools/sound_map/build_pool.py out.json pool.electric.json pool.strings.json ... [--blends old_pool.json]   (per style)
+  python tools/sound_map/build_pool.py out.json pool.body.json ... --grid [--exclude id,id]   (per grid cell: deep/middle/high root x dark/bright)
+Blends are the old pool's sounds whose layer textures do not make one style. --grid keeps only body-led sounds (body loudest over the whole drive, and measured)."""
 import json, sys
 import numpy as np
-from generate import STYLES
+from generate import STYLES, BANDS, GRID_ROOTS, body_rule
+from score import PITCHES
 
 PER = 12
 LIM = {'S': 1.3, 'R': 0.3, 'F': 0.2}
@@ -20,6 +22,21 @@ def traits(sound):
 def evolving_ok(sound):
     return 'driveEvolving' in sound and all(sound['driveEvolving'][k] <= LIM[k] for k in LIM)
 
+def body_leads(sound):
+    """The body leads over the whole drive (generate.body_rule on its settings) and, measured at full pedal and peak rate, the loudest
+    octave band is the band of the body's note."""
+    return body_rule(sound['voice']['stack']) and int(np.argmax(sound['desc']['bands'])) == int(np.digitize(sound['rootHz'] * PITCHES['peak'][0], BANDS))
+
+def grid(sounds):
+    """Cell per sound: deep / middle / high by root, dark / bright by drive sharpness against the median of that root band."""
+    out = {}
+    for lo, hi, name in ((0, GRID_ROOTS[0], 'deep'), (*GRID_ROOTS, 'middle'), (GRID_ROOTS[1], 999, 'high')):
+        band = [s for s in sounds if lo <= s['rootHz'] < hi]
+        if not band: continue
+        mid = float(np.median([s['drive']['S'] for s in band]))
+        for s in band: out[s['id']] = f"{name}-{'bright' if s['drive']['S'] > mid else 'dark'}"
+    return out
+
 def pick(sounds, n):
     """Start at the sound nearest the style's average, then keep adding the one farthest from those taken (Evolving-failing sounds count 30% less)."""
     if len(sounds) <= n: return list(sounds)
@@ -33,6 +50,21 @@ def pick(sounds, n):
 
 if __name__ == '__main__':
     args = sys.argv[1:]; out = args.pop(0)
+    if '--grid' in args:
+        args.remove('--grid')
+        drop = set(args.pop(args.index('--exclude') + 1).split(',')) if '--exclude' in args else set()  # sounds heard as bad
+        if '--exclude' in args: args.remove('--exclude')
+        sounds = [s for path in args for s in json.load(open(path))['sounds'] if body_leads(s) and s['id'] not in drop]
+        cell = grid(sounds)
+        for s in sounds: s['style'], s['cell'] = style_of(s), cell[s['id']]
+        names = [f'{r}-{b}' for r in ('deep', 'middle', 'high') for b in ('dark', 'bright')]
+        chosen = [s for name in names for s in pick([s for s in sounds if s['cell'] == name], PER)]
+        meta = {k: v for k, v in json.load(open(args[0])).items() if k != 'sounds'}
+        json.dump({**meta, 'source': 'tools/sound_map build_pool.py --grid: body-led sounds, deep/middle/high x dark/bright', 'sounds': chosen}, open(out, 'w'))
+        for name in names:
+            mine = [s for s in chosen if s['cell'] == name]
+            print(name, len(mine), 'of', sum(s['cell'] == name for s in sounds), 'pass Evolving', sum(evolving_ok(s) for s in mine))
+        sys.exit()
     blends = args.pop(args.index('--blends') + 1) if '--blends' in args else None
     if blends: args.remove('--blends')
     pools = [json.load(open(path)) for path in args]

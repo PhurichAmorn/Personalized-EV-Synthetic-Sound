@@ -740,6 +740,40 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         data=d.export();self.assertEqual(data['policy'],'source-map-styles-1');self.assertEqual(data['regions']['names'][data['regions']['focus'][0]-1],liked)
         self.assertEqual(len(d._features(d.candidates[d.pair[0]]['recipe'] if d.pair else next(iter(d.candidates.values()))['recipe'])),len(d.feature_names))
         d.close()
+    def test_heard_session_splits_by_heard_traits_not_style(self):
+        import json,tempfile,random as stdrandom
+        from experiment.source_search import HeardMapDiscovery,MAP_FEATURE_NAMES,MAP_REGIONS,MAP_POOL
+        data=json.loads(Path(MAP_POOL).read_text())
+        for sound in data['sounds']:sound.pop('cell',None)  # a pool without grid cells: k-means regions
+        path=Path(tempfile.mkdtemp())/'pool.json';path.write_text(json.dumps(data))
+        d=HeardMapDiscovery(renderer=lambda recipe:None,pool_path=path);d.start('rise');d.rng=stdrandom.Random(6)
+        self.assertIsNone(d.region_names);self.assertEqual(d.n_regions,MAP_REGIONS)  # k-means regions, numbered
+        for n in range(20):
+            self.assertEqual(len(d.pair),2,d.error);d.feedback(choice='A')
+        recipe=next(iter(d.candidates.values()))['recipe']
+        self.assertEqual(len(d._features(recipe)),len(MAP_FEATURE_NAMES))  # no style input
+        data=d.export();self.assertEqual(data['policy'],'source-map-heard-1');self.assertIn('phase2',data);self.assertNotIn('texture style',data['note'])
+        d.close()
+    def test_heard_session_on_a_grid_pool_opens_with_every_cell(self):
+        import json,tempfile,random as stdrandom
+        from experiment.source_search import HeardMapDiscovery,MAP_POOL,MAP_GRID,MAP_OPENING
+        data=json.loads(Path(MAP_POOL).read_text())
+        for k,sound in enumerate(data['sounds']):sound['cell']=MAP_GRID[k%len(MAP_GRID)]  # build_pool.py --grid labels
+        path=Path(tempfile.mkdtemp())/'pool.json';path.write_text(json.dumps(data))
+        d=HeardMapDiscovery(renderer=lambda recipe:None,pool_path=path);d.start('rise');d.rng=stdrandom.Random(7)
+        self.assertEqual(d.region_names,MAP_GRID);cell=lambda i:d.by_cell[d.candidates[i]['recipe']['cell']]['cell']
+        opened=set()
+        for n in range(20):
+            self.assertEqual(len(d.pair),2,d.error)
+            if n<MAP_OPENING:opened|={cell(i) for i in d.pair}
+            d.feedback(choice='A')
+        self.assertEqual(opened,set(MAP_GRID))  # the opening plays every cell of the grid
+        self.assertIn('grid',d.export()['note'])
+        best=d.region_names[d.focus_regions()[0]];names={d.region_names[k] for k in d.focus_regions()[1:]}
+        r,b=best.split('-');R=['deep','middle','high']
+        near={f"{r}-{'dark' if b=='bright' else 'bright'}"}|{f'{x}-{b}' for x in R if abs(R.index(x)-R.index(r))==1}
+        self.assertTrue(near<=names,(best,names))  # soft cells: every neighbour of the best cell can bring a challenger
+        d.close()
     def test_phase2_fine_tunes_the_champion_with_its_variations(self):
         import copy,json,tempfile,random as stdrandom
         from experiment.source_search import StyleMapDiscovery,MAP_POOL,STYLE_PAIRS,MAP_FINE_PAIRS
@@ -789,6 +823,5 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertGreaterEqual(games(d.finalists[0]),2)  # the pick never rests on one game
         self.assertEqual(d.finalists[0],next(i for i in d._ranked() if games(i)>=2))  # the model's best, not the last winner
         self.assertEqual(d._bt_order()[0][0],d.finalists[0])
-        winners=[r['winner'] for r in d.history[MAP_OPENING+MAP_PLAYOFF:] if r['winner']]
-        self.assertTrue(any(w!=winners[0] for w in winners))  # a challenger did take over
+        # no 'a challenger took over' check: when the opening already finds the listener's favourite none should (failed 5/10 runs, old pool too)
         d.close()

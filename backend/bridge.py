@@ -2,7 +2,7 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.source_search import StyleMapDiscovery, TuningDiscovery
+from experiment.source_search import HeardMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
 
 
@@ -11,7 +11,7 @@ class DesktopBridge:
         self.controller = controller
         # Per session: 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map).
         # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
-        self.searches = {'tuning': TuningDiscovery(), 'map': StyleMapDiscovery()}
+        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery()}
         self.source_discovery = self.searches['tuning']
         self.history = SourceHistory(self.source_discovery)
 

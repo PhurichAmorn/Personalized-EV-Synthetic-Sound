@@ -1103,7 +1103,8 @@ def _centre(s):
     """Spectral centre: energy-weighted octave band (0 = under 100 Hz .. 7 = over 6.4 kHz), from the offline profile."""
     e=np.array(s['desc']['bands'])**2;return float(e@np.arange(len(e))/max(e.sum(),1e-12))
 # Heard traits the model learns over, each scaled to 0..1: (name, getter, low, high, log scale). Same for both voices.
-MAP_FEATURES=(('pitch',lambda s:s['rootHz'],80,200,1),('sharpness',lambda s:s['drive']['S'],.3,1.,0),('roughness',lambda s:s['drive']['R'],0,.3,0),
+MAP_FEATURES=(('pitch',lambda s:s['rootHz'],41,130,1),  # the body's note (2026-11-19: the pool's roots are 41-130 Hz; was 80-200)
+    ('sharpness',lambda s:s['drive']['S'],.3,1.,0),('roughness',lambda s:s['drive']['R'],0,.3,0),
     ('pulsing',lambda s:s['drive']['F'],0,.4,0),('inharmonic',lambda s:s['desc']['inharm'],0,1,0),('centre',_centre,1,6,0),
     ('blocks',lambda s:float(s['voice']['kind']=='blocks'),0,1,0),('chorus',lambda s:s['fx'].get('chorus',0),0,2,0),
     ('vibrato',lambda s:s['fx'].get('vibDepth',0),0,8,0))
@@ -1399,6 +1400,33 @@ class StyleMapDiscovery(RegionMapDiscovery):
         data=super().export();data['phase2']={'pairs':MAP_FINE_PAIRS,'move_trends':self.move_trends(),
             'variations_heard':{i:{'parent':self.by_cell[c['recipe']['cell']].get('parent'),'move':self.by_cell[c['recipe']['cell']].get('move')}
                                 for i,c in self.candidates.items() if self.by_cell.get(c['recipe'].get('cell'),{}).get('move')}}
-        data['note']=data['note'].replace(f'The pool is split into {self.n_regions} regions (k-means on the 9 traits).',
-            f'The pool is split by texture style ({", ".join(self.region_names or [])}); the model also learns the style.')
+        split=self._split_note()
+        if split:data['note']=data['note'].replace(f'The pool is split into {self.n_regions} regions (k-means on the 9 traits).',split)
         return data
+    def _split_note(self):return f'The pool is split by texture style ({", ".join(self.region_names)}); the model also learns the style.' if self.region_names else None
+
+MAP_GRID=[f'{r}-{b}' for r in ('deep','middle','high') for b in ('dark','bright')]
+
+class HeardMapDiscovery(StyleMapDiscovery):
+    """StyleMapDiscovery (opening, focus, phase 2 variations) split by what is heard, with no style input to the model. Styles dropped as
+    the session split on 2026-11-19: on a blind same/different test the listener could not tell styles apart (4/12, chance 6) once
+    register and brightness were matched; the sound's style stays in the pool data. A grid pool (build_pool.py --grid: every sound has a
+    'cell', deep/middle/high body note x dark/bright) is split by its cells; any other pool by k-means on the heard traits."""
+    policy='source-map-heard-1'
+    feature_names=MAP_FEATURE_NAMES
+    def _regions(self):
+        if not all('cell' in s for s in self.pool):return RegionMapDiscovery._regions(self)
+        self.region_names=[c for c in MAP_GRID if any(s['cell']==c for s in self.pool)]
+        label=np.array([self.region_names.index(s['cell']) for s in self.pool]);units=np.array([s['unit'] for s in self.pool])
+        typical=[int(min(np.flatnonzero(label==k),key=lambda i:np.linalg.norm(units[i]-units[label==k].mean(0)))) for k in range(len(self.region_names))]
+        return label,typical
+    def _split_note(self):return f'The pool is split into a grid ({", ".join(self.region_names)}): body note deep/middle/high x dark/bright.' if self.region_names else None
+    def focus_regions(self,rows=None):
+        """Grid: the best cell first, then the runner-up and every neighbour of the best cell (one step in register or in brightness), so
+        the focus stage can cross a cell line where the taste sits near it (soft cells, 2026-11-19). Far cells only via Neither answers."""
+        order=super().focus_regions(rows)
+        if not self.region_names:return order
+        reg=lambda k:self.region_names[k].split('-');R=('deep','middle','high');(r0,b0)=reg(order[0])
+        near=[k for k in range(self.n_regions) if k not in order and ((reg(k)[0]==r0)!=(reg(k)[1]==b0)) and abs(R.index(reg(k)[0])-R.index(r0))<=1]
+        return order+near
+    def _features(self,recipe):return RegionMapDiscovery._features(self,recipe)

@@ -9,13 +9,15 @@ generating anything live. Each variation is the pool sound with ONE named move (
   brighter+deeper ... and the other three bright/pitch combinations
 A variation is kept if it passes the quick guardrail and the full 22 s drive check in Rising (Evolving is measured and stored, as for pool
 sounds), and is audibly different from its parent but still the same sound: gap (generate.gap, in 'distinct' steps) in [NEAR, FAR].
+A body-led parent (build_pool.py --grid) keeps only variations whose body still leads, by settings and as measured (2026-11-19).
 Writes the kept variations into the pool file under each sound ('variations'). Heavy: run on the cooled laptop.
   LIMIT_F=0.2 WORKERS=14 python tools/sound_map/variations.py [pool file, default experiment/sound_map_pool.json]"""
 import json, os, subprocess, sys
 for var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS'): os.environ[var] = '1'
 from multiprocessing import Pool
 import numpy as np
-from generate import LIMITS, FRAME_TEXTURES, check, gap, style_of
+from generate import LIMITS, FRAME_TEXTURES, check, gap, style_of, body_rule
+from build_pool import body_leads
 from score import prepare
 from drive import check_all, verdict, TMP
 
@@ -60,7 +62,8 @@ def moves(sound):
            'body+': make(body(3)), 'body-': make(body(-3)), 'swap1': make(swap(layers[0])), 'swap2': make(swap(layers[1 % len(layers)])),
            'brighter+deeper': make(bright(1.5), pitch(-3)), 'brighter+higher': make(bright(1.5), pitch(3)),
            'darker+deeper': make(bright(1 / 1.5), pitch(-3)), 'darker+higher': make(bright(1 / 1.5), pitch(3))}
-    return {name: v for name, v in out.items() if v[0] != sound['voice'] or v[1] != sound['fx']}  # a move at its limit changes nothing
+    lead = body_rule(st)  # a body-led parent (grid pool) keeps only body-led variations: fuller / shimmer must not let the top take over
+    return {name: v for name, v in out.items() if (v[0] != sound['voice'] or v[1] != sound['fx']) and (not lead or body_rule(v[0]['stack']))}  # a move at its limit changes nothing
 
 
 def quick(items, pool):
@@ -89,6 +92,7 @@ if __name__ == '__main__':
             if any(m[k] > LIMITS[k] for k in LIMITS): continue
             desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': fx.get('chorus', 0), 'vib': fx.get('vibDepth', 0),
                     'style': style_of({'voice': 'stack', 'stLayers': voice['stack']['layers'], **{f'stT{k}': t for k, t in enumerate(voice['stack']['timbres'])}})}
+            if body_rule(s['voice']['stack']) and not body_leads({'voice': voice, 'desc': desc, 'rootHz': voice['stack']['rootHz']}): continue  # measured
             if NEAR <= gap(s['desc'], desc) <= FAR: near[vid] = (m, desc)
         print(f'{len(near)} pass the quick check and are near their parent: full-drive check', flush=True)
         drive = check_all({vid: meta[vid][2:] for vid in near}, pool)
