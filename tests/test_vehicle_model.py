@@ -238,33 +238,6 @@ class VehiclePhysicsTests(unittest.TestCase):
             car.update(1, 0, 0.01)
             self.assertEqual(car.friction_force_n, 0)
 
-    def test_full_cold_hot_batteries_still_allow_service_braking(self):
-        for car in self.cars():
-            car.soc = 1
-            car.auxiliary_power_w = 0
-            car.speed = 100
-            self.advance(car, 0, 1, 1)
-            self.assertEqual(car.regen, 0)
-            self.assertGreater(car.friction_force_n, 0)
-            self.assertLess(car.speed, 90)
-            self.assertEqual(car.soc, 1)
-        for temperature in (-20, 55):
-            car = VehicleModel(battery_temperature_c=temperature, speed=80)
-            self.advance(car, 0, 1, 1)
-            self.assertEqual(car.regen, 0)
-            self.assertGreater(car.friction_force_n, 0)
-
-    def test_soc_and_temperature_charge_taper(self):
-        car = VehicleModel()
-        normal = car.charge_power_limit_w
-        car.soc = 0.95
-        self.assertAlmostEqual(car.charge_power_limit_w, normal * 0.5)
-        car.soc = 0.99
-        self.assertAlmostEqual(car.charge_power_limit_w, normal * 0.1)
-        car.soc = 0.8
-        car.battery_temperature_c = 0
-        self.assertAlmostEqual(car.charge_power_limit_w, normal * 0.4)
-
     def test_coasting_and_low_speed_stop(self):
         coast = VehicleModel(speed=80, lift_off_deceleration_g=0)
         regen = VehicleModel(speed=80)
@@ -296,20 +269,6 @@ class VehiclePhysicsTests(unittest.TestCase):
             self.assertTrue(0 < car.battery_recovered_energy_j < kinetic)
             self.assertGreater(car.soc, 0.8)
             self.assert_energy(car, initial_battery, 100)
-
-    def test_empty_battery_and_stationary_auxiliaries(self):
-        car = VehicleModel(soc=0)
-        self.advance(car, 1, 0, 2)
-        self.assertEqual(car.speed, 0)
-        self.assertEqual(car.battery_power_w, 0)
-        car = VehicleModel(speed=80, soc=0)
-        self.advance(car, 0, 1, 1)
-        self.assertGreater(car.soc, 0)
-        car = VehicleModel()
-        initial = car.battery_energy_j
-        self.advance(car, 0, 0, 2)
-        self.assertEqual(car.speed, 0)
-        self.assertAlmostEqual(initial - car.battery_energy_j, 1000, delta=1e-5)
 
     def test_energy_balance_acceleration_braking_and_limits(self):
         for car in self.cars():
@@ -354,12 +313,6 @@ class VehiclePhysicsTests(unittest.TestCase):
             car = VehicleModel.from_name(name)
             self.advance(car, .03, 0, .5)
             self.assertGreater(car.speed, 0)
-            car.speed, car.soc = 60, 1
-            car.auxiliary_power_w = 0
-            car.motor_torque_nm = 0
-            self.advance(car, 0, 0, 1)
-            self.assertEqual(car.regen, 0)
-            self.assertEqual(car.friction_force_n, 0)
 
     def test_input_validation_and_noop_timestep(self):
         car = VehicleModel()
@@ -371,7 +324,7 @@ class VehiclePhysicsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 car.update(*arguments)
         for arguments in ({'mass_kg': 0}, {'wheel_radius_m': -1}, {'soc': 1.1},
-                          {'motor_efficiency': 1.1}, {'battery_temperature_c': math.nan}):
+                          {'motor_efficiency': 1.1}):
             with self.assertRaises(ValueError):
                 VehicleModel(**arguments)
 

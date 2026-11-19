@@ -46,19 +46,19 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
   // A little launch depth tapers away without raising the upper pitch endpoint.
   const launchDepth = 1 * (1 - pitchRegister) ** 2
   const semitones = -10 - launchDepth + (mode === 'steady' ? 9 : mode === 'rise' ? 13 : 11) * travel * pitchRegister + (mode === 'evolving' ? 4 * (1 - Math.exp(-highSpeed / 80)) : 0)
-    + (mode === 'steady' ? 0 : (mode === 'rise' ? 6 : 0) * regen)  // regen sounds higher in Rising (up to +6 semitones); none in Evolving (+6, +3, +2 too high, 2026-11-18)
+    + (mode === 'steady' ? 0 : (mode === 'rise' ? 3 : 0) * regen)  // regen sounds higher in Rising (up to +3 semitones; +6 heard as too aggressive, 2026-11-19); none in Evolving (+6, +3, +2 too high, 2026-11-18)
   return {
     cycleSpeed: mode === 'evolving' ? .25 + .75 * Math.max(pedal, power) : 1,
     // No parking: Evolving's sweeps follow speed stages (stage below); parked sweeps were heard as a stall (2026-11-18).
     loopHold: 0,
-    stage: mode === 'evolving' ? speed / 40 : 0,  // Evolving Shepard position: one octave of rise per 40 km/h
+    stage: mode === 'evolving' ? speed / 80 : 0,  // Evolving Shepard position: one octave per 80 km/h (40 heard as too fast on the eSBR300, 2026-11-19)
     rate: Math.pow(2, semitones / 12), semitones,
     bodyGain: 1,
     padGain: .65 + .2 * propulsion,
     glassGain: .1 + propulsion * .25 + .08 * acceleration,
     airGain: 1,
     cutoff: 1300 + 900 * propulsion - 200 * regen + 350 * acceleration,
-    driveGain: input.running && !input.starting && !stale ? activity * (.9 * presence * (1 - .6 * quietCruise) + .06 * regen) : 0,  // regen halved (-6 dB): heard as too loud, 2026-11-18
+    driveGain: input.running && !input.starting && !stale ? activity * (.9 * presence * (1 - .6 * quietCruise) + .03 * regen) : 0,  // regen -6 dB again: heard as too loud 2026-11-18 and 2026-11-19
     propulsion, regen,
   }
 }

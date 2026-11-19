@@ -42,7 +42,7 @@ class DesktopBridgeTest(unittest.TestCase):
 
     def test_snapshot_exposes_signed_motor_load(self):
         self.controller.car.motor_torque_nm = -.5 * self.controller.car.max_regen_torque_nm
-        self.controller.car.acceleration_m_s2 = -.25 * 9.81  # half of full regen (0.5 g)
+        self.controller.sim_regen = .5  # smoothed regen level, set by the tick from deceleration
         self.assertAlmostEqual(self.bridge.snapshot()['motorLoad'], -.5)
         self.controller.car.motor_torque_nm = .5 * self.controller.car.max_torque_nm
         self.assertAlmostEqual(self.bridge.snapshot()['motorLoad'], .5)

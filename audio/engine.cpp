@@ -182,7 +182,7 @@ void Engine::render(float* out,std::size_t frames,int channels){
         const double sound=(work[1][j]*motor+.60*work[2][j]*regen)/std::max(1.,work[1][j]+work[2][j]);
         double sample=(1-work[6][j])*std::tanh(sound*work[5][j]*1.6)+work[6][j]*std::tanh(work[37][j]);
         if(startup_sample>=0){const double t=(startup_sample+static_cast<double>(j))/sample_rate;
-            const double envelope=std::pow(std::sin(pi*clamp(t/1.4)),2);sample+=.045*envelope*(std::sin(2*pi*196*t)+.5*std::sin(2*pi*294*t));}
+            const double envelope=std::pow(std::sin(pi*clamp(t/1.4)),2);sample+=.015*envelope/* -10 dB vs .045: louder than gain-matched car sounds, 2026-11-19 */*(std::sin(2*pi*196*t)+.5*std::sin(2*pi*294*t));}
         const float rendered=static_cast<float>(std::clamp(sample*work[9][j],-1.,1.));
         for(int c=0;c<channels;++c)out[j*channels+c]=rendered;
     }

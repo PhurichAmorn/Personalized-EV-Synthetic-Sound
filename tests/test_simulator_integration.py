@@ -175,13 +175,13 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertIn('No audio device', self.controller.error)
         self.stop_audio.assert_called_once()
 
-    def test_empty_battery_has_no_launch_sound(self):
-        self.controller.car.soc = 0
+    def test_drained_battery_never_caps_full_throttle(self):
+        self.controller.toggle()
+        self.controller.car.soc = 0  # driving only: a drained pack once capped full throttle near 50 km/h (2026-11-19)
         self.controller.throttle = 1
-        self.tick()
-        self.assertEqual(self.controller.audio.params[1], 0)
-        self.assertEqual(self.controller.speed, 0)
-
+        for _ in range(250):
+            self.tick()
+        self.assertGreater(self.controller.speed, 80)
 
     def test_common_sound_bridge_across_vehicles(self):
         pitches = []

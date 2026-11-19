@@ -166,11 +166,10 @@ class VehicleModel:
     brake_response_s: float = 0.08
     speed_limit_response_s: float = 0.40
 
-    # ponytail: fixed battery temperature and estimated BMS maps; replace with
-    # measured maps/thermal dynamics when vehicle calibration data is available.
+    # Driving only: SOC is energy bookkeeping; it never limits driving or regen (a drained pack capped
+    # full throttle near 50 km/h, 2026-11-19). Only the fixed power caps below limit the motor.
     usable_battery_kwh: float = 28.5
     soc: float = 0.80
-    battery_temperature_c: float = 25.0
     max_regen_torque_nm: float = 160.0
     max_regen_power_kw: float = 50.0  # generator shaft limit
     max_charge_power_kw: float = 40.0  # battery acceptance, independent of DC charger
@@ -242,8 +241,6 @@ class VehicleModel:
             raise ValueError("Braking tire grip must be finite and nonnegative.")
         if not math.isfinite(self.speed) or self.speed < 0:
             raise ValueError("Initial speed must be finite and nonnegative.")
-        if not math.isfinite(self.battery_temperature_c):
-            raise ValueError("Battery temperature must be finite.")
         self.rpm = self.speed / 3.6 * self.motor_rad_s_per_m_s * 60 / (2 * math.pi)
 
     @classmethod
@@ -302,16 +299,11 @@ class VehicleModel:
 
     @property
     def charge_power_limit_w(self) -> float:
-        # Estimated taper over the last 10% SOC and at cold/hot pack temperatures.
-        temperature = max(0.0, min(1.0, (self.battery_temperature_c + 10) / 25,
-                                   (55 - self.battery_temperature_c) / 15))
-        return self.max_charge_power_kw * 1000 * temperature * min(1.0, (1 - self.soc) / 0.10)
+        return self.max_charge_power_kw * 1000
 
     @property
     def discharge_power_limit_w(self) -> float:
-        temperature = max(0.0, min(1.0, (self.battery_temperature_c + 20) / 25,
-                                   (60 - self.battery_temperature_c) / 15))
-        return self.max_discharge_power_kw * 1000 * temperature * min(1.0, self.soc / 0.05)
+        return self.max_discharge_power_kw * 1000
 
     def update(self, throttle: float, brake: float, dt: float) -> None:
         if not all(math.isfinite(x) for x in (throttle, brake, dt)):
@@ -357,7 +349,7 @@ class VehicleModel:
         # Upper speed bound makes torque/power limits valid across the whole step.
         omega_bound = (v + self.tire_grip * 9.81 * dt) * k
         available = self.propulsion_torque_limit(omega_bound * 60 / (2 * math.pi))
-        battery_available = min(self.discharge_power_limit_w, self.battery_energy_j / dt)
+        battery_available = self.discharge_power_limit_w
         auxiliaries = min(self.auxiliary_power_w, battery_available)
         propulsion_budget = max(0.0, battery_available - auxiliaries)
         copper_k = self.copper_loss_at_peak_w / self.max_torque_nm**2
@@ -383,9 +375,7 @@ class VehicleModel:
         requested_brake = regen_request if brake else 0.0
         fade = min(1.0, v / self.regen_fade_speed_m_s)
         fade = fade * fade * (3 - 2 * fade)
-        charge_budget = min(self.charge_power_limit_w,
-                            (self.usable_battery_kwh * 3_600_000 - self.battery_energy_j)
-                            / dt + auxiliaries)
+        charge_budget = self.charge_power_limit_w + auxiliaries
         regen_cap = min(self.max_regen_torque_nm,
                         self.max_regen_power_kw * 1000 / max(v * k, 1e-9),
                         charge_budget / max(v * k * self.regen_efficiency, 1e-9))

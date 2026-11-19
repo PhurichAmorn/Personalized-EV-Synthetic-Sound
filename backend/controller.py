@@ -32,6 +32,7 @@ class SimulatorController(QObject):
         self.beamng_previous_sample = None
         self.beamng_error = ''
         self.beamng_torque = TorqueScaler()
+        self.sim_regen = 0.0  # simulator regen 0..1, smoothed like BeamNG's (0.15 s)
         self.beamng_signed_load = None  # torque-based -1..+1 (None when the car has no motor device)
         self.beamng_stale_after = 0.5
         self.audio = SoundEngine()
@@ -293,7 +294,7 @@ class SimulatorController(QObject):
             self.shutdown()
             if self.source_mode == 'Simulator':
                 self.car = VehicleModel.from_name(self.car.name)
-            self.display_power = self.display_charge = 0.0
+            self.display_power = self.display_charge = self.sim_regen = 0.0
         else:
             try:
                 self.audio.start()
@@ -350,8 +351,8 @@ class SimulatorController(QObject):
         if self.source_mode == 'BeamNG':
             return max(-1.0, min(1.0, self._telemetry_load(0.0)))
         torque = self.car.motor_torque_nm
-        # Same scales as BeamNG: drive by peak torque, regen by how hard the car slows.
-        return min(1.0, torque / self.car.max_torque_nm) if torque >= 0 else -regen_from_decel(self.car.acceleration_m_s2)
+        # Same scales as BeamNG: drive by peak torque, regen by how hard the car slows (smoothed in _tick).
+        return min(1.0, torque / self.car.max_torque_nm) if torque >= 0 else -self.sim_regen
 
     def _update_audio(self):
         if self.soundSweepActive:
@@ -452,6 +453,8 @@ class SimulatorController(QObject):
         self._last_tick = now
         if self.source_mode == 'Simulator':
             self.car.update(self.throttle, self.brake, dt)
+            target = regen_from_decel(self.car.acceleration_m_s2) if self.car.motor_torque_nm < 0 else 0.0
+            self.sim_regen += (target - self.sim_regen) * (1 - math.exp(-dt / 0.15))  # instant jumps heard as too aggressive (2026-11-19)
         elif self._beamng_fresh():
             load = self._signed_motor_load()
             self.display_power, self.display_charge = max(0.0, load), max(0.0, -load)
@@ -459,7 +462,7 @@ class SimulatorController(QObject):
         if self.source_mode == 'BeamNG':
             self.changed.emit()
             return
-        charge = regen_from_decel(self.car.acceleration_m_s2) if self.car.motor_torque_nm < 0 else 0.0
+        charge = self.sim_regen if self.car.motor_torque_nm < 0 else 0.0
         power_target = min(1.0, max(0.0, self.throttle)) if self.car.motor_torque_nm > 0 else 0.0
         current = self.display_power - self.display_charge
         # Both directions pass through zero without lighting both sections.
