@@ -92,7 +92,6 @@ export function useCarSound(state: State, onCommand: Command, personalizeOpen: b
     gs, mode, start: () => start(),
     select: (next: GranularMode) => { setMode(next); start(next) },
     cycle: () => { const next = mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'; setMode(next); start(next) },
-    theme: (name: string) => { setGs(false); ref.current?.stop(); void onCommand('theme', { name }) },
     stop: () => ref.current?.stop(),
     resume: () => { if (gs && state.running) ref.current?.start() },
     analyser: () => ref.current?.analyser() ?? null,

@@ -26,7 +26,7 @@ export default function OverlayHost({ state, error, page, onCommand, onPersonali
   return <>
     {/* One card for both pages: Personalize keeps the live graphs and adds the session below them. */}
     <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onStartStop={() => void startStop()} analyser={car.analyser}
-          granular={car.gs} granularMode={car.mode} onGranular={car.start} onGranularCycle={car.cycle} onTheme={car.theme}
+          granular={car.gs} granularMode={car.mode} onGranular={car.start} onGranularCycle={car.cycle}
           personalize={page === 'search' ? searchPanel : undefined} onLeave={onLeave} />
     <SoundEditor onAudioError={setAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded />
   </>

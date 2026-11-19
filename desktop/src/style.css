@@ -371,10 +371,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-vbar { position: relative; width: 10px; height: 60px; overflow: hidden; border-radius: 5px; background: rgb(0 0 0 / 35%); }
 .overlay-vbar b { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 5px; }
 .overlay-wave { height: 56px; }
-.overlay-sound-head { display: flex; align-items: center; justify-content: space-between; }
-.overlay-view { display: flex; gap: 3px; }
-.overlay-view button { padding: 1px 6px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 5px; background: rgb(0 0 0 / 26%); color: var(--muted); font: inherit; letter-spacing: .04em; cursor: pointer; }
-.overlay-view button[aria-pressed='true'] { border-color: #dadada; color: var(--fg); background: rgb(255 255 255 / 12%); }
+.overlay-wave + .overlay-wave { margin-top: 4px; }
 .overlay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .overlay-grid > div { min-width: 0; }
 .overlay-caption { margin-bottom: 4px; color: var(--muted); font-size: 9px; letter-spacing: .08em; }
