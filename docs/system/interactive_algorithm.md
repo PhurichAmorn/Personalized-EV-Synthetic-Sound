@@ -85,7 +85,8 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   stays the top-two confirmation. A variation is a pool sound with one named move (brighter, darker, deeper, higher, fuller, thinner,
   smoother, shimmer, body+, body-, two layer swaps) or a bright/pitch combination, made offline by `tools/sound_map/variations.py`
   and kept only if it passes the quick guardrail and the full Rising drive check (Evolving stored and used to gate Evolving sessions)
-  and is 0.3-1.5 'distinct' steps from its parent: audibly different, still the same sound. Nothing is generated during a session.
+  and is 0.6-1.5 'distinct' steps from its parent: audibly different, still the same sound (2026-11-20: steps doubled to filter x2,
+  4/7 semitones, sharpness >= 0.08 acum; the 0.3 / x1.4 / 2-semitone steps drew 'Both good' twice in a row). Nothing is generated during a session.
   Move trends: a variation that wins gives +1 to its moves and -1 to their opposites; one that loses -1. The next variation is the one
   whose moves have the best trend, then the model's Thompson sample. When a variation becomes champion, pairs continue with its
   parent's other variations (one level deep; combinations cover two-step moves). Changes are not shown to the listener; the export has

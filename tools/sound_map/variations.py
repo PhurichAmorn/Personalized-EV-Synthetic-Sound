@@ -1,7 +1,7 @@
 """Phase 2: checked variations of every pool sound, so a session can fine-tune the listener's favourite (pairs 17-19) without
-generating anything live. Ladder (2026-11-19): each variation turns ONE knob of the pool sound's layered (stack) recipe by one or two steps:
-  brighter / darker (2)  low-pass (stack cutoff) and tone x/÷ 1.4 per step, middle and top player levels x/÷ 1.15 per step
-  deeper / higher (2)    root -/+ 2 semitones per step
+generating anything live. Ladder (2026-11-19; steps doubled 2026-11-20: x1.4 / 2 st / 0.3 were not heard, 'Both good' twice): each variation turns ONE knob of the pool sound's layered (stack) recipe by one or two steps:
+  brighter / darker (2)  low-pass (stack cutoff) and tone x/÷ 2 per step, middle and top player levels x/÷ 1.3 per step
+  deeper / higher (2)    root -/+ 4 semitones (one step) or 7 (two steps)
   fuller / thinner       upper layers louder/softer (fall +/- .1), more/less fifth (+/- .15)
   swap1 / swap2          one layer's texture swapped (two different layers)
 'brighter2' is two steps; the session offers it only after 'brighter' won. No combinations of knobs (yet).
@@ -20,8 +20,8 @@ from build_pool import body_leads
 from score import prepare
 from drive import check_all, verdict, TMP
 
-NEAR, FAR = .3, 1.5  # audibly different (0.3 step) but not a new sound (1.5 steps; a layer swap may change the style, which counts 1)
-BRIGHT_S = .03  # acum: smallest sharpness change that counts as an audible brightness step
+NEAR, FAR = .6, 1.5  # audibly different (0.6 step; 0.3 was not heard) but not a new sound (1.5 steps; a layer swap may change the style, which counts 1)
+BRIGHT_S = .08  # acum (.03 was not heard): smallest sharpness change that counts as an audible brightness step
 HERE = os.path.dirname(os.path.abspath(__file__))
 POOL = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(HERE, '..', '..', 'experiment', 'sound_map_pool.json')
 WORKERS = int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))
@@ -38,11 +38,11 @@ def moves(sound):
         return voice, fx
     def bright(n):  # n steps (negative: darker)
         def change(st, fx):
-            st['cutoff'] = clip(st['cutoff'] * 1.4 ** n, 800, 6000); fx['tone'] = clip(fx['tone'] * 1.4 ** n, 800, 6000)
+            st['cutoff'] = clip(st['cutoff'] * 2 ** n, 800, 6000); fx['tone'] = clip(fx['tone'] * 2 ** n, 800, 6000)
             if 'trend' in st:  # upper players louder, but never past half the body (body rule), so the body stays the base
                 mid, top = side_levels(st['layers'], st['fall'], st['shimmer'], st['fifth'], st['rootHz'])
                 for e in ('rest', 'full'):
-                    t = st['trend'][e]; t[1:] = [clip(x * 1.15 ** n, .02, 1) for x in t[1:]]
+                    t = st['trend'][e]; t[1:] = [clip(x * 1.3 ** n, .02, 1) for x in t[1:]]
                     if lead: t[1] = min(t[1], t[0] / (2 * mid)) if mid else t[1]; t[2] = min(t[2], t[0] / (2 * top))
         return change
     def pitch(semitones):
@@ -57,7 +57,7 @@ def moves(sound):
         def change(st, fx): st['timbres'][k] = int(rng.choice([t for t in usable if t != st['timbres'][k]]))
         return change
     out = {'brighter': make(bright(1)), 'brighter2': make(bright(2)), 'darker': make(bright(-1)), 'darker2': make(bright(-2)),
-           'deeper': make(pitch(-2)), 'deeper2': make(pitch(-4)), 'higher': make(pitch(2)), 'higher2': make(pitch(4)),
+           'deeper': make(pitch(-4)), 'deeper2': make(pitch(-7)), 'higher': make(pitch(4)), 'higher2': make(pitch(7)),
            'fuller': make(full(1)), 'thinner': make(full(-1)), 'swap1': make(swap(layers[0])), 'swap2': make(swap(layers[1 % len(layers)]))}
     for name in ('brighter2', 'darker2', 'deeper2', 'higher2'):
         if out[name] == out[name[:-1]]: del out[name]  # the second step hit the range limit: same as the first
@@ -94,7 +94,7 @@ if __name__ == '__main__':
             if body_rule(s['voice']['stack']) and not body_leads({'voice': voice, 'desc': desc, 'rootHz': voice['stack']['rootHz']}): continue  # measured
             g = gap(s['desc'], desc)
             audible = (abs(m['S'] - s['metrics']['S']) >= BRIGHT_S if name.startswith(('brighter', 'darker'))
-                       else True if name.startswith(('deeper', 'higher')) else g >= NEAR)  # a 2-semitone step is always heard (0.29 'distinct' steps)
+                       else True if name.startswith(('deeper', 'higher')) else g >= NEAR)  # a 4-semitone step is always heard (about 0.57 'distinct' steps)
             if audible and g <= FAR: near[vid] = (m, desc)
         print(f'{len(near)} pass the quick check and are near their parent: full-drive check', flush=True)
         drive = check_all({vid: meta[vid][2:] for vid in near}, pool)
