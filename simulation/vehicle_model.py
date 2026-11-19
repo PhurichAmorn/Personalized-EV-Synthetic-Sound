@@ -76,18 +76,24 @@ VEHICLE_CONFIGS = {
         "motor_map_description": "Estimated motor envelope; real 2-speed layout, estimated shifting",
     },
     "Hirochi SBR4 eSBR300 (BeamNG)": {
-        # The BeamNG car used in the study (fictional vehicle). Published game figures (BeamNG wiki / fan wiki, config
-        # electric_300): single rear motor, 238 kW, 502 Nm, 1536 kg, RWD, 40 kWh pack.
-        "max_power_kw": 238.0, "max_torque_nm": 502.0, "mass_kg": 1536.0, "drive_layout": "RWD",
+        # The BeamNG car used in the study (fictional vehicle). Values from the game files (sbr.zip, config
+        # electric_300, read 2026-11-19): one rear motor, open diff, final drive 7.6, 0.32 m rear tyre, 40 kWh.
+        # Torque 500 Nm flat, then the game curve (taper = curve torque x speed / peak power). ponytail: the taper
+        # cannot rise, so 4000-6000 rpm uses constant power (462 Nm at 5000 rpm vs game 450).
+        "max_power_kw": 241.9, "max_torque_nm": 500.0, "mass_kg": 1571.0, "drive_layout": "RWD",
+        "power_taper": ((0.0, 1.0), (7000.0, 1.0),
+                        (8000.0, 0.987), (9000.0, 0.974), (10000.0, 0.974), (11000.0, 0.952), (12000.0, 0.831),
+                        (13000.0, 0.76), (14000.0, 0.667), (15000.0, 0.584), (16000.0, 0.554)),
         "battery_kwh": 40.0, "battery_type": "Lithium-ion (BeamNG)", "range_km": 0, "range_standard": "not published",
-        # ponytail: top speed, motor ceiling, reduction, tyre radius and regen are estimates; replace with the
-        # electric_300 jbeam values (motor torque curve, gear ratio, regen) read from the game files.
-        "max_speed": 200.0, "max_rpm": 12000.0, "gear_ratio": 7.2, "wheel_radius_m": 0.320,  # forum: "poor acceleration above 200 km/h"
-        "wheelbase_m": 2.60, "cg_height_m": 0.46,
-        "max_regen_torque_nm": 200.0, "max_regen_power_kw": 100.0,
-        "max_brake_deceleration_g": 1.0, "brake_tire_grip": 1.20,
-        "brake_calibration": "Estimated 1.0 g dry braking; unverified",
-        "motor_map_description": "BeamNG eSBR300 peak figures; envelope estimated (no jbeam curve yet)",
+        "max_speed": 247.0, "max_rpm": 16000.0, "gear_ratio": 7.6, "wheel_radius_m": 0.320,  # game-measured top speed
+        # ponytail: wheelbase and cg height not in the game files read; estimates. Grip, drag and battery limits
+        # tuned so the sim matches game-measured 0-100 4.6 s, 0-200 16.2 s, top 247 km/h (sim 4.7 / 16.2 / 247).
+        "wheelbase_m": 2.60, "cg_height_m": 0.46, "tire_grip": 1.10, "drag_area_m2": 0.60,
+        "max_discharge_power_kw": 270.0, "max_charge_power_kw": 150.0,
+        "max_regen_torque_nm": 100.0, "max_regen_power_kw": 150.0,  # game motor values (torque at the motor)
+        "max_brake_deceleration_g": 0.994, "brake_tire_grip": 1.20,
+        "brake_calibration": "Game-measured 0.994 g (100-0 km/h in 39.6 m)",
+        "motor_map_description": "BeamNG eSBR300 electric_300 motor torque curve (game files)",
     },
 }
 

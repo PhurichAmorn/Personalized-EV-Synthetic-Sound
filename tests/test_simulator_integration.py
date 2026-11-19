@@ -60,7 +60,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
         before = self.controller.speed
         # Laptop sleep/long stalls advance at most 250 ms, not minutes of driving.
         self.tick(60)
-        self.assertLess(self.controller.speed - before, 5)
+        self.assertLess(self.controller.speed - before, 7)  # 250 ms at ~1.1 g
 
     def test_light_pedal_during_regen_never_lights_power(self):
         for name in self.controller.vehicleNames:

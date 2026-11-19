@@ -98,6 +98,9 @@ class VehiclePhysicsTests(unittest.TestCase):
                 self.assertTrue(8 <= times[1] <= 10, times)
             elif name.startswith('Tesla'):
                 self.assertTrue(3 <= times[1] <= 4, times)
+            elif 'eSBR300' in name:
+                # BeamNG game-measured 0-100 km/h: 4.6 s.
+                self.assertTrue(4.3 <= times[1] <= 5.0, times)
             else:
                 self.assertTrue(6 <= times[1] <= 9, times)
 
@@ -128,7 +131,7 @@ class VehiclePhysicsTests(unittest.TestCase):
 
     def test_top_speed_uses_only_road_load_power(self):
         for car in self.cars():
-            self.advance(car, 1, 0, 60, dt=0.02)
+            self.advance(car, 1, 0, 120, dt=0.02)
             self.assertAlmostEqual(car.speed, car.max_speed, delta=0.001)
             self.assertLessEqual(car.rpm, car.max_rpm)
             required = car.road_load_n * car.speed / 3.6 / car.drivetrain_efficiency
