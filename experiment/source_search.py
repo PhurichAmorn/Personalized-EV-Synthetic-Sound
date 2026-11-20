@@ -1315,6 +1315,7 @@ class RegionMapDiscovery(SoundMapDiscovery):
             label,typical=self._regions()
             self.region={s['id']:int(k) for s,k in zip(self.pool,label)};self.typical=[self.pool[i] for i in typical];self.n_regions=len(typical)
     def _regions(self):return map_regions(np.array([s['unit'] for s in self.pool]))
+    opening_pairs=MAP_OPENING  # HeardMapDiscovery on a grid pool: 2 (pitch only)
     region_names=None  # names per region for the export (styles); None: numbered
     def _region_record(self,rows):
         """Wins and losses per region over all answers: Both good is a win for both sounds' regions, Neither a loss for both."""
@@ -1337,7 +1338,7 @@ class RegionMapDiscovery(SoundMapDiscovery):
         if mp and self.completed==0:return super()._proposals()  # pair 1: Rising vs Evolving
         if mp and self.completed==1:self._set_motion(self._choices())
         self.check_parent=None;step=self.completed-mp;rows=self._map_rows();space=self._space()
-        if step<MAP_OPENING:
+        if step<self.opening_pairs:
             # Opening pairs: each typical sound with the one most different from it among those left.
             if step==0:  # Evolving: each region's typical sound among those that also pass in Evolving
                 left=[min([s for s in space if self.region[s['id']]==self.region[t['id']]] or [t],key=lambda s:np.linalg.norm(s['unit']-t['unit'])) for t in self.typical];order=[]
@@ -1476,9 +1477,10 @@ class HeardMapDiscovery(StyleMapDiscovery):
         return label,typical
     def _split_note(self):
         if not self.region_names:return None
-        return (f'The pool is split into a grid ({", ".join(self.region_names)}): body note deep/middle/high x dark/bright. Opening, one trait at a '
-                f'time (2026-11-20, replaces the six typical sounds): deep vs high, then that winner vs middle (brightness matched at {MAP_BALANCED_S} acum, '
-                'other traits near the pool middle; a pitch answer counts for both cells of each band), then the chosen band\'s typical dark vs bright sound.')
+        return (f'The pool is split into a grid ({", ".join(self.region_names)}): body note deep/middle/high x dark/bright. Opening, pitch only '
+                f'(2026-11-20, replaces the six typical sounds): deep vs high, then that winner vs middle (balanced brightness, about {MAP_BALANCED_S} acum, '
+                'other traits near the pool middle; a pitch answer counts for both cells of each band). No dark vs bright pair: brightness is left to '
+                'exploring and the tuning copies.')
     def start(self,motion=None):
         with self.lock:self.repeats=[];self._repeat_order=None
         super().start(motion)
@@ -1493,24 +1495,22 @@ class HeardMapDiscovery(StyleMapDiscovery):
         near=[s for s in here if abs(s['drive']['S']-MAP_BALANCED_S)<=.03] or sorted(here,key=lambda s:abs(s['drive']['S']-MAP_BALANCED_S))[:3]  # brightness first
         weight=np.ones(len(target));weight[0]=4  # then pitch, then the other traits
         return min(near,key=lambda s:float(weight@(s['unit']-target)**2))
-    def _typical(self,cell):
-        t=self.typical[self.region_names.index(cell)]
-        return min([s for s in self._space() if s['cell']==cell] or [t],key=lambda s:np.linalg.norm(s['unit']-t['unit']))
+    @property
+    def opening_pairs(self):return 2 if self._grid() else MAP_OPENING
     def _kept(self,row):return row['winner'] if row.get('winner') else max(row['pair'],key=self._utility)  # Both good / Neither: the model's higher
     def _grid_opening(self,step,rows):
-        """Grid opening, one trait at a time (2026-11-20). Pair 2: deep vs high, pair 3: that winner vs middle, both with brightness
-        matched (MAP_BALANCED_S) and other traits near the pool middle. Pair 4: the chosen band's typical dark vs typical bright sound.
-        Both good: the model's higher of the two goes on (both stay in play: the model learns both beat a neutral sound). Neither on
-        pair 2: the one nearer middle in pitch goes on."""
+        """Grid opening, pitch only (2026-11-20). Pair 2: deep vs high, pair 3: that winner vs middle, all three with balanced brightness
+        (MAP_BALANCED_S) and other traits near the pool middle. Both good: the model's higher of the two goes on (both stay in play: the
+        model learns both beat a neutral sound). Neither on pair 2: the one nearer middle in pitch goes on. The dark vs bright pair 4 was
+        dropped: in the brightness listening check (2026-11-20) the owner heard sharpness gaps under about 0.09 acum as the same and
+        marked every step from 0.42 to 0.86 acum acceptable, and the middle band's typical dark and bright sounds were only 0.08 apart.
+        Brightness is left to exploring and to the tuning copies."""
         if step==0:sounds=[self._balanced('deep'),self._balanced('high')]
-        elif step==1:
+        else:
             r=rows[0];mid=self._balanced('middle')
             keep=self._kept(r) if r['choice']!='neither' else min(r['pair'],key=lambda i:abs(self._sound(i)['unit'][0]-mid['unit'][0]))
             sounds=[self._sound(keep),mid]
-        else:
-            band=self._cell(self._kept(rows[1])).split('-')[0];sounds=[self._typical(f'{band}-dark'),self._typical(f'{band}-bright')]
-        kind='pitch' if step<2 else 'opening'
-        return [self._add_sound(s,kind,f"Opening ({'pitch' if step<2 else 'brightness'}): {s['cell']} ({s['id']})") for s in sounds]
+        return [self._add_sound(s,'pitch',f"Opening (pitch): {s['cell']} ({s['id']})") for s in sounds]
     def _region_record(self,rows):
         """Grid: a pitch pair (pair 2, 3 and the replay) counts for both cells of each band, not only the matched sound's cell."""
         if not self._grid():return super()._region_record(rows)
@@ -1527,7 +1527,7 @@ class HeardMapDiscovery(StyleMapDiscovery):
         return w,l
     def _proposals(self):
         mp=self.motion_pairs;step=self.completed-mp
-        if self._grid() and 0<=step<MAP_OPENING and not (mp and self.completed==0):
+        if self._grid() and 0<=step<self.opening_pairs and not (mp and self.completed==0):
             if mp and self.completed==1:self._set_motion(self._choices())
             self.check_parent=None;self.rematch=self._grid_opening(step,self._map_rows());return []
         options=super()._proposals()  # first, so the champion still follows the last focus answer

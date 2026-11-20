@@ -757,7 +757,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertEqual(len(d._features(recipe)),len(MAP_FEATURE_NAMES))  # no style input
         data=d.export();self.assertEqual(data['policy'],'source-map-heard-1');self.assertIn('phase2',data);self.assertNotIn('texture style',data['note'])
         d.close()
-    def test_grid_opening_pitch_first_then_brightness(self):
+    def test_grid_opening_is_pitch_only(self):
         import random as stdrandom
         from experiment.source_search import HeardMapDiscovery,MAP_BALANCED_S
         for liked,motion in (('deep','rise'),('middle',None),('high','rise')):
@@ -771,8 +771,8 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             self.assertEqual({band(i) for i in d.pair},{'middle','deep' if liked!='high' else 'high'})  # pair 3: winner vs middle
             if liked!='middle':self.assertIn(first,d.pair)  # the same sound returns
             pick()
-            self.assertEqual({cell(i) for i in d.pair},{f'{liked}-dark',f'{liked}-bright'})  # pair 4: brightness inside the chosen band
-            d.feedback(choice='A');w,l=d._region_record(d._map_rows())
+            self.assertNotIn('Opening',' '.join(d._origin_text(d.pair).values()))  # no brightness pair: exploring starts at pair 4
+            w,l=d._region_record(d._map_rows())
             k=[n for n,c in enumerate(d.region_names) if c.startswith(liked+'-')]
             self.assertTrue(all(w[i]>=1 for i in k))  # a pitch answer counts for both cells of the band
             d.close()

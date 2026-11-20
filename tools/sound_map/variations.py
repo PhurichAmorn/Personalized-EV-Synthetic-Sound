@@ -22,7 +22,7 @@ from score import prepare
 from drive import check_all, verdict, TMP
 
 NEAR, FAR = .6, 1.5  # audibly different (0.6 step; 0.3 was not heard) but not a new sound (1.5 steps; a layer swap may change the style, which counts 1)
-BRIGHT_S = .08  # acum (.03 was not heard): smallest sharpness change that counts as an audible brightness step
+BRIGHT_S = .10  # acum (.03 was not heard; 2026-11-20 listening check: gaps under ~.09 heard as the same, .08 raised to .10): smallest sharpness change that counts as an audible brightness step
 HERE = os.path.dirname(os.path.abspath(__file__))
 POOL = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(HERE, '..', '..', 'experiment', 'sound_map_pool.json')
 WORKERS = int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))

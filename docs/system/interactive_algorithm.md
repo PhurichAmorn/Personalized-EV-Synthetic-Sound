@@ -86,18 +86,20 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   smoother, shimmer, body+, body-, two layer swaps) or a bright/pitch combination, made offline by `tools/sound_map/variations.py`
   and kept only if it passes the quick guardrail and the full Rising drive check (Evolving stored and used to gate Evolving sessions)
   and is 0.6-1.5 'distinct' steps from its parent: audibly different, still the same sound (2026-11-20: steps doubled to filter x2,
-  4/7 semitones, sharpness >= 0.08 acum; the 0.3 / x1.4 / 2-semitone steps drew 'Both good' twice in a row). Nothing is generated during a session.
+  4/7 semitones, sharpness >= 0.08 acum, raised to 0.10 after the owner's brightness listening check; the 0.3 / x1.4 / 2-semitone steps drew 'Both good' twice in a row). Nothing is generated during a session.
   Move trends: a variation that wins gives +1 to its moves and -1 to their opposites; one that loses -1. The next variation is the one
   whose moves have the best trend, then the model's Thompson sample. When a variation becomes champion, pairs continue with its
   parent's other variations (one level deep; combinations cover two-step moves). Changes are not shown to the listener; the export has
   `phase2` (move trends, variations heard). Without variations in the pool the pairs fall back to phase-1 challengers.
-- **Session, grid opening one trait at a time (current, 2026-11-20; `HeardMapDiscovery` on a `build_pool.py --grid` pool).** Pair 1 Rising
+- **Session, grid opening by pitch (current, 2026-11-20; `HeardMapDiscovery` on a `build_pool.py --grid` pool).** Pair 1 Rising
   vs Evolving. Pair 2 deep vs high, pair 3 that winner vs middle: each the band's sound with sharpness near 0.55 acum (a level every band
-  reaches), pitch near the band's median, other traits near the pool's middle, so the answer is about pitch alone. Pair 4: the chosen band's
-  typical dark vs typical bright sound. Both good: the model's higher-rated sound goes on and both count as beating a neutral sound; Neither on
-  pair 2: the one nearer middle in pitch goes on. A pitch answer counts for both cells of each band in the region record. Before, pairs 2-4
-  played the six cells' typical sounds, two cells per pair, changing pitch and brightness at once, so an answer could not say which mattered.
-  Pairs 5-11 explore cells, 12 replays pair 3, the pitch winner vs middle (A/B swapped; pair 2 was replayed until 2026-11-20, but deep vs high can be two sounds the
+  reaches), pitch near the band's median, other traits near the pool's middle, so the answer is about pitch alone. Both good: the model's
+  higher-rated sound goes on and both count as beating a neutral sound; Neither on pair 2: the one nearer middle in pitch goes on. A pitch
+  answer counts for both cells of each band in the region record. Before, pairs 2-4 played the six cells' typical sounds, changing pitch
+  and brightness at once. A dark vs bright pair 4 was tried and dropped the same day: in a brightness listening check the owner heard
+  sharpness gaps under about 0.09 acum as the same (0 of 7 pairs, 6 of 7 at 0.09 and above) and marked every step from 0.42 to 0.86 acum
+  acceptable, and the middle band's typical dark and bright sounds are only 0.08 acum apart. Brightness is left to exploring and the tuning copies.
+  Pairs 4-11 explore cells, 12 replays pair 3, the pitch winner vs middle (A/B swapped; pair 2 was replayed until 2026-11-20, but deep vs high can be two sounds the
   listener rejects; the second repeat at pair 16 was dropped as it cut into the champion run),
   13-16 champion run (the first champion, and the one after Neither, is the Bradley-Terry best on the answers, not the trait model's
   pick; `champion_starts` in the export), 17-19 tuning, 20 the final list's #1 against the strongest sound it has not met. Final list: Bradley-Terry on the
