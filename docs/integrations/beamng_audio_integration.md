@@ -121,7 +121,7 @@ If the study later needs a custom EV motor model to change vehicle acceleration,
 | Accelerator | Pedal intent | BeamNG electrics commonly expose normalized throttle input. |
 | Motor RPM | Not accepted by the current sound API | The engine derives virtual order RPM from speed. Adding measured motor RPM would be a separate sound-interface change. |
 | Motor torque/load or power | Sound intensity/body | Use signed direction if available so drive and regen can be distinguished. |
-| Brake/regen | Regenerative sound blend | Brake input is not necessarily equal to regenerative torque; inspect actual powertrain signals. |
+| Brake/regen | Regenerative sound blend | Regen level = the mod's regen power (motor torque x motor speed) over the motor's regen torque cap at 140 km/h (eSBR300: 92 kW); the Simulator uses the same rule. Brake input is not regen: past the motor cap it only adds friction brakes. |
 | Acceleration | Transient emphasis | Derive from speed if direct acceleration is unavailable; smooth and validate. |
 
 ## First proof-of-concept acceptance criteria

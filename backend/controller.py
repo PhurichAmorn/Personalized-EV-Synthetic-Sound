@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer, QEvent, Qt
 from audio import DEBUG_THEMES, SOUND_RECIPES, SOUND_THEMES
 from audio import SoundEngine
 from simulation.vehicle_model import VehicleModel, SIMULATOR_PRESETS
-from backend.beamng_telemetry import TorqueScaler, regen_from_decel
+from backend.beamng_telemetry import TorqueScaler, regen_full_w, regen_level
 
 
 class SimulatorController(QObject):
@@ -161,7 +161,7 @@ class SimulatorController(QObject):
         torque = state.get('motor_torque')
         self.beamng_signed_load = (None if torque is None else
                                    self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0, speed,
-                                                             self.beamng_acceleration, self.car.max_torque_nm))
+                                                             state.get('regen_power'), self.car.max_torque_nm, regen_full_w(self.car)))
         self.beamng_state = state
         self.beamng_received_at = now
         self._record_beamng(now, state)
@@ -453,7 +453,7 @@ class SimulatorController(QObject):
         self._last_tick = now
         if self.source_mode == 'Simulator':
             self.car.update(self.throttle, self.brake, dt)
-            target = regen_from_decel(self.car.acceleration_m_s2) if self.car.motor_torque_nm < 0 else 0.0
+            c = self.car;target = regen_level(c.motor_torque_nm * c.rpm * 2 * math.pi / 60, regen_full_w(c)) if c.motor_torque_nm < 0 else 0.0
             self.sim_regen += (target - self.sim_regen) * (1 - math.exp(-dt / 0.15))  # instant jumps heard as too aggressive (2026-11-19)
         elif self._beamng_fresh():
             load = self._signed_motor_load()

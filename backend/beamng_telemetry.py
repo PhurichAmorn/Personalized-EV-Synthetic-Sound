@@ -33,22 +33,27 @@ def decode_ev_sound_packet(packet: bytes) -> dict:
     return fields
 
 
-# Deceleration that reads as full regen on the gauge and in the sound. ponytail: one global value, tuned by ear in
-# BeamNG; make it per car if cars differ a lot.
-REGEN_FULL_G = 0.5
+# Regen power that reads as full regen on the gauge and in the sound: the motor's regen torque cap at REGEN_FULL_KMH
+# (= the sound's top speed), or its regen power cap if lower. eSBR300: 100 Nm x 924 rad/s = 92 kW, so lift-off reads
+# 71% at 100 km/h and 36% at 50 km/h, fading to 0 at a stop like a real EV power gauge. Was deceleration / 0.5 g (2026-11-20).
+REGEN_FULL_KMH = 140.0
 
 
-def regen_from_decel(acceleration_m_s2):
-    """How hard the car slows, 0..1 (REGEN_FULL_G = 1)."""
-    return min(1.0, max(0.0, -acceleration_m_s2 / (REGEN_FULL_G * 9.81)))
+def regen_full_w(car):
+    return min(car.max_regen_torque_nm * REGEN_FULL_KMH / 3.6 * car.motor_rad_s_per_m_s, car.max_regen_power_kw * 1000)
+
+
+def regen_level(power_w, full_w):
+    """Regen power (W, either sign) -> 0..1."""
+    return min(1.0, abs(power_w) / full_w)
 
 
 class TorqueScaler:
     """Signed motor torque (Nm) -> -1..+1 on fixed scales (no learned peaks).
 
-    Drive: torque / the car's peak torque. Regen (negative torque): how hard the car slows (regen_from_decel), not the
-    motor torque: in one-pedal drive the eSBR300 motor is already at its 100 Nm regen limit on lift-off, and braking only
-    adds friction brakes the torque cannot show, so torque alone would read 100% for both.
+    Drive: torque / the car's peak torque. Regen (negative torque): regen power (torque x motor speed, sent by the mod)
+    over regen_full_w, not torque alone: in one-pedal drive the eSBR300 motor sits at its 100 Nm regen cap from lift-off,
+    so torque alone would read 100% at any speed. Braking past the cap adds friction brakes only, as in a real EV.
     Small torques (noise around zero) and standstill read as exactly 0, and the output is lightly smoothed,
     so the gauges and the regen sound do not flicker.
     """
@@ -60,7 +65,7 @@ class TorqueScaler:
         self.value = 0.0
         self.started = False
 
-    def update(self, torque, dt, speed=None, acceleration=0.0, drive_nm=500.0):
+    def update(self, torque, dt, speed=None, regen_power=None, drive_nm=500.0, full_w=92_400.0):
         dt = max(0.0, min(dt, 1.0))
         still = speed is not None and speed < self.still_speed
         if still or abs(torque) < self.deadband_nm:
@@ -68,7 +73,7 @@ class TorqueScaler:
         elif torque > 0:
             raw = min(1.0, torque / drive_nm)
         else:
-            raw = -regen_from_decel(acceleration)
+            raw = -regen_level(regen_power or 0.0, full_w)
         if not self.started or self.smooth_s <= 0 or dt <= 0:
             self.value, self.started = raw, True
         else:
