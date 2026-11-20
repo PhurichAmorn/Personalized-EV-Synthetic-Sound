@@ -347,6 +347,11 @@ class SourceDiscovery:
             if self.active and self.stage=='discovery' and self.history:self._rank_finalists()
             self.active=False;self.pair=[];self.playoff_queue=[];self.stage='done' if self.finalists else self.stage;self.final=ident;self.epoch+=1;self.busy=False
             if hasattr(self.renderer,'cancel'):self.renderer.cancel()
+    def end(self):
+        """Leave early: stop here without ranking finalists or concluding (the comparisons so far stay in the record)."""
+        with self.lock:
+            self.active=False;self.pair=[];self.playoff_queue=[];self.epoch+=1;self.busy=False
+            if hasattr(self.renderer,'cancel'):self.renderer.cancel()
     def accept(self,answer):
         """Final absolute check: would the listener be happy with the chosen sound in their car (yes/no)."""
         with self.lock:
