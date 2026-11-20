@@ -34,6 +34,9 @@ def measure(job):
     return play(loop, fx, rate, pedal, raw=True)  # the sound's own level, not scaled to 70 dB
 
 
+def sones_at(x, g): return sones(x * g)
+
+
 def gain_for(x, target):
     g = 1.
     for _ in range(2):  # sones double per +10 dB (above ~40 phon): correct, then refine once
@@ -57,7 +60,12 @@ if __name__ == '__main__':
         loud = pool.map(sones, signals)
         target = float(np.median(loud[:len(sounds)]))  # the pool sounds' median
         gains = pool.starmap(gain_for, [(x, target) for x in signals])
-    for (i, s), g in zip(items, gains): s['fx']['gain'] = round(g, 4)
+        after = pool.starmap(sones_at, zip(signals, gains))
+    # Measured values beside the gain (2026-11-20), so a sound at the MAX_DB limit shows how far off it still is:
+    # sones at the raw level, sones after the gain, and that gap to the target in dB (sones double per +10 dB).
+    for (i, s), g, n0, n1 in zip(items, gains, loud, after):
+        s['fx']['gain'] = round(g, 4)
+        s['loudness'] = {'sones': round(n0, 3), 'after': round(n1, 3), 'off_db': round(10 * np.log2(n1 / target), 2)}
     data['loudness'] = {'target_sones': round(target, 3), 'reference': 'cruise', 'max_db': MAX_DB}
     json.dump(data, open(POOL, 'w'), indent=0)
     db = 20 * np.log10(gains)
