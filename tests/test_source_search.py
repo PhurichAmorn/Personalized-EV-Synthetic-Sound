@@ -785,6 +785,14 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             self.assertEqual(len(d.pair),2,d.error);self.assertIn('middle',{band(i) for i in d.pair})
             self.assertEqual(len(set(d.pair)&set(first)),1)  # one of deep/high goes on against middle
             d.close()
+    def test_end_stops_early_without_a_final_sound(self):
+        from experiment.source_search import HeardMapDiscovery
+        d=HeardMapDiscovery(renderer=lambda recipe:None);d.start('rise')
+        for _ in range(5):d.feedback(choice='A')
+        d.end();data=d.export()
+        self.assertFalse(d.active);self.assertEqual(d.pair,[]);self.assertIsNone(data['final'])
+        self.assertEqual(len(data['history']),5);self.assertEqual(data['finalists'],[])  # the answers stay; nothing is ranked or chosen
+        d.close()
     def test_first_champion_is_the_best_by_answers(self):
         import random as stdrandom
         from experiment.source_search import HeardMapDiscovery
