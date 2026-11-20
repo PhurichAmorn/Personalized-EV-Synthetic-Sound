@@ -49,7 +49,7 @@ class DesktopBridgeTest(unittest.TestCase):
 
     def test_snapshot_exposes_existing_vehicle_and_search_state(self):
         state = self.bridge.snapshot()
-        self.assertEqual(state['vehicle'], 'BeamNG eSBR300')
+        self.assertEqual(state['vehicle'], 'BeamNG Vivace E')
         self.assertFalse(state['running'])
         self.assertEqual(state['hasGears'], self.controller.hasGears)
         self.assertFalse(state['search']['active'])

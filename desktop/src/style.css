@@ -235,7 +235,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .beamng-overlay-grip::before { content: ''; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgb(255 255 255 / 28%); }
 .beamng-overlay-card { position: relative; }
 .beamng-overlay-resize { position: absolute; right: 4px; bottom: 4px; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, rgb(255 255 255 / 35%) 50%, rgb(255 255 255 / 35%) 58%, transparent 58%, transparent 72%, rgb(255 255 255 / 35%) 72%, rgb(255 255 255 / 35%) 80%, transparent 80%); }
-.beamng-overlay-close { align-self: flex-start; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.beamng-overlay-close { align-self: flex-start; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
 .beamng-overlay-close:hover { background: rgb(255 255 255 / 12%); color: var(--fg); }
 .beamng-overlay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .beamng-overlay-kicker { color: var(--muted); font-size: 9px; letter-spacing: .16em; }
@@ -273,7 +273,9 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-personalize { flex: none; }
 .overlay-personalize .search-dialog { width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .overlay-personalize .search-dialog-header { position: static; padding: 0 0 6px; border: 0; background: transparent; }
-.overlay-personalize .search-dialog-header h2, .overlay-personalize .search-close { display: none; }
+.overlay-personalize .search-dialog-header h2 { display: none; } .overlay-personalize .search-dialog-header { justify-content: flex-end; }
+.overlay-personalize .search-close { width: 38px; height: 38px; border-radius: 8px; background: rgb(245 107 107 / 14%); }
+.overlay-personalize .search-close:hover:not(:disabled) { background: rgb(245 107 107 / 28%); }
 .overlay-personalize .search-dialog-header p { font-size: 10px; }
 .overlay-personalize .search-content { display: block; padding: 0; }
 .overlay-personalize .search-content > section + section { margin-top: 8px; }
@@ -549,3 +551,8 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 
 .dashboard-controls.personalize-active .controls-spacer { align-items: flex-start; }
 .dashboard-controls.personalize-active .dashboard-search-slot .search-dialog { height: auto; max-height: calc(100vh - 380px); min-height: 260px; }
+.x-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
+.overlay-personalize .search-close .x-icon { width: 28px; height: 28px; }
+.beamng-overlay-close .x-icon { width: 24px; height: 24px; }
+.source-end { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: #f56b6b; }
+.source-end .x-icon { width: 16px; height: 16px; stroke-width: 3; }

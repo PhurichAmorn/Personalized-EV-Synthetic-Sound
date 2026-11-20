@@ -62,6 +62,7 @@ class ControllerRegenTests(unittest.TestCase):
 
     def test_negative_torque_is_regen_for_gauge_and_sound(self):
         c = self.controller
+        c.selectVehicle('BeamNG eSBR300')  # the recorded regen numbers below are the eSBR300's
         for step in range(30):  # held hard regen at speed settles past the smoothing
             c.receive_beamng_telemetry(packet(motor_torque=-100.0, motor_load=0.1, speed_m_s=40.0, regen_power=-100_000.0), received_at=1 + step / 10)
         self.assertGreater(c.telemetryRegen, .9)
