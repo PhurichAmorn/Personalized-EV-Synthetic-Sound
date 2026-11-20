@@ -103,6 +103,7 @@ class DesktopBridge:
             elif name == 'sourceDiscoveryFeedback':discovery.feedback(payload.get('ratings'),payload.get('context',{}),payload.get('choice'))
             elif name == 'sourceDiscoveryPlayoff':discovery.playoff_feedback(payload.get('choice'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFinish':discovery.finish(payload.get('id'))
+            elif name == 'sourceDiscoveryEnd':discovery.end()
             elif name == 'sourceDiscoveryAccept':discovery.accept(payload.get('answer'))
             elif name == 'sourceDiscoverySkip':discovery.skip_similar(payload.get('ids'))
             elif name == 'sourceDiscoveryExport':return discovery.export()
@@ -110,7 +111,7 @@ class DesktopBridge:
                 if discovery.busy or not discovery.active:raise ValueError('No failed active trial to retry')
                 with discovery.lock:discovery._prepare()
             else:raise ValueError('Unknown source discovery command')
-            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryAccept'):self.history.save()  # autosave to local history
+            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryEnd','sourceDiscoveryAccept'):self.history.save()  # autosave to local history
             return self.snapshot()
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
