@@ -810,7 +810,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             for n in range(20):
                 self.assertEqual(len(d.pair),2,d.error);a,b=d.pair
                 for i in d.pair:
-                    if move(i)=='brighter2':self.assertEqual(move(d.champion),'brighter')  # the second step only once the first won
+                    if move(i)=='brighter2' and n<STYLE_PAIRS-1:self.assertEqual(move(d.champion),'brighter')  # the second step only once the first won (pair 20 is the confirmation)
                 d.feedback(choice='A' if liked in move(a) else 'B' if liked in move(b) else 'A')
             heard={move(i) for r in d._choices() for i in r['pair']}
             if liked=='darker':self.assertNotIn('brighter2',heard);self.assertIn('darker2',heard)  # no checked 'darker': two steps is the first step
@@ -848,7 +848,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertEqual(set(r),{'version','kind','seed','motion','cell','voice','fx'})  # = MapRecipe in desktop/src/levels.ts
         self.assertIn("kind: 'map'",Path('desktop/src/levels.ts').read_text());self.assertIn(r['voice']['kind'],('plain','blocks','stack'))  # = MapVoice in desktop/src/mapVoice.ts
         self.assertEqual((r['fx']['follow'],r['fx']['size']),(1,2.5))  # as the full-drive check played it
-    def test_winner_stays_and_the_last_pair_confirms_the_top_two(self):
+    def test_winner_stays_and_the_last_pair_confirms_the_leader(self):
         from experiment.source_search import SoundMapDiscovery,MAP_OPENING,MAP_PLAYOFF
         import random as stdrandom
         d=SoundMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(5)
@@ -858,11 +858,13 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             if n>MAP_OPENING+MAP_PLAYOFF and d.history[-1]['winner'] and d.history[-1]['winner']!=d.history[-2]['winner'] and n<19:
                 last=d.history[-1]
                 if d.history[-2]['winner'] in last['pair']:self.assertIn(last['winner'],d.pair)  # a challenger that won defends next
-            if n==19:d._rank_finalists();self.assertEqual(set(d.pair),set(d.finalists[:2]));self.assertEqual(set(d.pair),{d.confirm['first'],d.confirm['second']})
+            if n==19:
+                d._rank_finalists();self.assertEqual(set(d.pair),{d.confirm['first'],d.confirm['second']});self.assertEqual(d.confirm['first'],d.finalists[0])
+                self.assertFalse(any(set(r['pair'])==set(d.pair) for r in d.history))  # pair 20: #1 against a sound it has not met
             a,b=d.pair;d.feedback(choice='A' if pitch(a)<pitch(b) else 'B')  # this listener prefers the lowest sound
         games=lambda i:sum(i in r['pair'] for r in d.history)
         self.assertGreaterEqual(games(d.finalists[0]),2)  # the pick never rests on one game
-        self.assertEqual(d.finalists[0],next(i for i in d._ranked() if games(i)>=2))  # the model's best, not the last winner
+        self.assertEqual(d.finalists[0],next(i for i in d._bt_ranked() if games(i)>=2))  # Bradley-Terry on the answers, not the trait model
         self.assertEqual(d._bt_order()[0][0],d.finalists[0])
         # no 'a challenger took over' check: when the opening already finds the listener's favourite none should (failed 5/10 runs, old pool too)
         d.close()
