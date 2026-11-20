@@ -1,2 +1,4 @@
+# Line endings: LF in the repo and on checkout everywhere, so Windows CRLF copies never show as changed (laptop B, 2026-11-20)
+* text=auto eol=lf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
