@@ -97,6 +97,27 @@ VEHICLE_CONFIGS = {
         "brake_calibration": "Game-measured 0.994 g (100-0 km/h in 39.6 m)",
         "motor_map_description": "BeamNG eSBR300 electric_300 motor torque curve (game files)",
     },
+    "Cherrier Vivace E (BeamNG)": {
+        # Second BeamNG car (fictional vehicle, shown in game as the Cherrier FCV Vivace E). Values from the game
+        # files (vivace.zip, config vivace_E, read 2026-11-20): one FRONT motor, final drive 9, 215/45R17 tyre
+        # (0.3127 m), 50 kWh, 1866 kg. Torque 291 Nm flat to 4500 rpm, then the game curve (taper = curve torque x
+        # speed / peak power). Regen has no jbeam limits, so the game uses the motor's own: 291 Nm and peak power.
+        # ponytail: the model has no FWD layout, so RWD with the front weight share as the driven-axle share.
+        "max_power_kw": 144.5, "max_torque_nm": 291.0, "mass_kg": 1866.0, "drive_layout": "RWD",
+        "rear_weight_fraction": 0.58,
+        "power_taper": ((0.0, 1.0), (6000.0, 1.0), (7000.0, 0.994), (8000.0, 0.985), (9000.0, 0.979),
+                        (10000.0, 0.955), (11000.0, 0.877), (12000.0, 0.739), (13000.0, 0.565), (14000.0, 0.355)),
+        "battery_kwh": 50.0, "battery_type": "Lithium-ion (BeamNG)", "range_km": 0, "range_standard": "not published",
+        "max_speed": 159.0, "max_rpm": 14000.0, "gear_ratio": 9.0, "wheel_radius_m": 0.3127,  # game-reported top speed
+        # ponytail: wheelbase, cg height, grip and drag are estimates (not read from the game files); the sim gives 0-100 8.2 s, 100-0 38.8 m, top 159 km/h against the game 8.1 s, 37.1 m, 159 km/h.
+        "wheelbase_m": 2.60, "cg_height_m": 0.50, "tire_grip": 1.0, "drag_area_m2": 0.70,
+        "max_discharge_power_kw": 160.0, "max_charge_power_kw": 150.0,
+        "max_regen_torque_nm": 291.0, "max_regen_power_kw": 144.5,  # game defaults: the motor's own torque and power
+        "max_brake_deceleration_g": 1.06, "brake_tire_grip": 1.20,
+        "lift_off_deceleration_g": 0.06,
+        "brake_calibration": "Game-reported 1.06 g (100-0 km/h in 37.1 m)",
+        "motor_map_description": "BeamNG Vivace E front motor torque curve (game files)",
+    },
 }
 
 
@@ -105,6 +126,7 @@ SIMULATOR_PRESETS = {
     "Compact EV": "Honda e",
     "Performance EV": "Tesla Model 3 Performance (2024 US)",
     "BeamNG eSBR300": "Hirochi SBR4 eSBR300 (BeamNG)",
+    "BeamNG Vivace E": "Cherrier Vivace E (BeamNG)",
 }
 
 

@@ -2,8 +2,13 @@
 local M = {}
 local rearMotor
 
+-- The drive motor: the rear one, or the front one on front-wheel-drive cars (the Vivace E has only "frontMotor").
+local function findMotor()
+  return powertrain.getDevice("rearMotor") or powertrain.getDevice("frontMotor")
+end
+
 local function init()
-  rearMotor = powertrain.getDevice("rearMotor")
+  rearMotor = findMotor()
 end
 
 -- Mute BeamNG's low-speed pedestrian warning (the "avas" controller) so it does not play over EV Sound Lab.
@@ -63,7 +68,7 @@ end
 local function fillStruct(o, dtSim)
   if not avasMuted then muteAvas() end
   local e = electrics.values
-  rearMotor = rearMotor or powertrain.getDevice("rearMotor")
+  rearMotor = rearMotor or findMotor()
   o.marker = "EVS1"
   o.speed = e.wheelspeed or e.airspeed or 0
   o.throttle = e.throttle or 0

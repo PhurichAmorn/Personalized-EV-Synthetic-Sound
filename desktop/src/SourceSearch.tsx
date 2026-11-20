@@ -20,6 +20,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [pending, setPending] = useState(false)
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [choice, setChoice] = useState<Answer | null>(null)
+  const [ending, setEnding] = useState(false)  // asking before the X ends the session
   const [showMore, setShowMore] = useState(false)  // shortlist #4-5
   const [search, setSearch] = useState<'tuning' | 'map'>('tuning')  // which search the next session uses (baseline or sound map)
   const heard = useRef(new Set<string>())
@@ -102,13 +103,17 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const preparing = discovery?.active && (discovery.busy || pairReady !== (revision ?? null))
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
     <section className="panel p-3 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap gap-2">{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}</div></div>
+      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery?.active && (ending
+        ? <><span className="text-sm">End this session?</span><button type="button" className="control" autoFocus onClick={() => setEnding(false)}>Keep working</button><button type="button" className="control border-red-500" onClick={() => { setEnding(false); onStop(); setAudition(null); setNowPlaying(null); void onCommand('sourceDiscoveryFinish') }}>End session</button></>
+        : <button type="button" className="control source-end" aria-label="End session" title="End session (Back to driving pauses instead)" onClick={() => setEnding(true)}><svg className="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4L20 20M20 4L4 20" /></svg></button>)}{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}</div></div>
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {discovery && !discovery.active ? <p className="mt-3 text-sm text-neutral-300" role="status">{discovery.finalists?.length ? `Session complete · ${discovery.step ?? discovery.completed} comparisons.${discovery.final ? '' : ' Choose your final sound from your shortlist below.'}` : discovery.completed ? `Session finished after ${discovery.completed} comparisons.` : 'Start a session to compare sources.'}</p> : null}
-      {discovery && nowPlaying && playing && <p className="mt-3 text-sm text-neutral-200" role="status">▶ Now playing: <strong>{nowPlaying.label}</strong></p>}
+      {discovery && ((nowPlaying && playing) || preparing) && <div className="mt-3 flex items-center gap-x-5 whitespace-nowrap">
+        {nowPlaying && playing && <p className="text-sm text-neutral-200" role="status">▶ Now playing: <strong>{nowPlaying.label}</strong></p>}
+        {preparing && <p className="loading-note text-xs text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Preparing…</p>}
+      </div>}
       {discovery?.active ? <>
-        {preparing && <p className="loading-note mt-3 text-xs text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Preparing the next pair…{nowPlaying && playing ? ' Keep driving your pick meanwhile.' : ''}</p>}
         {final && <p className="mt-3 text-sm text-neutral-300" role="status">Final round: your four finalists, compared head to head. Pick the one you prefer.</p>}
         {!discovery.busy && <>
         <div className="source-search-candidates" role="group" aria-label="Source A and B">
@@ -127,7 +132,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
             })()}
           </div>)}
         </div>
-        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending} onClick={() => void submitChoice(value)}>{label}</button>)}</div>
+        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending || preparing} onClick={() => void submitChoice(value)}>{label}</button>)}</div>
         : <div className="source-search-preferences"><button type="button" className="control" disabled={!ready} onClick={() => void feedback()}>Next</button></div>}
         </>}
         {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>Retry preparation</button></p>}

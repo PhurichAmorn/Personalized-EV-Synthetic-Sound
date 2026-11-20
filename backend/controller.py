@@ -24,7 +24,7 @@ class SimulatorController(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.car = VehicleModel.from_name('BeamNG eSBR300')  # the study's BeamNG car is the starting car (2026-11-19)
+        self.car = VehicleModel.from_name('BeamNG Vivace E')  # starting car: Vivace E (2026-11-20); eSBR300 was the starting car on 2026-11-19
         self.source_mode = 'Simulator'
         self.beamng_state = None
         self.beamng_received_at = 0.0

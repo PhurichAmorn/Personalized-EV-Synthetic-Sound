@@ -52,7 +52,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
     def test_real_elapsed_time_drives_model_and_smoothing(self):
         self.controller.toggle()
         self.controller.throttle = 1
-        expected = VehicleModel.from_name('BeamNG eSBR300')
+        expected = VehicleModel.from_name('BeamNG Vivace E')
         expected.update(1, 0, 0.07)
         self.tick(0.07)
         self.assertAlmostEqual(self.controller.speed, expected.speed, places=7)
@@ -158,10 +158,10 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertEqual(self.controller.car.soc, 0.8)
 
     def test_only_neutral_presets_are_exposed(self):
-        self.assertEqual(self.controller.vehicleNames, ['Compact EV', 'Performance EV', 'BeamNG eSBR300'])
+        self.assertEqual(self.controller.vehicleNames, ['Compact EV', 'Performance EV', 'BeamNG eSBR300', 'BeamNG Vivace E'])
         for name in VehicleModel.available_names():
             self.controller.selectVehicle(name)
-            self.assertEqual(self.controller.selectedVehicle, 'BeamNG eSBR300')
+            self.assertEqual(self.controller.selectedVehicle, 'BeamNG Vivace E')
         for name in self.controller.vehicleNames:
             self.controller.selectVehicle(name)
             self.assertEqual(self.controller.selectedVehicle, name)
@@ -176,6 +176,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.stop_audio.assert_called_once()
 
     def test_drained_battery_never_caps_full_throttle(self):
+        self.controller.selectVehicle('BeamNG eSBR300')  # the 80 km/h in 250 ticks check was measured on this car
         self.controller.toggle()
         self.controller.car.soc = 0  # driving only: a drained pack once capped full throttle near 50 km/h (2026-11-19)
         self.controller.throttle = 1
