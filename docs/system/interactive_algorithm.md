@@ -91,6 +91,16 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   whose moves have the best trend, then the model's Thompson sample. When a variation becomes champion, pairs continue with its
   parent's other variations (one level deep; combinations cover two-step moves). Changes are not shown to the listener; the export has
   `phase2` (move trends, variations heard). Without variations in the pool the pairs fall back to phase-1 challengers.
+- **Session, grid opening one trait at a time (current, 2026-11-20; `HeardMapDiscovery` on a `build_pool.py --grid` pool).** Pair 1 Rising
+  vs Evolving. Pair 2 deep vs high, pair 3 that winner vs middle: each the band's sound with sharpness near 0.55 acum (a level every band
+  reaches), pitch near the band's median, other traits near the pool's middle, so the answer is about pitch alone. Pair 4: the chosen band's
+  typical dark vs typical bright sound. Both good: the model's higher-rated sound goes on and both count as beating a neutral sound; Neither on
+  pair 2: the one nearer middle in pitch goes on. A pitch answer counts for both cells of each band in the region record. Before, pairs 2-4
+  played the six cells' typical sounds, two cells per pair, changing pitch and brightness at once, so an answer could not say which mattered.
+  Pairs 5-11 explore cells, 12 replays pair 2 (A/B swapped; the second repeat at pair 16 was dropped as it cut into the champion run),
+  13-16 champion run (the first champion, and the one after Neither, is the Bradley-Terry best on the answers, not the trait model's
+  pick; `champion_starts` in the export), 17-19 tuning, 20 the final list's #1 against the strongest sound it has not met. Final list: Bradley-Terry on the
+  answers alone (3 virtual even games per sound), sounds heard at least twice first, none that lost every pair; every A/B press is logged (`plays`).
 - **Session, regions (2026-11-17, kept as `RegionMapDiscovery`).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
   region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
   region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the

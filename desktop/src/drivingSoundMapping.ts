@@ -24,8 +24,9 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
   const propulsion = soundResponse(effort, response)
   // Keep curve-shaped colour while giving partial pedal a responsive, continuous level.
   const speed = Math.max(0, Number.isFinite(input.speedKmh) ? input.speedKmh : 0)
-  // Rise stays audible (softer) while rolling off the pedal, so slowing down is heard.
-  const presence = Math.max(.65 * effort + .35 * propulsion, mode === 'rise' ? .004 * ease(speed / 20) : 0)  // faint (-24 dB; level goes through sqrt in driveEnvelopeTarget), .07 was still -11.5 dB (2026-11-18)
+  // Rise and Evolving stay faintly audible while rolling off the pedal, so slowing down is heard (Evolving too since 2026-11-20).
+  const coastFloor = mode !== 'steady' ? .004 * ease(speed / 20) : 0
+  const presence = Math.max(.65 * effort + .35 * propulsion, coastFloor)  // faint (-24 dB; level goes through sqrt in driveEnvelopeTarget), .07 was still -11.5 dB (2026-11-18)
   const acceleration = mode !== 'steady' ? unit((input.acceleration ?? 0) / 4) : 0
   const regen = load === null ? 0 : Math.max(0, -load)
   const hasRpm = Number.isFinite(input.rpm) && Number.isFinite(input.maxRpm) && input.maxRpm! > 0
@@ -45,8 +46,9 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
     : 0
   // A little launch depth tapers away without raising the upper pitch endpoint.
   const launchDepth = 1 * (1 - pitchRegister) ** 2
+  // Regen adds no pitch in any mode: Rising regen now sounds like Evolving's (2026-11-20; Rising had +6 then +3 semitones, heard as too
+  // aggressive; Evolving +6/+3/+2 too high, 2026-11-18). Regen still darkens (cutoff) and adds a little level (driveGain), the same in both.
   const semitones = -10 - launchDepth + (mode === 'steady' ? 9 : mode === 'rise' ? 13 : 11) * travel * pitchRegister + (mode === 'evolving' ? 4 * (1 - Math.exp(-highSpeed / 80)) : 0)
-    + (mode === 'steady' ? 0 : (mode === 'rise' ? 3 : 0) * regen)  // regen sounds higher in Rising (up to +3 semitones; +6 heard as too aggressive, 2026-11-19); none in Evolving (+6, +3, +2 too high, 2026-11-18)
   return {
     cycleSpeed: mode === 'evolving' ? .25 + .75 * Math.max(pedal, power) : 1,
     // No parking: Evolving's sweeps follow speed stages (stage below); parked sweeps were heard as a stall (2026-11-18).
@@ -58,7 +60,7 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
     glassGain: .1 + propulsion * .25 + .08 * acceleration,
     airGain: 1,
     cutoff: 1300 + 900 * propulsion - 200 * regen + 350 * acceleration,
-    driveGain: input.running && !input.starting && !stale ? activity * (.9 * presence * (1 - .6 * quietCruise) + .03 * regen) : 0,  // regen -6 dB again: heard as too loud 2026-11-18 and 2026-11-19
+    driveGain: input.running && !input.starting && !stale ? activity * (.9 * Math.max(presence * (1 - .6 * quietCruise), coastFloor) + .03 * regen) : 0,  // regen -6 dB again: heard as too loud 2026-11-18 and 2026-11-19
     propulsion, regen,
   }
 }

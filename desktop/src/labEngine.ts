@@ -98,7 +98,10 @@ export function driveRig(rig: Rig, motion: Pick<Motion, 'mode' | 'travel' | 'res
   }
   const target = drivingSoundTargets(input, stale, motion.response, motion.mode as GranularMode, motion.travel)
   for (const player of current.players as GranularPlayer[]) {
-    set(player.playbackRate, fx.peakHz && current.rootHz ? Math.min(target.rate, fx.peakHz / current.rootHz) : target.rate, .35)
+    const rate = fx.peakHz && current.rootHz ? Math.min(target.rate, fx.peakHz / current.rootHz) : target.rate
+    // Rising: pitch falls slower than it climbs (1 s vs 0.35 s), so hard braking glides down instead of swooping; Evolving's two crossfading
+    // voices already hide a fast fall (2026-11-20: Rising dropped 3.5 semitones in the last 20 km/h of a 0.9 g stop, heard as a skip).
+    set(player.playbackRate, rate, motion.mode === 'rise' && rate < player.playbackRate.value ? 1 : .35)
     set(player.evolution, motion.mode === 'evolving' ? 1 : 0, .05)
     set(player.cycleSpeed, target.cycleSpeed, .15)
     set(player.stage, target.stage, .35)

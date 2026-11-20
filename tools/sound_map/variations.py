@@ -9,7 +9,8 @@ A variation is kept if it passes the quick guardrail and the full 22 s drive che
 sounds), and is audibly different from its parent but still the same sound: gap (generate.gap, in 'distinct' steps) in [NEAR, FAR];
 a brightness step counts as audible when its sharpness moves by at least BRIGHT_S (the spectrum gap hardly moves when the body leads).
 A body-led parent (build_pool.py --grid) keeps only variations whose body still leads, by settings and as measured (2026-11-19).
-Writes the kept variations into the pool file under each sound ('variations'). Heavy: run on the cooled laptop.
+Writes the kept variations into the pool file under each sound ('variations'), and why each other one was dropped under
+data['variations']['rejected'] ({id: reason}; 2026-11-20). Heavy: run on the cooled laptop.
   LIMIT_F=0.2 WORKERS=14 python tools/sound_map/variations.py [pool file, default experiment/sound_map_pool.json]"""
 import json, os, subprocess, sys
 for var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS'): os.environ[var] = '1'
@@ -79,36 +80,45 @@ if __name__ == '__main__':
     prepare(); os.makedirs('tmp', exist_ok=True); os.makedirs(TMP, exist_ok=True)
     data = json.load(open(POOL)); sounds = [s for s in data['sounds'] if s['voice']['kind'] == 'stack']
     with Pool(WORKERS) as pool:
-        items, meta = [], {}
+        items, meta, skipped = [], {}, {}
+        ALL = ('brighter', 'brighter2', 'darker', 'darker2', 'deeper', 'deeper2', 'higher', 'higher2', 'fuller', 'thinner', 'swap1', 'swap2')
         for s in sounds:
-            for name, (voice, fx) in moves(s).items():
+            made = moves(s)
+            for name in ALL:
+                if name not in made: skipped[f"{s['id']}-{name}"] = 'not made: at its range limit, same as one step, or the body would no longer lead'
+            for name, (voice, fx) in made.items():
                 vid = f"{s['id']}-{name}"; items.append((vid, voice, fx, voice['stack']['rootHz'])); meta[vid] = (s, name, voice, fx)
         print(f'{len(items)} variations of {len(sounds)} sounds: quick check', flush=True)
         checked = quick(items, pool)
-        near = {}
+        near, rejected = {}, dict(skipped)  # rejected: {id: reason}, saved in the pool file so a thin ladder can be explained (2026-11-20)
         for vid, (m, d) in checked.items():
             s, name, voice, fx = meta[vid]
-            if any(m[k] > LIMITS[k] for k in LIMITS): continue
+            over = [f'{k} {m[k]:.2f} > {LIMITS[k]}' for k in LIMITS if m[k] > LIMITS[k]]
+            if over: rejected[vid] = 'guardrail: ' + ', '.join(over); continue
             desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': fx.get('chorus', 0), 'vib': fx.get('vibDepth', 0),
                     'style': style_of({'voice': 'stack', 'stLayers': voice['stack']['layers'], **{f'stT{k}': t for k, t in enumerate(voice['stack']['timbres'])}})}
-            if body_rule(s['voice']['stack']) and not body_leads({'voice': voice, 'desc': desc, 'rootHz': voice['stack']['rootHz']}): continue  # measured
+            if body_rule(s['voice']['stack']) and not body_leads({'voice': voice, 'desc': desc, 'rootHz': voice['stack']['rootHz']}): rejected[vid] = 'body no longer leads'; continue  # measured
             g = gap(s['desc'], desc)
             audible = (abs(m['S'] - s['metrics']['S']) >= BRIGHT_S if name.startswith(('brighter', 'darker'))
                        else True if name.startswith(('deeper', 'higher')) else g >= NEAR)  # a 4-semitone step is always heard (about 0.57 'distinct' steps)
             if audible and g <= FAR: near[vid] = (m, desc)
+            elif not audible: rejected[vid] = (f"too small: sharpness {m['S'] - s['metrics']['S']:+.3f} acum (needs {BRIGHT_S})" if name.startswith(('brighter', 'darker'))
+                                               else f'too small: gap {g:.2f} (needs {NEAR})')
+            else: rejected[vid] = f'too far: gap {g:.2f} (max {FAR})'
         print(f'{len(near)} pass the quick check and are near their parent: full-drive check', flush=True)
         drive = check_all({vid: meta[vid][2:] for vid in near}, pool)
     kept = 0
     for s in sounds: s['variations'] = []
     for vid, (m, desc) in near.items():
         s, name, voice, fx = meta[vid]
-        if verdict(drive[vid]): continue
+        failed = verdict(drive[vid])
+        if failed: rejected[vid] = 'drive check: ' + '; '.join(failed); continue
         s['variations'].append({'id': vid, 'parent': s['id'], 'move': name, 'voice': voice, 'fx': fx, 'rootHz': voice['stack']['rootHz'],
                                 'style': desc['style'], 'metrics': m, 'desc': desc,
                                 'drive': {k: v for k, v in drive[vid]['rise'].items() if k != 'at'},
                                 'driveEvolving': {k: v for k, v in drive[vid]['evolving'].items() if k != 'at'}})
         kept += 1
-    data['variations'] = {'near': NEAR, 'far': FAR, 'kept': kept}
+    data['variations'] = {'near': NEAR, 'far': FAR, 'bright_s': BRIGHT_S, 'kept': kept, 'rejected': rejected}
     json.dump(data, open(POOL, 'w'), indent=0)
     per = [len(s['variations']) for s in sounds]
     print(f'{kept} variations kept -> {POOL}; per sound min {min(per)}, median {int(np.median(per))}, max {max(per)}')

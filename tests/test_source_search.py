@@ -757,29 +757,46 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertEqual(len(d._features(recipe)),len(MAP_FEATURE_NAMES))  # no style input
         data=d.export();self.assertEqual(data['policy'],'source-map-heard-1');self.assertIn('phase2',data);self.assertNotIn('texture style',data['note'])
         d.close()
-    def test_heard_session_on_a_grid_pool_opens_with_every_cell(self):
-        import json,tempfile,random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_POOL,MAP_GRID,MAP_OPENING
-        data=json.loads(Path(MAP_POOL).read_text())
-        for k,sound in enumerate(data['sounds']):sound['cell']=MAP_GRID[k%len(MAP_GRID)]  # build_pool.py --grid labels
-        path=Path(tempfile.mkdtemp())/'pool.json';path.write_text(json.dumps(data))
-        d=HeardMapDiscovery(renderer=lambda recipe:None,pool_path=path);d.start('rise');d.rng=stdrandom.Random(7)
-        self.assertEqual(d.region_names,MAP_GRID);cell=lambda i:d.by_cell[d.candidates[i]['recipe']['cell']]['cell']
-        opened=set()
-        for n in range(20):
-            self.assertEqual(len(d.pair),2,d.error)
-            if n<MAP_OPENING:opened|={cell(i) for i in d.pair}
-            d.feedback(choice='A')
-        self.assertEqual(opened,set(MAP_GRID))  # the opening plays every cell of the grid
-        self.assertIn('grid',d.export()['note'])
-        best=d.region_names[d.focus_regions()[0]];names={d.region_names[k] for k in d.focus_regions()[1:]}
-        r,b=best.split('-');R=['deep','middle','high']
-        near={f"{r}-{'dark' if b=='bright' else 'bright'}"}|{f'{x}-{b}' for x in R if abs(R.index(x)-R.index(r))==1}
-        self.assertTrue(near<=names,(best,names))  # soft cells: every neighbour of the best cell can bring a challenger
-        d.close()
-    def test_heard_session_repeats_a_clear_and_a_close_pair_swapped(self):
+    def test_grid_opening_pitch_first_then_brightness(self):
         import random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_REPEATS,MAP_REPEAT_GAP,MAP_OPENING
+        from experiment.source_search import HeardMapDiscovery,MAP_BALANCED_S
+        for liked,motion in (('deep','rise'),('middle',None),('high','rise')):
+            d=HeardMapDiscovery(renderer=lambda recipe:None);d.start(motion);d.rng=stdrandom.Random(9)
+            cell=d._cell;band=lambda i:cell(i).split('-')[0];mp=d.motion_pairs
+            if mp:d.feedback(choice='A')  # Rising vs Evolving
+            self.assertEqual({band(i) for i in d.pair},{'deep','high'})  # pair 2: the extremes
+            self.assertLess(abs(d._sound(d.pair[0])['drive']['S']-d._sound(d.pair[1])['drive']['S']),.06)  # brightness matched
+            pick=lambda:d.feedback(choice='A' if band(d.pair[0])==liked else 'B' if band(d.pair[1])==liked else 'A')
+            first=next((i for i in d.pair if band(i)==liked),None);pick()
+            self.assertEqual({band(i) for i in d.pair},{'middle','deep' if liked!='high' else 'high'})  # pair 3: winner vs middle
+            if liked!='middle':self.assertIn(first,d.pair)  # the same sound returns
+            pick()
+            self.assertEqual({cell(i) for i in d.pair},{f'{liked}-dark',f'{liked}-bright'})  # pair 4: brightness inside the chosen band
+            d.feedback(choice='A');w,l=d._region_record(d._map_rows())
+            k=[n for n,c in enumerate(d.region_names) if c.startswith(liked+'-')]
+            self.assertTrue(all(w[i]>=1 for i in k))  # a pitch answer counts for both cells of the band
+            d.close()
+    def test_grid_opening_both_good_and_neither(self):
+        import random as stdrandom
+        from experiment.source_search import HeardMapDiscovery
+        for answer in ('good','neither'):
+            d=HeardMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(10)
+            band=lambda i:d._cell(i).split('-')[0];first=list(d.pair);d.feedback(choice=answer)
+            self.assertEqual(len(d.pair),2,d.error);self.assertIn('middle',{band(i) for i in d.pair})
+            self.assertEqual(len(set(d.pair)&set(first)),1)  # one of deep/high goes on against middle
+            d.close()
+    def test_first_champion_is_the_best_by_answers(self):
+        import random as stdrandom
+        from experiment.source_search import HeardMapDiscovery
+        d=HeardMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(11)
+        pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
+        while d.champion is None:
+            a,b=d.pair;d.feedback(choice='A' if pitch(a)<pitch(b) else 'B')
+        self.assertEqual(d.champion,d._bt_ranked()[0])  # who won the most, not the trait model's guess
+        self.assertEqual(d.export()['champion_starts'][0]['by'],'answers');d.close()
+    def test_heard_session_repeats_the_first_opening_pair_swapped(self):
+        import random as stdrandom
+        from experiment.source_search import HeardMapDiscovery,MAP_REPEATS,MAP_REPEAT_GAP
         for motion in ('rise',None):  # with and without the Rising vs Evolving pair first
             d=HeardMapDiscovery(renderer=lambda recipe:None);d.start(motion);d.rng=stdrandom.Random(8)
             pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
@@ -788,10 +805,9 @@ class SoundMapDiscoveryTest(unittest.TestCase):
                 if d.pair[0]==d.pair[1] or d.candidates[d.pair[0]]['origin'].get('kind')=='motion':d.feedback(choice='A');continue
                 a,b=d.pair;d.feedback(choice='A' if pitch(a)<pitch(b) else 'B')  # a perfectly consistent listener: prefers the lowest
             rows=d._choices();self.assertEqual([r['at'] for r in d.repeats],sorted(MAP_REPEATS))
-            for r in d.repeats:
-                self.assertGreaterEqual(r['at']-r['of'],MAP_REPEAT_GAP);self.assertEqual(rows[r['at']]['pair'],rows[r['of']]['pair'][::-1])  # same pair, A/B swapped
-            clear,close=d.repeats;self.assertLess(clear['of'],d.motion_pairs+MAP_OPENING);self.assertGreaterEqual(close['of'],d.motion_pairs+MAP_OPENING)
-            data=d.export();self.assertTrue(all(r['agree'] for r in data['repeats']));self.assertIn('Repeats',data['note'])
+            (r,)=d.repeats;self.assertEqual(r['of'],d.motion_pairs);self.assertGreaterEqual(r['at']-r['of'],MAP_REPEAT_GAP)
+            self.assertEqual(rows[r['at']]['pair'],rows[r['of']]['pair'][::-1])  # deep vs high again, A/B swapped
+            data=d.export();self.assertTrue(all(x['agree'] for x in data['repeats']));self.assertIn('Repeats',data['note'])
             d.close()
     def test_phase2_ladder_offers_the_second_step_only_after_the_first_won(self):
         import copy,json,tempfile,random as stdrandom
@@ -810,8 +826,9 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             for n in range(20):
                 self.assertEqual(len(d.pair),2,d.error);a,b=d.pair
                 for i in d.pair:
-                    if move(i)=='brighter2' and n<STYLE_PAIRS-1:self.assertEqual(move(d.champion),'brighter')  # the second step only once the first won (pair 20 is the confirmation)
-                d.feedback(choice='A' if liked in move(a) else 'B' if liked in move(b) else 'A')
+                    if move(i)=='brighter2' and n<STYLE_PAIRS-1 and i!=d.champion:self.assertEqual(move(d.champion),'brighter')  # the second step only once the first won (pair 20 is the confirmation)
+                other='darker' if liked=='brighter' else 'brighter'  # never let the opposite move win by default
+                d.feedback(choice='A' if liked in move(a) else 'B' if liked in move(b) else 'B' if other in move(a) else 'A')
             heard={move(i) for r in d._choices() for i in r['pair']}
             if liked=='darker':self.assertNotIn('brighter2',heard);self.assertIn('darker2',heard)  # no checked 'darker': two steps is the first step
             self.assertGreater(d.move_trends().get(liked,0),0);d.close()
@@ -866,5 +883,6 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertGreaterEqual(games(d.finalists[0]),2)  # the pick never rests on one game
         self.assertEqual(d.finalists[0],next(i for i in d._bt_ranked() if games(i)>=2))  # Bradley-Terry on the answers, not the trait model
         self.assertEqual(d._bt_order()[0][0],d.finalists[0])
+        self.assertTrue(all(any(r['winner']==i or r['choice'] in ('equal','good') for r in d._choices() if i in r['pair']) for i in d.finalists))  # no sound that lost every time
         # no 'a challenger took over' check: when the opening already finds the listener's favourite none should (failed 5/10 runs, old pool too)
         d.close()
