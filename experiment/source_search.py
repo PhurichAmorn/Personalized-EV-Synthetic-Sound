@@ -1218,7 +1218,7 @@ class SoundMapDiscovery(TuningDiscovery):
         if self.completed==STYLE_PAIRS-1:
             self._rank_finalists()
             if self.finalists:
-                first=self.finalists[0];met={j for r in self._choices() if first in r['pair'] for j in r['pair']}
+                first=self.finalists[0];met={j for r in self._ranking_rows() if first in r['pair'] for j in r['pair']}  # a copy has met what its parent met
                 second=next((i for i in self._bt_ranked() if i not in met and self._distinct(first,i)),self.finalists[1] if len(self.finalists)>1 else None)
                 if second:self.confirm={'first':first,'second':second};self.rematch=[first,second];return []
         self._sample();heard={i for r in self._choices() for i in r['pair']};here=self.by_cell[self.candidates[best]['recipe']['cell']]
@@ -1227,9 +1227,27 @@ class SoundMapDiscovery(TuningDiscovery):
         pool.sort(key=lambda s:-self._sampled(map_recipe(s,self.motion)))
         self.check_parent=best
         return [(map_recipe(s,self.motion),{'kind':'challenger','cell':s['id'],'from':s.get('from'),'summary':f"Challenger: {s['id']} (Thompson sample)"}) for s in pool]
-    def _bt_strength(self):
-        """Bradley-Terry strengths from the answers alone (no traits), the Rising vs Evolving pair left out."""
+    def _ranking_rows(self,inherit=True):
+        """Answers for the ranking, the Rising vs Evolving pair left out. inherit: a tuned copy (phase 2 variation) that beats a sound of
+        its own family (its parent or a sibling copy) also takes over that sound's earlier answers, as the same sound improved; the beaten
+        sound keeps its own (2026-11-20: a copy that beat its 7-of-8 parent ranked below it on 2 games, so the tuning result was lost)."""
         rows=self._choices()[self.motion_pairs:]
+        if not inherit:return rows
+        cell=lambda i:self.by_cell.get(self.candidates[i]['recipe'].get('cell'),{})
+        family=lambda i:cell(i).get('parent') or cell(i).get('id')
+        added=[]
+        for k,r in enumerate(rows):
+            w=r.get('winner')
+            if not w or not cell(w).get('parent'):continue
+            x=next(i for i in r['pair'] if i!=w)
+            if family(x)!=family(w):continue
+            for q in [q for q in rows[:k] if x in q['pair']]+[q for q,at in added if at<k and x in q['pair']]:
+                pair=[w if i==x else i for i in q['pair']]
+                if pair[0]!=pair[1]:added.append(({**q,'pair':pair,'winner':w if q.get('winner')==x else q.get('winner')},k))
+        return rows+[q for q,_ in added]
+    def _bt_strength(self,inherit=True):
+        """Bradley-Terry strengths from the answers alone (no traits)."""
+        rows=self._ranking_rows(inherit)
         heard=[i for i in dict.fromkeys(i for r in rows for i in r['pair']) if self.candidates[i]['recipe']['motion']==self.motion]
         return bt_strengths(heard,rows,prior=BT_PRIOR)
     def _bt_ranked(self):s=self._bt_strength();return sorted(s,key=lambda i:(s[i],self._utility(i)),reverse=True)
@@ -1237,21 +1255,23 @@ class SoundMapDiscovery(TuningDiscovery):
         """Shortlist: Bradley-Terry on the answers (BT_PRIOR), sounds heard at least twice first, kept distinct. The trait model only picks
         challengers and breaks ties: with 20 answers over 18 trait terms it is near flat, and on 2026-11-20 it put first a sound the
         listener had beaten twice. Pair 20 plays the BT #1 against the strongest sound it has not met. The confirmation winner is recorded as champion."""
-        rows=self._choices()
+        rows=self._ranking_rows()
         wins=lambda i:sum(1. if r['winner']==i else .5 if r['choice'] in ('equal','good') else 0. for r in rows if i in r['pair'])
         ranked=[i for i in self._bt_ranked() if wins(i)>0] or self._bt_ranked()  # a sound that lost every time is not offered (2026-11-20)
-        eligible=[i for i in ranked if self._games(i)>=SHORTLIST_MIN_GAMES];self.finalists=[]
+        eligible=[i for i in ranked if sum(i in r['pair'] for r in rows)>=SHORTLIST_MIN_GAMES];self.finalists=[]
         for ident in eligible+[i for i in ranked if i not in eligible]:
             if all(self._distinct(ident,j) for j in self.finalists):self.finalists.append(ident)
             if len(self.finalists)==SHORTLIST:break
-        last=rows[-1] if rows else {}
+        answers=self._choices();last=answers[-1] if answers else {}  # the real last answer (rows above also hold inherited ones)
         if self.confirm and set(last.get('pair',()))=={self.confirm['first'],self.confirm['second']} and last.get('winner'):self.champion=last['winner']
     def _bt_order(self):
         strength=self._bt_strength();return [(i,strength.get(i,1.)) for i in self.finalists]
     def export(self):
         data=LevelDiscovery.export(self);mean,cov=self._posterior()
         data.update(motion=self.motion,pool={k:self.pool_meta.get(k) for k in ('created','source','limits')} if self.pool_meta else None,
-                    champion=self.champion,champion_starts=self.champion_starts,confirmation=self.confirm)
+                    champion=self.champion,champion_starts=self.champion_starts,confirmation=self.confirm,
+                    ranking={'inherited':[[i,round(v,4)] for i,v in sorted(self._bt_strength().items(),key=lambda x:-x[1])],
+                             'plain':[[i,round(v,4)] for i,v in sorted(self._bt_strength(False).items(),key=lambda x:-x[1])]})
         data['preference_model'].update(version='bayes-bt-map-2',feature_sd={n:round(float(v),3) for n,v in zip(self.feature_names,np.sqrt(np.diag(cov)))})
         data['note']=('Sound-map search (phase 1, v5). Pool: generated sounds from tools/sound_map: an open archive (no grid) of sounds made with the '
             'plain synth or the blocks voice (FM, noise band, waveshaper, amplitude modulation, inharmonic partials, resonant peaks), each kept only '
@@ -1404,7 +1424,7 @@ class StyleMapDiscovery(RegionMapDiscovery):
         options=super()._proposals()
         if self.rematch or not STYLE_PAIRS-1-MAP_FINE_PAIRS<=self.completed<STYLE_PAIRS-1 or self.champion is None:return options
         # Phase 2 (pairs 17-19): the champion against a variation of it (or of its parent, when the champion is itself a variation);
-        # moves that have been winning go first, then the model's Thompson sample. Winner stays as before.
+        # layer swaps last, then moves that have been winning, then the model's Thompson sample. Winner stays as before.
         here=self.by_cell[self.candidates[self.champion]['recipe']['cell']];parent=self.by_cell.get(here.get('parent'),here)
         heard={i for r in self._choices() for i in r['pair']}|self.excluded;trend=self.move_trends();self._sample()
         step2=lambda v:(v.get('move') or '').endswith('2') and not (v['move'] or '').startswith('swap')
@@ -1412,7 +1432,8 @@ class StyleMapDiscovery(RegionMapDiscovery):
               and self._id(map_recipe(v,self.motion)) not in heard and (not step2(v) or here.get('move')==v['move'][:-1] or not any(w.get('move')==v['move'][:-1] for w in parent.get('variations',[])))]
         # ladder: 2 steps only after 1 won (or when the parent has no checked first step: then 2 steps is its first)
         if not left:return options  # no variations (pool without phase 2): the phase-1 challenger
-        score=lambda v:(sum(trend.get(m,0) for m in v['move'].split('+')) if v.get('move') else 0,self._sampled(map_recipe(v,self.motion)))
+        # layer swaps last: they change the least (0.29-0.36 'distinct' steps) and twice took 11 plays to call (2026-11-20)
+        score=lambda v:(not (v.get('move') or '').startswith('swap'),sum(trend.get(m,0) for m in v['move'].split('+')) if v.get('move') else 0,self._sampled(map_recipe(v,self.motion)))
         left.sort(key=score,reverse=True)
         return [(map_recipe(v,self.motion),{'kind':'variation','cell':v['id'],'from':parent['id'],'move':v.get('move','original'),
                  'summary':f"Variation of {parent['id']}: {v.get('move','original')}"}) for v in left]
@@ -1434,7 +1455,7 @@ class StyleMapDiscovery(RegionMapDiscovery):
     def _split_note(self):return f'The pool is split by texture style ({", ".join(self.region_names)}); the model also learns the style.' if self.region_names else None
 
 MAP_GRID=[f'{r}-{b}' for r in ('deep','middle','high') for b in ('dark','bright')]
-MAP_REPEATS={11:'clear'}  # completed pairs -> repeat kind: pair 12 replays the first opening pair (grid: deep vs high). 2026-11-20: the
+MAP_REPEATS={11:'clear'}  # completed pairs -> repeat kind: pair 12 replays an opening pair (grid: pair 3, the pitch winner vs middle). 2026-11-20: the
 # second repeat (closest call, pair 16) was dropped: it cut into the champion run
 MAP_BALANCED_S=.55  # acum: grid opening pitch pairs match brightness here, a level every band reaches (deep .46-.82, middle .44-.85, high .45-1.0)
 MAP_REPEAT_GAP=5  # a repeat comes at least 5 pairs after its original, so memory does not decide it
@@ -1515,10 +1536,13 @@ class HeardMapDiscovery(StyleMapDiscovery):
         rows=self._choices();done={r['of'] for r in self.repeats}
         old=[(n,r) for n,r in enumerate(rows) if n<=self.completed-MAP_REPEAT_GAP and n>=self.motion_pairs and n not in done
              and len(set(r['pair']))==2 and not any(r['pair']==x['pair'][::-1] for x in self.repeats)]
-        old=[(n,r) for n,r in old if n==self.motion_pairs];key=lambda nr:nr[0]  # 'clear': the first opening pair (grid: deep vs high)
+        # 'clear': grid: the pitch pair with the middle (pair 3), which always holds the listener's pitch choice; deep vs high (pair 2) can be
+        # two sounds they both reject (2026-11-20: answered deep then high, after middle beat both). Other pools: the first opening pair.
+        old=[(n,r) for n,r in old if n==self.motion_pairs+(1 if self._grid() else 0)];key=lambda nr:nr[0]
         if not old:return options
         n,row=min(old,key=key)
         self.repeats.append({'at':self.completed,'of':n,'kind':kind,'pair':row['pair'][::-1]})
+        if self.champion_starts and self.champion_starts[-1]['pair']==self.completed+1:self.champion_starts[-1]['pair']+=1  # it defends from the pair after the repeat
         self._repeat_order=row['pair'][::-1];self.rematch=list(row['pair']);return []
     def _prepare(self):
         super()._prepare()
@@ -1530,7 +1554,7 @@ class HeardMapDiscovery(StyleMapDiscovery):
         data['repeats']=[{**r,'first':rows[r['of']]['choice'],'again':rows[r['at']]['choice'],'agree':same(rows[r['of']],rows[r['at']])}
                          for r in self.repeats if r['at']<len(rows)]
         data['note']+=(f' Repeats: pairs {", ".join(str(k+1) for k in sorted(MAP_REPEATS))} replay an earlier pair (A and B swapped, at least '
-                       f'{MAP_REPEAT_GAP} pairs later): the first opening pair; both answers count, and agreement is exported.')
+                       f'{MAP_REPEAT_GAP} pairs later): grid: pair 3 (pitch winner vs middle), else the first opening pair; both answers count, and agreement is exported.')
         return data
     def focus_regions(self,rows=None):
         """Grid: the best cell first, then the runner-up and every neighbour of the best cell (one step in register or in brightness), so

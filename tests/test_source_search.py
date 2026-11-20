@@ -794,7 +794,26 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             a,b=d.pair;d.feedback(choice='A' if pitch(a)<pitch(b) else 'B')
         self.assertEqual(d.champion,d._bt_ranked()[0])  # who won the most, not the trait model's guess
         self.assertEqual(d.export()['champion_starts'][0]['by'],'answers');d.close()
-    def test_heard_session_repeats_the_first_opening_pair_swapped(self):
+    def test_a_tuned_copy_that_beats_its_parent_inherits_its_record(self):
+        import copy,json,tempfile,random as stdrandom
+        from experiment.source_search import HeardMapDiscovery,MAP_POOL
+        data=json.loads(Path(MAP_POOL).read_text())
+        for sound in data['sounds']:  # fake checked copies: a little brighter
+            v=copy.deepcopy(sound);v.pop('variations',None);v.update(id=f"{sound['id']}-brighter",parent=sound['id'],move='brighter')
+            v['drive']['S']+=.05;v['driveEvolving']=dict(v.get('driveEvolving',v['drive']));v['fx']['tone']*=1.05;sound['variations']=[v]
+        path=Path(tempfile.mkdtemp())/'pool.json';path.write_text(json.dumps(data))
+        d=HeardMapDiscovery(renderer=lambda recipe:None,pool_path=path);d.start('rise');d.rng=stdrandom.Random(12)
+        move=lambda i:d.by_cell[d.candidates[i]['recipe']['cell']].get('move') or ''
+        pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
+        for n in range(20):
+            a,b=d.pair;d.feedback(choice='A' if move(a) else 'B' if move(b) else 'A' if pitch(a)<pitch(b) else 'B')  # copies always win
+        rows=d._choices();beat=[r for r in rows if r.get('winner') and move(r['winner']) and any(not move(i) for i in r['pair'])]
+        self.assertTrue(beat,'a copy met its parent')
+        copy_id=beat[0]['winner'];parent=next(i for i in beat[0]['pair'] if i!=copy_id)
+        order=d._bt_ranked();self.assertLess(order.index(copy_id),order.index(parent))  # the improved sound leads
+        data=d.export();self.assertEqual({r[0] for r in data['ranking']['plain']},{r[0] for r in data['ranking']['inherited']})  # both rankings saved
+        d.close()
+    def test_heard_session_repeats_the_middle_pitch_pair_swapped(self):
         import random as stdrandom
         from experiment.source_search import HeardMapDiscovery,MAP_REPEATS,MAP_REPEAT_GAP
         for motion in ('rise',None):  # with and without the Rising vs Evolving pair first
@@ -805,8 +824,8 @@ class SoundMapDiscoveryTest(unittest.TestCase):
                 if d.pair[0]==d.pair[1] or d.candidates[d.pair[0]]['origin'].get('kind')=='motion':d.feedback(choice='A');continue
                 a,b=d.pair;d.feedback(choice='A' if pitch(a)<pitch(b) else 'B')  # a perfectly consistent listener: prefers the lowest
             rows=d._choices();self.assertEqual([r['at'] for r in d.repeats],sorted(MAP_REPEATS))
-            (r,)=d.repeats;self.assertEqual(r['of'],d.motion_pairs);self.assertGreaterEqual(r['at']-r['of'],MAP_REPEAT_GAP)
-            self.assertEqual(rows[r['at']]['pair'],rows[r['of']]['pair'][::-1])  # deep vs high again, A/B swapped
+            (r,)=d.repeats;self.assertEqual(r['of'],d.motion_pairs+1);self.assertIn('middle',{d._cell(i).split('-')[0] for i in r['pair']});self.assertGreaterEqual(r['at']-r['of'],MAP_REPEAT_GAP)
+            self.assertEqual(rows[r['at']]['pair'],rows[r['of']]['pair'][::-1])  # pitch winner vs middle again, A/B swapped
             data=d.export();self.assertTrue(all(x['agree'] for x in data['repeats']));self.assertIn('Repeats',data['note'])
             d.close()
     def test_phase2_ladder_offers_the_second_step_only_after_the_first_won(self):

@@ -97,10 +97,12 @@ fixed preset set. Personalize sound now has a search selector: *Sound families (
   typical dark vs typical bright sound. Both good: the model's higher-rated sound goes on and both count as beating a neutral sound; Neither on
   pair 2: the one nearer middle in pitch goes on. A pitch answer counts for both cells of each band in the region record. Before, pairs 2-4
   played the six cells' typical sounds, two cells per pair, changing pitch and brightness at once, so an answer could not say which mattered.
-  Pairs 5-11 explore cells, 12 replays pair 2 (A/B swapped; the second repeat at pair 16 was dropped as it cut into the champion run),
+  Pairs 5-11 explore cells, 12 replays pair 3, the pitch winner vs middle (A/B swapped; pair 2 was replayed until 2026-11-20, but deep vs high can be two sounds the
+  listener rejects; the second repeat at pair 16 was dropped as it cut into the champion run),
   13-16 champion run (the first champion, and the one after Neither, is the Bradley-Terry best on the answers, not the trait model's
   pick; `champion_starts` in the export), 17-19 tuning, 20 the final list's #1 against the strongest sound it has not met. Final list: Bradley-Terry on the
-  answers alone (3 virtual even games per sound), sounds heard at least twice first, none that lost every pair; every A/B press is logged (`plays`).
+  answers alone (3 virtual even games per sound), sounds heard at least twice first, none that lost every pair; a tuned copy that beats its parent (or a sibling copy) takes over
+  that sound's earlier answers as the same sound improved (the export keeps both rankings, `ranking.plain` and `ranking.inherited`); every A/B press is logged (`plays`).
 - **Session, regions (2026-11-17, kept as `RegionMapDiscovery`).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
   region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
   region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the
