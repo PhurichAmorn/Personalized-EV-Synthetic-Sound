@@ -2,16 +2,17 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.source_search import HeardMapDiscovery, TuningDiscovery
+from experiment.source_search import BlockDiscovery, HeardMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
 
 
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
-        # Per session: 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map).
+        # Per session: 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map);
+        # 'blocks' = building-block sounds built on the spot (experiment/sound_blocks.py, 2026-11-21).
         # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
-        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery()}
+        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery()}
         self.source_discovery = self.searches['tuning']
         self.history = SourceHistory(self.source_discovery)
 
@@ -27,7 +28,7 @@ class DesktopBridge:
             'beamngBrake': c.telemetryBrake, 'beamngRegen': c.telemetryRegen,
             'running': c.running, 'starting': c.sound_starting,
             'speed': c.speed, 'rpm': c.rpm, 'gear': c.gear, 'hasGears': c.hasGears,
-            'maxRpm': c.maxRpm, 'speedGaugeMaximum': c.speedGaugeMaximum,
+            'maxRpm': c.maxRpm, 'speedGaugeMaximum': c.speedGaugeMaximum, 'kmhPerOctave': c.kmhPerOctave,
             'power': c.power, 'charge': c.charge, 'regenActive': c.regenActive,
             'acceleration': c.beamng_acceleration if c.sourceMode == 'BeamNG' else c.car.acceleration_m_s2,
             'motorLoad': c._signed_motor_load(), 'sourceAudition': c.source_audition,

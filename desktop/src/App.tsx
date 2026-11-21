@@ -14,7 +14,7 @@ export type State = {
   sourceMode: 'Simulator' | 'BeamNG'; beamngConnected: boolean; beamngError: string
   beamngThrottle: number; beamngBrake: number; beamngRegen: number
   running: boolean; starting: boolean; speed: number; rpm: number; gear: number; hasGears: boolean
-  maxRpm: number; speedGaugeMaximum: number; power: number; charge: number; acceleration?: number; motorLoad?: number; sourceAudition?: boolean
+  maxRpm: number; speedGaugeMaximum: number; kmhPerOctave?: number; power: number; charge: number; acceleration?: number; motorLoad?: number; sourceAudition?: boolean
   regenActive: boolean; vehicle: string; vehicleNames: string[]; specs: string
   soundTheme: string; soundThemes: string[]; soundRecipes: Record<string, string[]>;
   soundRecipeSelection: Record<string, string>; parameters: string

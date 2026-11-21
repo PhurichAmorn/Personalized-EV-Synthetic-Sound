@@ -46,7 +46,8 @@ export const isTuningRecipe = (recipe: unknown): recipe is TuningRecipe => (reci
  * and effects. Played as the full-drive check played it: levels SEARCH_FIXED effects plus the sound's own. */
 export type MapRecipe = { version: 4 | 5; kind: 'map'; seed: number; motion: 'rise' | 'evolving'; cell: string; fx: Partial<Fx>
   plain?: Partial<PlainParams>  // version 4: plain synth only
-  voice?: MapVoice }            // version 5: plain or blocks voice (mapVoice.ts)
+  voice?: MapVoice              // version 5: plain or blocks voice (mapVoice.ts)
+  label?: string }              // building-block sounds (experiment/sound_blocks.py): plain words, e.g. 'Soft body · Glass top (medium) · 75 Hz'
 export const isMapRecipe = (recipe: unknown): recipe is MapRecipe => (recipe as MapRecipe | null)?.kind === 'map'
 export type LiveRecipe = LevelRecipe | TuningRecipe | MapRecipe
 /** Built and played in the app (no offline render). */
@@ -180,7 +181,7 @@ export const VARIANTS: Record<string, StartingSound[]> = {
 for (const sound of [...STARTING_SOUNDS, ...Object.values(VARIANTS).flat()]) sound.plain.width ??= 1
 /** Plain-words description of a search sound, shown after the session so the listener knows what changed. */
 export function describeSound(recipe: unknown) {
-  if (isMapRecipe(recipe)) return `Generated sound (sound map box ${recipe.cell})`
+  if (isMapRecipe(recipe)) return recipe.label ?? `Generated sound (sound map box ${recipe.cell})`
   if (!isTuningRecipe(recipe)) return ''
   const b = recipe.base, name = (id: string) => findSound(id).name, changes: string[] = []
   if (b.blend) changes.push(`blended halfway with ${name(b.blend)}`)

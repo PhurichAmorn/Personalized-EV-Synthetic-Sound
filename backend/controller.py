@@ -10,6 +10,16 @@ from audio import SoundEngine
 from simulation.vehicle_model import VehicleModel, SIMULATOR_PRESETS
 from backend.beamng_telemetry import TorqueScaler, regen_full_w, regen_level
 
+# Evolving sweep pace (2026-11-21): one octave per 80 km/h felt right on the eSBR300; a car that gains speed faster (more power per kg)
+# gets more km/h per octave, so a full-pedal launch sweeps at the same pace in every car. ponytail: power per kg stands for acceleration;
+# use a measured 0-100 time per car if a car is heard as off.
+EVOLVING_REF_KMH, EVOLVING_REF_CAR = 80.0, 'Hirochi SBR4 eSBR300 (BeamNG)'
+
+
+def evolving_kmh_per_octave(car):
+    ref = VehicleModel.from_name(EVOLVING_REF_CAR)
+    return EVOLVING_REF_KMH * (car.max_power_kw / car.effective_mass_kg) / (ref.max_power_kw / ref.effective_mass_kg)
+
 
 class SimulatorController(QObject):
     changed = Signal()  # Live vehicle telemetry only.
@@ -82,6 +92,7 @@ class SimulatorController(QObject):
     running = Property(bool, lambda self: self.timer.isActive(), notify=sessionChanged)
     vehicleNames = Property('QStringList', lambda self: list(SIMULATOR_PRESETS), constant=True)
     speedGaugeMaximum = Property(float, lambda self: 300.0 if self.car.max_speed > 220 else 220.0, notify=vehicleChanged)
+    kmhPerOctave = Property(float, lambda self: evolving_kmh_per_octave(self.car), notify=vehicleChanged)
     selectedVehicle = Property(str, lambda self: self.car.name, notify=vehicleChanged)
     soundThemes = Property('QStringList', lambda self: list(SOUND_THEMES), constant=True)
     search = Property(QObject, lambda self: self._search, constant=True)

@@ -25,7 +25,7 @@ export default function SoundEditor({ active, state, onCommand, embedded = false
   // Level-search sounds play through the Sound Lab engine (labEngine.ts), not the old style player.
   const [lab] = useState(() => new LabPlayer())
   const [labPlaying, setLabPlaying] = useState(false)
-  const driving = { running: state.running, starting: state.starting, speedKmh: state.speed, power: state.power, acceleration: state.acceleration, rpm: state.rpm, maxRpm: state.maxRpm, throttle: state.throttleInput, brake: state.brakeInput, motorLoad: typeof state.motorLoad === 'number' ? state.motorLoad : null }
+  const driving = { running: state.running, starting: state.starting, speedKmh: state.speed, power: state.power, acceleration: state.acceleration, rpm: state.rpm, maxRpm: state.maxRpm, kmhPerOctave: state.kmhPerOctave, throttle: state.throttleInput, brake: state.brakeInput, motorLoad: typeof state.motorLoad === 'number' ? state.motorLoad : null }
   const latest = useRef({ input: driving, at: performance.now() })
   useEffect(() => { latest.current = { input: driving, at: performance.now() } }, [state])
   useEffect(() => () => lab.close(), [lab])

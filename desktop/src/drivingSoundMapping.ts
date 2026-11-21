@@ -1,5 +1,5 @@
 import type { GranularMode } from './granularPlayer'
-export type DrivingInput = { running: boolean; starting: boolean; speedKmh: number; throttle: number; brake?: number; motorLoad: number | null; rpm?: number; maxRpm?: number; power?: number; acceleration?: number }
+export type DrivingInput = { running: boolean; starting: boolean; speedKmh: number; throttle: number; brake?: number; motorLoad: number | null; rpm?: number; maxRpm?: number; power?: number; acceleration?: number; kmhPerOctave?: number }
 const unit = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0))
 const ease = (value: number) => { const x = unit(value); return x * x * (3 - 2 * x) }
 /** Speed where Rise/Evolving pitch reaches its top. */
@@ -53,7 +53,9 @@ export function drivingSoundTargets(input: DrivingInput, stale = false, response
     cycleSpeed: mode === 'evolving' ? .25 + .75 * Math.max(pedal, power) : 1,
     // No parking: Evolving's sweeps follow speed stages (stage below); parked sweeps were heard as a stall (2026-11-18).
     loopHold: 0,
-    stage: mode === 'evolving' ? speed / 80 : 0,  // Evolving Shepard position: one octave per 80 km/h (40 heard as too fast on the eSBR300, 2026-11-19)
+    // Evolving Shepard position: one octave per kmhPerOctave km/h, set per car from power per kg so the sweep pace matches the eSBR300's
+    // 80 km/h (40 heard as too fast there, 2026-11-19; a fast car swept too fast and a slow one too slowly at a fixed 80, 2026-11-21).
+    stage: mode === 'evolving' ? speed / (input.kmhPerOctave && input.kmhPerOctave > 0 ? input.kmhPerOctave : 80) : 0,
     rate: Math.pow(2, semitones / 12), semitones,
     bodyGain: 1,
     padGain: .65 + .2 * propulsion,

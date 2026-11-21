@@ -77,5 +77,15 @@ class ControllerRegenTests(unittest.TestCase):
         self.assertAlmostEqual(c.telemetryRegen, .3)
 
 
+class EvolvingPaceTest(unittest.TestCase):
+    def test_sweep_pace_matches_the_esbr300_in_every_car(self):
+        from backend.controller import evolving_kmh_per_octave, EVOLVING_REF_CAR
+        from simulation.vehicle_model import VehicleModel, VEHICLE_CONFIGS
+        self.assertAlmostEqual(evolving_kmh_per_octave(VehicleModel.from_name(EVOLVING_REF_CAR)), 80.0)
+        pace = lambda c: c.max_power_kw / c.effective_mass_kg / evolving_kmh_per_octave(c)  # octaves per unit of acceleration
+        ref = pace(VehicleModel.from_name(EVOLVING_REF_CAR))
+        for name in VEHICLE_CONFIGS: self.assertAlmostEqual(pace(VehicleModel.from_name(name)), ref)
+
+
 if __name__ == '__main__':
     unittest.main()

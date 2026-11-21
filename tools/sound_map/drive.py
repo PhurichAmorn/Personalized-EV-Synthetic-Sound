@@ -64,7 +64,13 @@ def measure(job):
     R, _, _, tR = roughness_dw(seg, FS)
     r, r_at = worst(np.asarray(R), np.asarray(tR))
     f, f_at = max((fluctuation(seg[i:i + 3 * FS]), i / FS + 1.5) for i in range(0, max(1, len(seg) - 3 * FS + 1), FS))
-    return {'S': s, 'R': r, 'F': f, 'at': {'S': t0 + s_at, 'R': t0 + r_at, 'F': t0 + f_at}}
+    cruise = (np.asarray(tS) + t0 >= 9) & (np.asarray(tS) + t0 <= 14)  # 9-14 s of the drive: cruising, as the listening pages measure brightness
+    part = seg[max(0, int((9 - t0) * FS)):max(0, int((14 - t0) * FS))]
+    part = part if len(part) > FS else seg
+    P = np.abs(np.fft.rfft(part)) ** 2; fr = np.fft.rfftfreq(len(part), 1 / FS)
+    bands = 10 * np.log10(np.array([P[(fr >= lo) & (fr < 2 * lo)].sum() for lo in 31.25 * 2 ** np.arange(9)]) + 1e-12)  # octave bands, as the listening pages
+    return {'S': s, 'R': r, 'F': f, 'cruise': float(np.median(np.asarray(S)[cruise])) if cruise.any() else s,
+            'bands': [round(float(v), 2) for v in bands - bands.max()], 'at': {'S': t0 + s_at, 'R': t0 + r_at, 'F': t0 + f_at}}
 
 
 def verdict(per_mode, modes=GATE):

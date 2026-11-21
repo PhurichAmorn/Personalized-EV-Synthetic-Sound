@@ -6,6 +6,7 @@ from itertools import combinations
 import math,random,threading
 import numpy as np
 from experiment.source_render_queue import SourceRenderer,trim_cache
+from experiment import sound_blocks as sb
 
 POLICY='source-diversity-preference-model-bt-playoff-v1'
 MAX_COMPARISONS=14  # Rated discovery pairs.
@@ -106,7 +107,7 @@ class SourceDiscovery:
             def public(ident):
                 c=self.candidates[ident]
                 return {k:c[k] for k in ['id','label','recipe','urls','traces'] if k in c}
-            return {'active':self.active,'busy':self.busy,'error':self.error,'completed':self.completed,'pair':[public(x) for x in self.pair],'heard':list(self.tried),'selected':self.selected,'final':self.final,'finalists':[dict(public(x),**self._finalist_summary(x,strength)) for x,strength in self._bt_order()],'stage':self.stage,'step':self.completed+len(self.playoff_history),'totalSteps':TOTAL_STEPS,'playoffDone':len(self.playoff_history),'playoffTotal':PLAYOFF_PAIRS,'quarantined':len(self.quarantine),'policy':self.policy,'checkpoint':self.stage!='discovery','pairMode':self.pair_mode,'maxComparisons':MAX_COMPARISONS,'acceptable':self.acceptable}
+            return {'active':self.active,'busy':self.busy,'error':self.error,'completed':self.completed,'pair':[public(x) for x in self.pair],'heard':list(self.tried),'selected':self.selected,'final':self.final,'finalists':[dict(public(x),**self._finalist_summary(x,strength)) for x,strength in self._bt_order()],'stage':self.stage,'step':self.completed+len(self.playoff_history),'totalSteps':getattr(self,'pairs',TOTAL_STEPS),'playoffDone':len(self.playoff_history),'playoffTotal':PLAYOFF_PAIRS,'quarantined':len(self.quarantine),'policy':self.policy,'checkpoint':self.stage!='discovery','pairMode':self.pair_mode,'maxComparisons':MAX_COMPARISONS,'acceptable':self.acceptable}
     def start(self):
         with self.lock:
             if self.busy:raise ValueError('Wait for source preparation to finish')
@@ -630,6 +631,7 @@ class StyleDiscovery(SourceDiscovery):
     distinct_families=False
     always_choice=True
     answers=('A','B','equal')
+    pairs=STYLE_PAIRS  # session length; BlockDiscovery uses 17 (2026-11-21)
     max_attempts=20  # after several steps in one direction many tunings resemble recent sounds; try more before giving up
     def _origin_for(self,recipe):return self.origins.get((recipe['seed'],recipe['layers'][0]['method']))
     def _note(self,recipe,origin):self.origins[(recipe['seed'],recipe['layers'][0]['method'])]=origin
@@ -716,7 +718,7 @@ class StyleDiscovery(SourceDiscovery):
         return out
     def _after_pair(self):
         self.completed+=1
-        if self.completed>=STYLE_PAIRS:  # no final round: rank, then the listener picks from the shortlist
+        if self.completed>=self.pairs:  # no final round: rank, then the listener picks from the shortlist
             self._rank_finalists();self.stage='done';self.active=False;self.pair=[];self.busy=False
             return
         self._prepare()
@@ -930,6 +932,7 @@ class TuningDiscovery(LevelDiscovery):
     feature_names=TUNING_FEATURE_NAMES
     motion='rise'
     motion_pairs=0  # 1 when the session opens with the Rising vs Evolving pair
+    motion_pair_count=1  # Rising vs Evolving pairs at the start of a session with no motion given (BlockDiscovery: 2)
     # Simulated listeners (600 per variant, hidden linear taste, noisy answers, 2026-11-16): share of sessions whose picked sound is in the
     # listener's top 5% (+-2%). Parents by posterior mean, changes ordered by a Thompson sample: half spread 85%, full 81%. Parents by the
     # sample too: half 78%, full 61% (too much wandering for 20 pairs). Old rules 82-83%, posterior mean only 84-86%. Finalist duels in the
@@ -993,7 +996,7 @@ class TuningDiscovery(LevelDiscovery):
     def start(self,motion=None):
         """motion None: pair 1 is the same sound Rising vs Evolving and the listener's choice sets it (Both good / Neither keep Rising)."""
         if motion not in (None,'rise','evolving'):raise ValueError('Choose Rising or Evolving')
-        with self.lock:self.motion=motion or 'rise';self.motion_pairs=0 if motion else 1;self.family=None;self.tuning_check=None;super().start()
+        with self.lock:self.motion=motion or 'rise';self.motion_pairs=0 if motion else self.motion_pair_count;self.family=None;self.tuning_check=None;super().start()
     def _proposals(self):
         self.check_parent=None;mp=self.motion_pairs;step=self.completed-mp;rows=self._choices()
         if mp and self.completed==0:
@@ -1028,7 +1031,7 @@ class TuningDiscovery(LevelDiscovery):
             if other and own():self.rematch=[own()[0],other];return []
         # Last pair (pair 20): blind tuning check. The current best against the same variant untuned (or, if the best is untuned, against its
         # best tuned version). It looks like any other pair and counts like any other choice, so the shortlist built after it agrees with it.
-        if self.completed==STYLE_PAIRS-1 and ranked:
+        if self.completed==self.pairs-1 and ranked:
             top=ranked[0];b=self.candidates[top]['recipe']['base'];tuned=lambda i:any(self.candidates[i]['recipe']['base'][k] for k in ('pitch','brightness','character'))
             same=lambda i:self.candidates[i]['recipe']['base'].get('variant')==b.get('variant')
             if tuned(top):plain=self._add(tuning_recipe(self.motion,b['start'],b.get('variant')),{'kind':'check','summary':'Tuning check: the same variant untuned'});pair=[top,plain]
@@ -1220,7 +1223,7 @@ class SoundMapDiscovery(TuningDiscovery):
         best=self.champion
         # Last pair: confirmation. The shortlist #1 (Bradley-Terry) against the strongest sound it has not met, so a sound it already
         # beat never returns (2026-11-20: #1 vs #2 brought back a sound the listener had beaten twice).
-        if self.completed==STYLE_PAIRS-1:
+        if self.completed==self.pairs-1:
             self._rank_finalists()
             if self.finalists:
                 first=self.finalists[0];met={j for r in self._ranking_rows() if first in r['pair'] for j in r['pair']}  # a copy has met what its parent met
@@ -1368,7 +1371,7 @@ class RegionMapDiscovery(SoundMapDiscovery):
             if len(pair)==2:
                 self.rematch=[self._add_sound(s,'region',f"Region {self.region[s['id']]+1}: {s['id']} (Thompson sample)") for s in pair];return []
         options=super()._proposals()
-        if self.rematch or self.completed==STYLE_PAIRS-1:return options
+        if self.rematch or self.completed==self.pairs-1:return options
         focus=self.focus_regions(rows);best=[focus[0]] if self.rng.random()<MAP_FOCUS else focus[1:]
         for regions in (best,focus):
             kept=[o for o in options if self.region[o[1]['cell']] in regions]
@@ -1428,7 +1431,7 @@ class StyleMapDiscovery(RegionMapDiscovery):
         return trend
     def _proposals(self):
         options=super()._proposals()
-        if self.rematch or not STYLE_PAIRS-1-MAP_FINE_PAIRS<=self.completed<STYLE_PAIRS-1 or self.champion is None:return options
+        if self.rematch or not self.pairs-1-MAP_FINE_PAIRS<=self.completed<self.pairs-1 or self.champion is None:return options
         # Phase 2 (pairs 17-19): the champion against a variation of it (or of its parent, when the champion is itself a variation);
         # layer swaps last, then moves that have been winning, then the model's Thompson sample. Winner stays as before.
         here=self.by_cell[self.candidates[self.champion]['recipe']['cell']];parent=self.by_cell.get(here.get('parent'),here)
@@ -1570,3 +1573,192 @@ class HeardMapDiscovery(StyleMapDiscovery):
         near=[k for k in range(self.n_regions) if k not in order and ((reg(k)[0]==r0)!=(reg(k)[1]==b0)) and abs(R.index(reg(k)[0])-R.index(r0))<=1]
         return order+near
     def _features(self,recipe):return RegionMapDiscovery._features(self,recipe)
+
+BLOCK_POLICY='source-blocks-v1'
+BLOCK_STEPS=16     # pairs after the motion pairs
+BLOCK_MOTION=('glass','pad','pure','digital','bell')  # starts tried, in order, for the two Rising vs Evolving pairs
+BLOCK_OPENING=3    # pairs 2-4 (after the motion pair): the five starts; pair 4 puts the fifth against the best of pairs 2-3
+BLOCK_BRIGHT_STEP=.15  # acum, measured: medium (.10 is the smallest gap heard; .20 with 8-semitone pitch jumps was heard as too large, 2026-11-21)
+BLOCK_BROAD=(4,11)     # pairs 6-13 (counted after the motion pair): broad challengers, 2 blocks changed at once
+BLOCK_BIG=(13,14)      # pairs 15-16: one medium change (pitch 4 semitones or brightness 0.15 acum)
+BLOCK_REPLAY=12        # pair 14: the playoff pair (pair 5) again, A and B swapped
+BLOCK_GAP_GROUPS=('body','level','synth')  # changes where other settings can cover them, checked against the measured spectrum gap. Not the top
+# texture: swaps were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass .33). Pitch, brightness and
+# space have their own rules: 4 semitones is always heard, brightness is a measured 0.15 acum, reverb changes over time.
+BLOCK_BROAD_GROUPS=('top','body','level','pitch','brightness','space','synth')
+_ONE_HOT=(('body',tuple(sb.BODIES)),('top',tuple(sb.TOPS)),('level',tuple(sb.TOP_LEVELS)),('space',('dry',)),
+          ('buzz',(2,)),('chord',('on',)),('bell',(True,)),('vowel',(True,)))
+BLOCK_FEATURE_NAMES=[f'{k}={v}' for k,vs in _ONE_HOT for v in vs]+['pitch','pitch^2','brightness','brightness^2']
+
+def block_features(sound):
+    s=sb.full(sound);zp=(s['pitch']-2)/2;zb=(s['brightness']-.5)/.2
+    return np.array([float(s[k]==v) for k,vs in _ONE_HOT for v in vs]+[zp,zp*zp,zb,zb*zb])
+
+def block_moves(sound,group):
+    """[(sound, words)] one medium change of this kind away (brightness is a target; the table turns it into a low-pass): pitch 4 semitones,
+    brightness 0.15 acum, top level one step (the gap rule drops it when too close), buzz off <-> strong (2026-11-21: one-step guesses were
+    not heard, 8-semitone jumps with 3 blocks were too large)."""
+    s=sb.full(sound);out=[]
+    def put(words,**kw):out.append(({**s,**kw},words))
+    if group=='top':[put(f"top: {sb.NAMES[t]}",top=t,**({} if t in ('synth','bell') else {'buzz':0,'chord':'off','bell':False,'vowel':False})) for t in sb.TOPS if t!=s['top']]
+    if group=='body':[put(f"body: {sb.NAMES[b]}",body=b) for b in sb.BODIES if b!=s['body']]
+    if group=='level':[put(f"top {v}",level=v) for v in (('soft','strong') if s['level']=='medium' else ('medium',))]
+    if group=='pitch':[put('deeper' if d<0 else 'higher',pitch=s['pitch']+d) for d in (-1,1) if 0<=s['pitch']+d<len(sb.PITCHES)]
+    if group=='brightness':[put('darker' if d<0 else 'brighter',brightness=round(s['brightness']+d,2)) for d in (-BLOCK_BRIGHT_STEP,BLOCK_BRIGHT_STEP)]
+    if group=='space':put('dry' if s['space']=='large' else 'large space',space='dry' if s['space']=='large' else 'large')
+    if group=='synth' and sb.has_synth(s):
+        put('buzz off' if s['buzz'] else 'buzz strong',buzz=0 if s['buzz'] else 2)
+        put('chord off' if s['chord']!='off' else 'chord on',chord='off' if s['chord']!='off' else 'on')
+        put('bell off' if s['bell'] else 'bell on',bell=not s['bell']);put('vowel off' if s['vowel'] else 'vowel on',vowel=not s['vowel'])
+    return out
+
+class BlockDiscovery(SoundMapDiscovery):
+    """17 choices over building-block sounds (experiment/sound_blocks.py, 2026-11-21): body texture, top texture, top level, synth knobs,
+    pitch, brightness, space. No pool: every sound is built on the spot, and only offered if the safe-area table
+    (tools/sound_map/block_sweep.py) says it passes the drive check; brightness changes are measured (0.15 acum), not fixed filter amounts.
+    Pair 1 Rising vs Evolving (Glass start); 2-4 the five starts; 5 playoff of their winners; 6-13 the champion against broad challengers
+    (2 blocks changed at once); 14 replay of pair 5; 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); 17 confirmation.
+    Answers, Bradley-Terry ranking (answers alone), shortlist and export as SoundMapDiscovery."""
+    policy=BLOCK_POLICY
+    feature_names=BLOCK_FEATURE_NAMES
+    motion_pair_count=1  # one Rising vs Evolving pair (a second one on Synth pad, 2026-11-21, sounded too alike and was removed)
+    pairs=1+BLOCK_STEPS
+    repeats=();_repeat_order=None
+    def __init__(self,renderer=None,table_path=sb.TABLE):
+        super().__init__(renderer);self.table_path=table_path;self.table=None
+    def _load(self):
+        if self.pool is None:
+            self.table=sb.load_table(self.table_path)  # ponytail: no table yet (sweep not run): sounds play unchecked, marked in the export
+            self.pool=[];self.by_cell={};self.evolving_ok={'all'};self.pool_meta={'source':'sound_blocks','limits':(self.table or {}).get('limits')}
+    def start(self,motion=None):
+        with self.lock:self.repeats=[];self._repeat_order=None;self.pool=None;self.pairs=(0 if motion else self.motion_pair_count)+BLOCK_STEPS
+        super().start(motion)
+    def _recipe(self,sound,motion=None):
+        """Block sound -> live recipe, or None when the table says it fails the drive check. Brightness becomes the low-pass that the
+        table measured for it; the sound keeps the brightness actually reached (it may stop at the texture's limit)."""
+        s=sb.full(sound);motion=motion or self.motion
+        if self.table:
+            entry=sb.nearest_entry(self.table,s);cutoff=sb.cutoff_for(entry,s['brightness'])
+            if not sb.safe(entry,cutoff,('rise',) if motion=='rise' else ('rise','evolving')):return None
+            s['brightness']=round(sb.sharpness_at(entry,cutoff),2)
+        else:cutoff=round(2000*4**((s['brightness']-.5)/.4))  # rough: about 0.10 acum per 1.4x
+        voice,fx=sb.build(s,cutoff)
+        return {'version':5,'kind':'map','seed':0,'motion':motion,'cell':sb.key(s),'voice':voice,'fx':fx,'blocks':s,'label':sb.describe(s),'checked':bool(self.table)}
+    def _space(self):return []
+    def _gap(self,a,b):
+        """Octave-band gap between two block recipes, from the table's measured spectra (nearest entries, at each one's low-pass point).
+        ponytail: a combination the sweep did not measure uses its nearest entry, so its gap is an estimate; two that share an entry
+        measure 0 and are never offered against each other."""
+        ea,eb=sb.nearest_entry(self.table,a['blocks']),sb.nearest_entry(self.table,b['blocks'])
+        return sb.gap(ea['bands'][sb.point(a['fx']['tone'])],eb['bands'][sb.point(b['fx']['tone'])])
+    def _features(self,recipe):return block_features(recipe['blocks'])
+    def _label(self,recipe):return recipe['label']+(' · Evolving' if recipe['motion']=='evolving' else '')
+    def _sound(self,ident):return self.candidates[ident]['recipe']['blocks']
+    def _distinct(self,a,b):
+        x,y=self._sound(a),self._sound(b)
+        return x['top']!=y['top'] or x['body']!=y['body'] or sum(x[k]!=y[k] for k in x)>=2
+    def _ranking_rows(self,inherit=True):return self._choices()[self.motion_pairs:]
+    def _set_motion(self,rows):
+        """The motion that won more of the Rising vs Evolving pairs; a tie, Both good or Neither keep Rising (as before)."""
+        won=[self.candidates[r['winner']]['recipe']['motion'] for r in rows if r['winner']]
+        self.motion='evolving' if won.count('evolving')>won.count('rise') else 'rise'
+    def _add_block(self,sound,kind,summary,motion=None):
+        """A start (or the motion pair) that fails at its brightness is tried darker, down to 0.25 acum, before it is left out."""
+        for b in (sound['brightness'],*[round(sound['brightness']-BLOCK_BRIGHT_STEP*k,2) for k in range(1,4)]):
+            r=self._recipe({**sound,'brightness':b},motion)
+            if r:return self._add(r,{'kind':kind,'summary':summary})
+        return None
+    def _starts(self):return [(name,{**sb.DEFAULT,**s}) for name,s in sb.STARTS.items()]
+    def _proposals(self):
+        self.check_parent=None;mp=self.motion_pairs;step=self.completed-mp;rows=self._choices()
+        if mp and self.completed==0:  # the first starts that pass in both modes, one pair each
+            names={'rise':'Rising','evolving':'Evolving'};starts=dict(self._starts());self.motion_sets=[]
+            for name in BLOCK_MOTION:
+                pair=[self._add_block(starts[name],'motion',f'Motion: {names[m]} ({name})',m) for m in ('rise','evolving')]
+                if None not in pair:self.motion_sets.append(pair)
+                if len(self.motion_sets)==mp:break
+            self.motion_pairs=mp=len(self.motion_sets);self.pairs=mp+BLOCK_STEPS
+            if not mp:self.motion='rise';return self._proposals()
+            self.rematch=self.motion_sets[0];return []
+        if mp and self.completed<mp:self.rematch=self.motion_sets[self.completed];return []
+        if mp and self.completed==mp:self._set_motion(rows[:mp])
+        rows=rows[mp:]
+        if step==0:
+            starts=self._starts();self.rng.shuffle(starts)
+            self.opening=[i for i in (self._add_block(s,'opening',f'Start: {name}') for name,s in starts) if i]
+        if step<BLOCK_OPENING-1 and 2*step+1<len(self.opening):self.rematch=self.opening[2*step:2*step+2];return []
+        if step==BLOCK_OPENING-1 and len(self.opening)>4:  # the fifth start against the best so far
+            self.rematch=[self.opening[4],next(i for i in self._bt_ranked() if i in self.opening[:4])];return []
+        winners=set()
+        for r in rows[:BLOCK_OPENING]:winners|={r['winner']} if r['winner'] else set(r['pair']) if r['choice']=='good' else set()
+        winners=[i for i in self._bt_ranked() if i in winners]
+        if step==BLOCK_OPENING:
+            pair=(winners+[i for i in self._bt_ranked() if i not in winners])[:2]
+            if len(pair)==2:self.rematch=pair;return []
+        if step==BLOCK_REPLAY and len(rows)>BLOCK_OPENING and len(set(rows[BLOCK_OPENING]['pair']))==2:
+            old=rows[BLOCK_OPENING]['pair'];self.repeats.append({'at':self.completed,'of':mp+BLOCK_OPENING,'kind':'playoff','pair':old[::-1]})
+            self._repeat_order=old[::-1];self.rematch=list(old);return []
+        # Champion (winner stays), first champion and the one after Neither by the answers, as SoundMapDiscovery.
+        rejected=set(rows[-1]['pair']) if rows and rows[-1]['choice']=='neither' else set();last=rows[-1] if rows else {}
+        if not self._bt_ranked():return []  # no start passes the safe-area table: _prepare reports that no pair could be formed
+        if self.champion is None or rejected:
+            self.champion=next((i for i in self._bt_ranked() if i not in rejected),None) or self._bt_ranked()[0]
+            self.champion_starts.append({'pair':self.completed+1,'id':self.champion,'by':'answers','after':'neither' if rejected else 'start'})
+        elif self.champion in last.get('pair',()) and last.get('winner') not in (None,self.champion):self.champion=last['winner']
+        if self.completed==self.pairs-1:  # confirmation: the shortlist #1 against the strongest sound it has not met
+            self._rank_finalists()
+            if self.finalists:
+                first=self.finalists[0];met={j for r in self._ranking_rows() if first in r['pair'] for j in r['pair']}
+                second=next((i for i in self._bt_ranked() if i not in met and self._distinct(first,i)),self.finalists[1] if len(self.finalists)>1 else None)
+                if second:self.confirm={'first':first,'second':second};self.rematch=[first,second];return []
+        best=self.champion;here=self._sound(best);self._sample();self.check_parent=best
+        heard=[self._sound(i) for r in self._choices() for i in r['pair']]
+        def ok(r,g,words):
+            if r is None:return False
+            if ('darker' in words or 'brighter' in words) and (not self.table or abs(r['blocks']['brightness']-here['brightness'])<BLOCK_BRIGHT_STEP-.03):return False  # unmeasured, or at its limit
+            return not (g in BLOCK_GAP_GROUPS and self.table and self._gap(self.candidates[best]['recipe'],r)<sb.MIN_GAP)  # measured as too close to hear
+        def single(gs):
+            out=[(r,{'kind':'change','group':g,'parent':best,'summary':f'Change: {w}'}) for g in gs for x,w in block_moves(here,g) if ok(r:=self._recipe(x),g,w)]
+            return sorted(out,key=lambda m:-self._sampled(m[0]))
+        if BLOCK_BIG[0]<=step<=BLOCK_BIG[1]:return single(('pitch','brightness'))+single(BLOCK_BROAD_GROUPS)
+        # Broad (pairs 6-13): 2 blocks changed at once, so every pair is clearly different. Candidates are drawn at random, then ordered by a
+        # Thompson sample of the taste plus how far each is from everything heard (areas not heard yet come first).
+        out=[]
+        for _ in range(300):
+            x,words,groups=dict(here),[],self.rng.sample(BLOCK_BROAD_GROUPS,2)
+            for g in groups:
+                moves=block_moves(x,g)
+                if moves:x,w=self.rng.choice(moves);words.append(w)
+            r=self._recipe(x)
+            if r is None or len(words)<2 or sum(r['blocks'][k]!=here[k] for k in here)<2:continue
+            if any(w in ('darker','brighter') for w in words) and (not self.table or abs(r['blocks']['brightness']-here['brightness'])<BLOCK_BRIGHT_STEP-.03):continue
+            far=min((sum(r['blocks'][k]!=h[k] for k in h) for h in heard),default=9)
+            out.append((r,{'kind':'broad','groups':groups,'parent':best,'summary':'Broad: '+', '.join(words),'far':far}))
+        out.sort(key=lambda m:-(self._sampled(m[0])+.5*m[1]['far']))
+        return out+single(BLOCK_BROAD_GROUPS)
+    def _prepare(self):
+        super()._prepare()
+        if self._repeat_order and set(self.pair)==set(self._repeat_order):self.pair=list(self._repeat_order)
+        self._repeat_order=None
+    def export(self):
+        data=super().export();rows=self._choices()
+        same=lambda a,b:(a['winner'] is not None and a['winner']==b['winner']) or (a['winner'] is None and a['choice']==b['choice'])
+        data['repeats']=[{**r,'first':rows[r['of']]['choice'],'again':rows[r['at']]['choice'],'agree':same(rows[r['of']],rows[r['at']])}
+                         for r in self.repeats if r['at']<len(rows)]
+        liked={i for r in rows[self.motion_pairs:] for i in ([r['winner']] if r['winner'] else r['pair'] if r['choice']=='good' else [])}
+        data['liked']=[{'id':i,'sound':self._sound(i),'label':self.candidates[i]['label']} for i in liked]
+        data['table']={'checked':bool(self.table),'created':(self.table or {}).get('created')}
+        data['note']=('Building-block search (2026-11-21, broad version). A sound is a body texture (Soft, Blocks, Electric, Glass), a top texture '
+            'for the 3 upper octave layers (Glass, Electric, Blocks, Plain, Synth, Bell synth), a top level (soft/medium/strong), synth knobs when the top '
+            'is a synth (buzz off/strong, chord on/off, bell, vowel), pitch (47-119 Hz), brightness (measured cruise sharpness) and space (dry/large). '
+            'Built on the spot; offered only if the safe-area table (tools/sound_map/block_sweep.py, full-drive check at 4 low-pass points) passes it '
+            '(table.checked false: no table yet, sounds unchecked and no brightness changes). Pair 1 Rising vs Evolving on the Glass start '
+            '(Both good or Neither keep Rising); 2-4 the five starts (Glass, Pure, Synth pad, Digital, Bell synth; pair 4 the fifth '
+            'against the best of pairs 2-3); 5 playoff of their winners; 6-13 the champion against broad challengers: 2 blocks changed at once, '
+            'drawn at random and ordered by a Thompson sample of a '
+            f'Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features plus distance from everything heard; 14 replay of pair 5 '
+            '(A and B swapped); 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); winner stays. Changes are medium (one-step '
+            'guesses were not heard, 8-semitone jumps with 3 blocks were too large); a change of body, top level or synth knob needs a measured octave-band gap of at least 0.35 '
+            '(.15-.31 were not heard). Pair 17: shortlist #1 against the strongest sound it has not met. Liked: every winner and both sounds of a Both '
+            'good answer. Shortlist: Bradley-Terry on the answers alone.')
+        return data
