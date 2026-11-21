@@ -101,6 +101,18 @@ class BlockDiscoveryTest(unittest.TestCase):
             d.feedback(choice='A')
         d.close()
 
+    def test_final_list_at_most_two_per_top_and_clearly_different(self):
+        d = self.session()
+        for _ in range(40):
+            if not d.active: break
+            d.feedback(choice='A')
+        tops = [d._sound(i)['top'] for i in d.finalists]
+        self.assertTrue(d.finalists); self.assertLessEqual(max(tops.count(t) for t in tops), 2)
+        for a in d.finalists:
+            for b in d.finalists:
+                if a != b: self.assertTrue(d._distinct(a, b))
+        d.close()
+
     def test_both_good_marks_both_liked(self):
         d = self.session(); d.feedback(choice='A'); pair = list(d.pair); d.feedback(choice='good')
         liked = {x['id'] for x in d.export()['liked']}

@@ -1586,6 +1586,7 @@ BLOCK_GAP_GROUPS=('body','level','synth')  # changes where other settings can co
 # texture: swaps were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass .33). Pitch, brightness and
 # space have their own rules: 4 semitones is always heard, brightness is a measured 0.15 acum, reverb changes over time.
 BLOCK_BROAD_GROUPS=('top','body','level','pitch','brightness','space','synth')
+BLOCK_PER_TOP=2  # final list: at most two sounds with the same top texture (2026-11-22)
 _ONE_HOT=(('body',tuple(sb.BODIES)),('top',tuple(sb.TOPS)),('level',tuple(sb.TOP_LEVELS)),('space',('dry',)),
           ('buzz',(2,)),('chord',('on',)),('bell',(True,)),('vowel',(True,)))
 BLOCK_FEATURE_NAMES=[f'{k}={v}' for k,vs in _ONE_HOT for v in vs]+['pitch','pitch^2','brightness','brightness^2']
@@ -1655,8 +1656,24 @@ class BlockDiscovery(SoundMapDiscovery):
     def _label(self,recipe):return recipe['label']+(' · Evolving' if recipe['motion']=='evolving' else '')
     def _sound(self,ident):return self.candidates[ident]['recipe']['blocks']
     def _distinct(self,a,b):
+        """Clearly different: another top, or a strong change (body, top level, synth knob, or pitch 8+ semitones). One pitch step and the
+        space do not count: final-list #2 and #3 differing only in those sounded alike in Evolving (2026-11-22)."""
         x,y=self._sound(a),self._sound(b)
-        return x['top']!=y['top'] or x['body']!=y['body'] or sum(x[k]!=y[k] for k in x)>=2
+        return x['top']!=y['top'] or x['body']!=y['body'] or x['level']!=y['level'] or any(x[k]!=y[k] for k in ('buzz','chord','bell','vowel')) \
+            or abs(x['pitch']-y['pitch'])>=2
+    def _rank_finalists(self):
+        """As SoundMapDiscovery (Bradley-Terry on the answers, heard twice first, a sound that never won left out), kept clearly different
+        (_distinct) and at most BLOCK_PER_TOP per top texture, so the list shows depth where the taste is and variety beyond it."""
+        rows=self._ranking_rows()
+        wins=lambda i:sum(1. if r['winner']==i else .5 if r['choice'] in ('equal','good') else 0. for r in rows if i in r['pair'])
+        ranked=[i for i in self._bt_ranked() if wins(i)>0] or self._bt_ranked()
+        eligible=[i for i in ranked if sum(i in r['pair'] for r in rows)>=SHORTLIST_MIN_GAMES];self.finalists=[]
+        for ident in eligible+[i for i in ranked if i not in eligible]:
+            same_top=sum(self._sound(j)['top']==self._sound(ident)['top'] for j in self.finalists)
+            if same_top<BLOCK_PER_TOP and all(self._distinct(ident,j) for j in self.finalists):self.finalists.append(ident)
+            if len(self.finalists)==SHORTLIST:break
+        answers=self._choices();last=answers[-1] if answers else {}
+        if self.confirm and set(last.get('pair',()))=={self.confirm['first'],self.confirm['second']} and last.get('winner'):self.champion=last['winner']
     def _ranking_rows(self,inherit=True):return self._choices()[self.motion_pairs:]
     def _set_motion(self,rows):
         """The motion that won more of the Rising vs Evolving pairs; a tie, Both good or Neither keep Rising (as before)."""
@@ -1760,5 +1777,6 @@ class BlockDiscovery(SoundMapDiscovery):
             '(A and B swapped); 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); winner stays. Changes are medium (one-step '
             'guesses were not heard, 8-semitone jumps with 3 blocks were too large); a change of body, top level or synth knob needs a measured octave-band gap of at least 0.35 '
             '(.15-.31 were not heard). Pair 17: shortlist #1 against the strongest sound it has not met. Liked: every winner and both sounds of a Both '
-            'good answer. Shortlist: Bradley-Terry on the answers alone.')
+            'good answer. Shortlist: Bradley-Terry on the answers alone, at most 2 per top texture, each clearly different from the others (another '
+            'top, body, top level or synth knob, or 8+ semitones; one pitch step or the space alone does not count).')
         return data
