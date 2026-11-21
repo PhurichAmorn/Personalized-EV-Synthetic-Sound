@@ -7,7 +7,9 @@ generating anything live. Ladder (2026-11-19; steps doubled 2026-11-20: x1.4 / 2
 'brighter2' is two steps; the session offers it only after 'brighter' won. No combinations of knobs (yet).
 A variation is kept if it passes the quick guardrail and the full 22 s drive check in Rising (Evolving is measured and stored, as for pool
 sounds), and is audibly different from its parent but still the same sound: gap (generate.gap, in 'distinct' steps) in [NEAR, FAR];
-a brightness step counts as audible when its sharpness moves by at least BRIGHT_S (the spectrum gap hardly moves when the body leads).
+a brightness step counts as audible when its sharpness moves by at least BRIGHT_S the right way (the spectrum gap hardly moves when the body leads).
+Texture fallback (2026-11-21): a brightness step that moves sharpness too little is tried again with its top layer set to each other
+texture as well (filter step + texture); the one moving sharpness most the right way is kept (same checks, 'texture' noted on it).
 A body-led parent (build_pool.py --grid) keeps only variations whose body still leads, by settings and as measured (2026-11-19).
 Writes the kept variations into the pool file under each sound ('variations'), and why each other one was dropped under
 data['variations']['rejected'] ({id: reason}; 2026-11-20). Heavy: run on the cooled laptop.
@@ -66,6 +68,17 @@ def moves(sound):
     return {name: v for name, v in out.items() if (v[0] != sound['voice'] or v[1] != sound['fx']) and (not lead or body_rule(v[0]['stack']))}  # a move at its limit changes nothing
 
 
+def texture_retries(voice, fx, sound):
+    """[(texture, voice, fx)]: the brightness step's voice with its top layer set to each other usable texture."""
+    st = voice['stack']; top = st['layers'] - 1
+    usable = [t for t in FRAME_TEXTURES if (t != 10 or 'plain' in st) and (t != 11 or 'blocks' in st) and t != st['timbres'][top]]
+    out = []
+    for t in usable:
+        v = json.loads(json.dumps(voice)); v['stack']['timbres'][top] = t
+        if not body_rule(sound['voice']['stack']) or body_rule(v['stack']): out.append((t, v, fx))
+    return out
+
+
 def quick(items, pool):
     """[(id, voice, fx, rootHz)] -> {id: (metrics, desc)} with the generator's guardrail check (render with the app's synth)."""
     batches = [[{'id': i, 'voice': v} for i, v, _, _ in items[n::WORKERS]] for n in range(WORKERS)]
@@ -91,20 +104,44 @@ if __name__ == '__main__':
         print(f'{len(items)} variations of {len(sounds)} sounds: quick check', flush=True)
         checked = quick(items, pool)
         near, rejected = {}, dict(skipped)  # rejected: {id: reason}, saved in the pool file so a thin ladder can be explained (2026-11-20)
-        for vid, (m, d) in checked.items():
+        def judge(vid, m, d):
+            """-> (desc, None) if kept, else (None, reason)."""
             s, name, voice, fx = meta[vid]
             over = [f'{k} {m[k]:.2f} > {LIMITS[k]}' for k in LIMITS if m[k] > LIMITS[k]]
-            if over: rejected[vid] = 'guardrail: ' + ', '.join(over); continue
+            if over: return None, 'guardrail: ' + ', '.join(over)
             desc = {**d, 'R': m['R'], 'F': m['F'], 'chorus': fx.get('chorus', 0), 'vib': fx.get('vibDepth', 0),
                     'style': style_of({'voice': 'stack', 'stLayers': voice['stack']['layers'], **{f'stT{k}': t for k, t in enumerate(voice['stack']['timbres'])}})}
-            if body_rule(s['voice']['stack']) and not body_leads({'voice': voice, 'desc': desc, 'rootHz': voice['stack']['rootHz']}): rejected[vid] = 'body no longer leads'; continue  # measured
-            g = gap(s['desc'], desc)
-            audible = (abs(m['S'] - s['metrics']['S']) >= BRIGHT_S if name.startswith(('brighter', 'darker'))
+            if body_rule(s['voice']['stack']) and not body_leads({'voice': voice, 'desc': desc, 'rootHz': voice['stack']['rootHz']}): return None, 'body no longer leads'  # measured
+            g = gap(s['desc'], desc); dS = (m['S'] - s['metrics']['S']) * (1 if name.startswith('brighter') else -1)
+            audible = (dS >= BRIGHT_S if name.startswith(('brighter', 'darker'))
                        else True if name.startswith(('deeper', 'higher')) else g >= NEAR)  # a 4-semitone step is always heard (about 0.57 'distinct' steps)
-            if audible and g <= FAR: near[vid] = (m, desc)
-            elif not audible: rejected[vid] = (f"too small: sharpness {m['S'] - s['metrics']['S']:+.3f} acum (needs {BRIGHT_S})" if name.startswith(('brighter', 'darker'))
-                                               else f'too small: gap {g:.2f} (needs {NEAR})')
-            else: rejected[vid] = f'too far: gap {g:.2f} (max {FAR})'
+            if audible and g <= FAR: return desc, None
+            if not audible: return None, (f"too small: sharpness {m['S'] - s['metrics']['S']:+.3f} acum (needs {BRIGHT_S} the right way)" if name.startswith(('brighter', 'darker'))
+                                          else f'too small: gap {g:.2f} (needs {NEAR})')
+            return None, f'too far: gap {g:.2f} (max {FAR})'
+        small = []  # brightness steps to retry with a texture
+        for vid, (m, d) in checked.items():
+            desc, why = judge(vid, m, d)
+            if desc: near[vid] = (m, desc)
+            else:
+                rejected[vid] = why
+                if why.startswith('too small: sharpness'): small.append(vid)
+        retries = []
+        for vid in small:
+            s, name, voice, fx = meta[vid]
+            for t, v, f in texture_retries(voice, fx, s):
+                rid = f'{vid}~t{t}'; retries.append((rid, v, f, v['stack']['rootHz'])); meta[rid] = (s, name, v, f)
+        print(f'{len(small)} brightness steps too small: {len(retries)} texture retries', flush=True)
+        best = {}  # vid -> (dS, rid, m, desc)
+        for rid, (m, d) in (quick(retries, pool) if retries else {}).items():
+            desc, _ = judge(rid, m, d)
+            if desc:
+                vid = rid.split('~')[0]; s, name = meta[rid][:2]
+                dS = abs(m['S'] - s['metrics']['S'])
+                if dS > best.get(vid, (0,))[0]: best[vid] = (dS, rid, m, desc)
+        for vid, (dS, rid, m, desc) in best.items():
+            meta[vid] = meta[rid]; near[vid] = (m, {**desc, 'texture': int(rid.split('~t')[1])}); rejected.pop(vid, None)
+        print(f'{len(best)} brightness steps rescued by a texture', flush=True)
         print(f'{len(near)} pass the quick check and are near their parent: full-drive check', flush=True)
         drive = check_all({vid: meta[vid][2:] for vid in near}, pool)
     kept = 0
@@ -113,7 +150,7 @@ if __name__ == '__main__':
         s, name, voice, fx = meta[vid]
         failed = verdict(drive[vid])
         if failed: rejected[vid] = 'drive check: ' + '; '.join(failed); continue
-        s['variations'].append({'id': vid, 'parent': s['id'], 'move': name, 'voice': voice, 'fx': fx, 'rootHz': voice['stack']['rootHz'],
+        s['variations'].append({'id': vid, 'parent': s['id'], 'move': name, 'voice': voice, 'fx': fx, 'rootHz': voice['stack']['rootHz'], **({'texture': desc['texture']} if 'texture' in desc else {}),
                                 'style': desc['style'], 'metrics': m, 'desc': desc,
                                 'drive': {k: v for k, v in drive[vid]['rise'].items() if k != 'at'},
                                 'driveEvolving': {k: v for k, v in drive[vid]['evolving'].items() if k != 'at'}})

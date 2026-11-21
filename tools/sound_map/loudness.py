@@ -1,7 +1,8 @@
 """Loudness matching: one playback gain per pool sound and variation, so every sound starts equally loud (2026-11-19).
 Each sound is rendered with the app's synth (as the quick check) and played at cruise (score.PITCHES), at the app's raw level
 (rms .13 = 70 dB SPL, as score.py); its loudness is MoSQITo's Zwicker loudness (ISO 532-1, sones, mean after the first 0.5 s).
-The gain brings it to the pool's median loudness (two passes: loudness is not linear in level), within +/- MAX_DB.
+The gain brings it to the pool's median loudness (two passes: loudness is not linear in level), within +/- MAX_DB; a variation
+still more than CUT_DB off is dropped (logged in data['variations']['rejected']).
 Stored as fx['gain'] (linear); the app multiplies its drive level by it. The guardrail is unaffected: its checks scale every
 sound to 70 dB anyway.
 ponytail: one reference point (cruise) and the quick-check render (full trend levels, no reverb or chorus); measure per drive
@@ -18,6 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 POOL = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(HERE, '..', '..', 'experiment', 'sound_map_pool.json')
 WORKERS = int(os.environ.get('WORKERS', max(1, os.cpu_count() - 1)))
 MAX_DB = 12  # never boost or cut a sound by more than this
+CUT_DB = 3  # a variation still this far off the target after MAX_DB is dropped (2026-11-21; 3 of 14 at the limit in the 2026-11-20 run)
 
 
 def sones(x):
@@ -66,7 +68,13 @@ if __name__ == '__main__':
     for (i, s), g, n0, n1 in zip(items, gains, loud, after):
         s['fx']['gain'] = round(g, 4)
         s['loudness'] = {'sones': round(n0, 3), 'after': round(n1, 3), 'off_db': round(10 * np.log2(n1 / target), 2)}
-    data['loudness'] = {'target_sones': round(target, 3), 'reference': 'cruise', 'max_db': MAX_DB}
+    # ponytail: only variations are dropped; a pool sound this far off is reported, not removed (none in the 2026-11-20 run), since it is a grid cell.
+    rejected = data.setdefault('variations', {}).setdefault('rejected', {})
+    for s in sounds:
+        for v in [v for v in s.get('variations', []) if abs(v['loudness']['off_db']) > CUT_DB]:
+            s['variations'].remove(v); rejected[v['id']] = f"loudness: {v['loudness']['off_db']:+.1f} dB off the target after the {MAX_DB} dB limit (max {CUT_DB})"
+        if abs(s['loudness']['off_db']) > CUT_DB: print(f"pool sound {s['id']} is {s['loudness']['off_db']:+.1f} dB off the target", flush=True)
+    data['loudness'] = {'target_sones': round(target, 3), 'reference': 'cruise', 'max_db': MAX_DB, 'cut_db': CUT_DB}
     json.dump(data, open(POOL, 'w'), indent=0)
     db = 20 * np.log10(gains)
     print(f'{len(items)} sounds: loudness {min(loud):.1f}-{max(loud):.1f} sones (median {target:.1f}); gains {db.min():+.1f} to {db.max():+.1f} dB, '
