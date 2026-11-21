@@ -10,7 +10,7 @@ The app does **not** mute BeamNG's stock drivetrain audio. The mod also tries to
 
 1. Install `beamng/evsound_telemetry` in BeamNG's `mods/unpacked/` folder and enable **EV Sound Lab telemetry** under **Options → Other → Protocols**.
 2. Start EV Sound Lab and pick **BeamNG** in the startup chooser. The overlay opens and switches the app to BeamNG telemetry; the app listens on `127.0.0.1:4445`.
-3. Start sound in the overlay. Use **Personalize sound** to enter the existing session setup and comparison flow; **Back to driving** returns to telemetry.
+3. Start sound in the overlay. Use **Personalize sound** to enter the existing session setup and comparison flow; the **X** closes it (during a session it asks: Pause, which Resume session continues, or End).
 4. BeamNG sends at most 30 packets per second. Display/audio timing also includes app, operating-system, and output-device buffering; no zero-latency guarantee.
 5. Stop or pause the game to confirm the overlay reports disconnect and the app sound fades. Restart the app and pick **Simulator** to use local simulation.
 

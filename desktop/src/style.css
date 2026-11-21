@@ -268,7 +268,6 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 @media (prefers-reduced-motion: reduce) { .overlay-led.starting { animation: none; } }
 /* Personalize: card height follows its content and the window is sized to fit it (BeamNGOverlay); the page scrolls only past screen height. */
 .beamng-overlay-card.personalizing { min-height: 0; gap: 10px; }
-.beamng-overlay-actions.single { grid-template-columns: 1fr; }
 .personalizing .overlay-graph, .personalizing .overlay-vbar { height: 40px; }
 .overlay-personalize { flex: none; }
 .overlay-personalize .search-dialog { width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
@@ -554,5 +553,3 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .x-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
 .overlay-personalize .search-close .x-icon { width: 28px; height: 28px; }
 .beamng-overlay-close .x-icon { width: 24px; height: 24px; }
-.source-end { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: #f56b6b; }
-.source-end .x-icon { width: 16px; height: 16px; stroke-width: 3; }

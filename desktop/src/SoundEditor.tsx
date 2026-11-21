@@ -76,7 +76,9 @@ export function useCarSound(state: State, onCommand: Command, personalizeOpen: b
   const [gs, setGs] = useState(true)
   const [mode, setMode] = useState<GranularMode>('rise')
   const start = (next = mode) => { setGs(true); ref.current?.start(true, next) }
-  const idle = !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active
+  // A paused session counts as idle: driving again plays the driver's sound (2026-11-21; it was silent until the session ended).
+  const idle = !state.search.active && !state.soundSweepActive
+  const session = !!state.sourceDiscovery?.active
   // Car on, or Personalize closed: GS (re)starts in the GS mode, which also ends any podium playback.
   // ...and when the driver's sound changes (picked in the list), GS switches to it.
   // A new driver's sound also brings its motion (the session's pair 1 choice): GS switches to Rise or Evolving with it.
@@ -87,6 +89,7 @@ export function useCarSound(state: State, onCommand: Command, personalizeOpen: b
     const next = changed && (own === 'rise' || own === 'evolving') ? own : mode
     if (next !== mode) setMode(next)
     if (state.running && !state.starting && gs && idle && !personalizeOpen) start(next)
+    else if (personalizeOpen && session) ref.current?.stop()  // resuming a paused session: GS gives way to the pair
   }, [state.running, state.starting, personalizeOpen, state.mySound?.id])
   return {
     gs, mode, start: () => start(),

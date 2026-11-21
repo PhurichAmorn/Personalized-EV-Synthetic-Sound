@@ -240,6 +240,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
   }
   // Leaving pauses a running session (kept in memory, ratings included): Personalize resumes it, so no warning is needed.
   const leaveLab = () => setPage('dashboard')
+  const [leaving, setLeaving] = useState(false)  // the X during a session: pause or end it (2026-11-21, replaces Back to driving)
   back.current = () => {
     if (closeRequested) setCloseRequested(false)
     else if (page === 'search') leaveLab()
@@ -248,7 +249,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
   // The finished session's shortlist and final sound stay in the dashboard slot too, so the listener can drive with them.
   const personalizationActive = !!(state?.search.active || state?.sourceDiscovery?.active || state?.sourceDiscovery?.finalists?.length)
   const searchPanel = state && page === 'search' ? (
-<div className={'search-dialog ' + (personalizationActive ? 'search-active' : '')} role="dialog" aria-modal={personalizationActive ? undefined : true} aria-label="Personalize sound"><header className="search-dialog-header"><div><h2 className="text-xl">Personalize sound</h2></div><div className="flex gap-2">{!state.search.active && !state.sourceDiscovery?.active && <button className="control search-close" aria-label="Close" title="Close" onClick={leaveLab}><svg className="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4L20 20M20 4L4 20" /></svg></button>}</div></header>{error && <p role="alert" className="mx-6 mt-5 text-red-300">{error}</p>}{state.search.active ? <LegacySearch state={state} command={command} onError={setError} onDone={() => setPage('dashboard')} /> : <div id="source-discovery-slot" />}</div>
+<div className={'search-dialog ' + (personalizationActive ? 'search-active' : '')} role="dialog" aria-modal={personalizationActive ? undefined : true} aria-label="Personalize sound"><header className="search-dialog-header"><div><h2 className="text-xl">Personalize sound</h2></div><div className="flex gap-2">{!state.search.active && <button className="control search-close" aria-label="Close" title="Close" onClick={() => state.sourceDiscovery?.active ? setLeaving(true) : leaveLab()}><svg className="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4L20 20M20 4L4 20" /></svg></button>}</div></header>{error && <p role="alert" className="mx-6 mt-5 text-red-300">{error}</p>}{state.search.active ? <LegacySearch state={state} command={command} onError={setError} onDone={() => setPage('dashboard')} /> : <div id="source-discovery-slot" />}</div>
   ) : undefined
 
   return <div className={overlay ? 'beamng-overlay-root' : 'dashboard-wrapper'}>
@@ -258,8 +259,11 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
       {/* Closing ends a discovery session: it lives in memory only, so it cannot be resumed after the app restarts. */}
       <button className="control" autoFocus onClick={() => setCloseRequested(false)}>Keep working</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>End session and close</button>
     </Confirm>)}
+    {leaving && <Confirm title="Leave the session?" text="Pause keeps your answers so far: Resume session continues it. End stops it without picking a final sound.">
+      <button className="control" autoFocus onClick={() => setLeaving(false)}>Keep working</button><button className="control" onClick={() => { setLeaving(false); leaveLab() }}>Pause</button><button className="control border-red-500" onClick={() => { setLeaving(false); leaveLab(); void command('sourceDiscoveryEnd') }}>End session</button>
+    </Confirm>}
     {!state && <div className="min-h-screen p-5 md:p-8"><div className="panel p-8">Connecting to simulator…</div></div>}
-    {state && overlay && (page === 'dashboard' || page === 'search') && <OverlayHost state={state} error={error} page={page} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => setPage('search')} onLeave={leaveLab} searchPanel={searchPanel} />}
+    {state && overlay && (page === 'dashboard' || page === 'search') && <OverlayHost state={state} error={error} page={page} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => setPage('search')} searchPanel={searchPanel} />}
     {state && !overlay && (page === 'dashboard' || page === 'search') && <Dashboard personalizeOpen={page === 'search'} state={state} error={error} onCommand={(name, payload) => command(name, payload)} onPersonalize={() => setPage('search')} onTrace={openTrace} initialSoundLab={soundLabStart} searchPanel={page === 'search' && personalizationActive ? searchPanel : null} />}
       {state && page === 'trace' && <PageShell active="trace" title="SOUND TRACE" onNavigate={goTo}>
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-500 bg-red-950 p-3 text-red-200">{error}</div>}

@@ -14,10 +14,9 @@ type Props = {
   onGranular: () => void
   onGranularCycle: () => void
   personalize?: ReactNode  // Personalize page: shown inside the card, below the live graphs
-  onLeave?: () => void
 }
 
-export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, onStartStop, analyser, granular, granularMode, onGranular, onGranularCycle, personalize, onLeave }: Props) {
+export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, onStartStop, analyser, granular, granularMode, onGranular, onGranularCycle, personalize }: Props) {
   const connected = state.sourceMode !== 'BeamNG' || state.beamngConnected
   const throttle = state.sourceMode === 'BeamNG' ? state.beamngThrottle : state.throttleInput
   const brake = state.sourceMode === 'BeamNG' ? state.beamngBrake : state.brakeInput
@@ -82,14 +81,13 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
     </div>}
     {personalize && <section className="overlay-personalize" aria-label="Personalize sound">{personalize}</section>}
     {(error || state.beamngError || dragError) && <p className="beamng-overlay-error" role="alert">{error || state.beamngError || dragError}</p>}
-    <footer className={'beamng-overlay-actions' + (personalize ? ' single' : '')}>
-      {personalize ? <button className="control" onClick={onLeave}>Back to driving</button> : <>
+    {!personalize && <footer className="beamng-overlay-actions">
       <button className="control beamng-overlay-start" disabled={state.starting || state.soundSweepActive} onClick={onStartStop}>
         <i className={'overlay-led' + (state.starting ? ' starting' : state.running ? ' on' : '')} aria-hidden="true" />
         {state.starting ? 'Starting…' : state.running ? 'Stop sound' : 'Start sound'}
       </button>
-      <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button></>}
-    </footer>
+      <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button>
+    </footer>}
     <div className="beamng-overlay-resize" role="separator" aria-label="Resize overlay" onMouseDown={startResize} />
   </main>
 }
