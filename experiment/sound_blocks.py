@@ -42,10 +42,10 @@ DEFAULT = {'body': 'soft', 'top': 'glass', 'level': 'medium', 'buzz': 0, 'chord'
 PARTNERS = {'moody': ('glass',), 'glass': ('moody', 'synth'), 'blocks': ('bell',), 'bell': ('glass', 'blocks'), 'plain': ('glass', 'moody'), 'synth': ('glass',)}
 PARTNER_LAYER = 3  # timbres index of layer 4
 # Starts: the styles kept by ear (style auditions 2026-11-21), written as blocks. Pure is the Plain top (sine layers, 0.34 acum).
-# Moody synth and Synth became one 'pad' start: they differed only in chord type, heard as the same (first session, 2026-11-21).
-# Moody returned as its own start with ensemble (moody compare 2026-11-22: kept beside Glass and Synth pad).
-STARTS = {'glass': {'top': 'glass'}, 'pure': {'top': 'plain'}, 'pad': {'top': 'synth', 'chord': 'on'}, 'digital': {'top': 'blocks'}, 'bell': {'top': 'bell'},
-          'moody': {'top': 'moody'}}
+# Four starts, one for each style heard as different while driving (2026-11-22 sessions): Moody and Synth pad were heard as near-alike
+# (the same voice and chord, Moody adds ensemble), and so were Pure and Digital. Synth pad and Digital stay reachable by changes.
+# The octave-band gap misses this (Pure-Digital .62, while Glass-Synth pad .53 sounds clearly different), so the choice is by ear.
+STARTS = {'glass': {'top': 'glass'}, 'pure': {'top': 'plain'}, 'bell': {'top': 'bell'}, 'moody': {'top': 'moody'}}
 NAMES = {'glass': 'Glass', 'electric': 'Electric', 'blocks': 'Blocks', 'plain': 'Plain', 'synth': 'Synth', 'bell': 'Bell synth', 'moody': 'Moody', 'soft': 'Soft'}
 
 
@@ -205,7 +205,7 @@ def gain_for(table, entry, cutoff):
 if __name__ == '__main__':  # self-check
     items = sweep_items()
     assert len({k for k, _ in items}) == len(items)
-    v, fx = build(STARTS['pad'], 2000)
+    v, fx = build({'top': 'synth', 'chord': 'on'}, 2000)
     assert v['stack']['timbres'][1] == 10 and v['stack']['plain']['chordType'] == 1 and fx['tone'] == 2000
     assert gap([0] * 9, [-3.5] * 9) == .35
     assert build({'top': 'bell'}, 800)[0]['stack']['plain']['bellModes'] == 1
@@ -217,4 +217,4 @@ if __name__ == '__main__':  # self-check
     t = {'loudness': {'target_sones': 9.}}
     assert gain_for(t, {'sones': [9.] * 4}, 2000) == 1 and abs(gain_for(t, {'sones': [4.5] * 4}, 2000) - 10 ** .5) < 1e-3  # half as loud: +10 dB
     assert gain_for({}, e, 2000) == 1 and gain_for(t, {'sones': [.01] * 4}, 2000) == round(10 ** .6, 4)  # no loudness: 1; capped at +12 dB
-    print(len(items), 'sweep items; self-check OK;', describe(STARTS['pad']))
+    print(len(items), 'sweep items; self-check OK;', describe({'top': 'synth', 'chord': 'on'}))

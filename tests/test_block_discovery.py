@@ -36,20 +36,20 @@ class BlockDiscoveryTest(unittest.TestCase):
         d.feedback(choice='A' if d.candidates[d.pair[0]]['recipe']['motion'] == 'evolving' else 'B')
         self.assertEqual(d.motion, 'evolving'); self.assertEqual(d.pairs, 17)
         starts = set()
-        for _ in range(3): starts |= {json.dumps(d._sound(i), sort_keys=True) for i in d.pair}; rows.append(list(d.pair)); d.feedback(choice='A')
-        self.assertEqual(len(starts), 6)  # pairs 2-4: the six starts, two new ones per pair
+        for _ in range(2): starts |= {json.dumps(d._sound(i), sort_keys=True) for i in d.pair}; rows.append(list(d.pair)); d.feedback(choice='A')
+        self.assertEqual(len(starts), 4)  # pairs 2-3: the four starts, two per pair
         playoff = list(d.pair); winners = {r[0] for r in rows}
-        self.assertTrue(set(playoff) <= winners)  # pair 5: opening winners
+        self.assertTrue(set(playoff) <= winners)  # pair 4: opening winners
         d.feedback(choice='A')
         blocks = lambda i: d._sound(i)
-        for n in range(6, 18):
+        for n in range(5, 18):
             if not d.active: break
-            if n == 14: self.assertEqual(d.pair, playoff[::-1])  # pair 14: pair 5 again, A and B swapped
+            if n == 14: self.assertEqual(d.pair, playoff[::-1])  # pair 14: pair 4 again, A and B swapped
             elif n < 17:
                 a, b = d.pair; o = lambda i: d.candidates[i]['origin']
                 new = a if o(a).get('parent') == b else b; self.assertEqual(o(new).get('parent'), next(i for i in d.pair if i != new))  # champion vs a challenger
                 differ = sum(blocks(a)[k] != blocks(b)[k] for k in blocks(a))
-                if n <= 13: self.assertEqual(o(new)['kind'], 'broad'); self.assertGreaterEqual(differ, 2)  # pairs 6-13: 2 blocks at once
+                if n <= 13: self.assertEqual(o(new)['kind'], 'broad'); self.assertGreaterEqual(differ, 2)  # pairs 5-13: 2 blocks at once
                 else: self.assertEqual(o(new)['kind'], 'change')  # pairs 15-16: one big change (pitch or brightness first; a top swap also clears synth knobs)
             d.feedback(choice='A')
         self.assertFalse(d.active); self.assertEqual(d.completed, 17)
@@ -167,14 +167,33 @@ class BlockDiscoveryTest(unittest.TestCase):
             d.close()
         self.assertGreater(broad, 20); self.assertLessEqual(repeats, broad // 10)  # rare: only when nothing else is left
 
-    def test_opening_never_pairs_moody_with_pad_and_playoff_is_a_new_pair(self):
+    def test_four_starts_one_per_style_and_playoff_is_a_new_pair(self):
+        self.assertEqual({s['top'] for s in sb.STARTS.values()}, {'glass', 'plain', 'bell', 'moody'})
         for seed in range(12):
-            d = self.session(seed=seed); d.feedback(choice='A'); met = []
-            for _ in range(3):
-                tops = {(d._sound(i)['top'], d._sound(i)['chord']) for i in d.pair}
-                self.assertNotEqual(tops, {('moody', 'off'), ('synth', 'on')}); met.append(frozenset(d.pair)); d.feedback(choice='good')
-            self.assertNotIn(frozenset(d.pair), met)  # pair 5 is not a replay of an opening pair
+            d = self.session(seed=seed); d.feedback(choice='A'); met = []; tops = set()
+            for _ in range(2): tops |= {d._sound(i)['top'] for i in d.pair}; met.append(frozenset(d.pair)); d.feedback(choice='good')
+            self.assertEqual(tops, {'glass', 'plain', 'bell', 'moody'})
+            self.assertNotIn(frozenset(d.pair), met)  # pair 4 is not a replay of an opening pair (all four won: Both good)
             d.close()
+
+    def test_pair_17_checks_a_tuned_pick_against_its_untuned_start_and_changes_are_shown(self):
+        checked = shown = 0
+        for seed in range(8):
+            d = self.session(seed=seed)
+            pick = lambda: 'A' if d.champion is None or d.pair[0] == d.champion else 'B'
+            for n in range(1, 17):
+                if n == 5: d.feedback(choice='B' if d.pair[0] == d.champion else 'A')  # first broad pair: the challenger wins, so the champion is tuned
+                else: d.feedback(choice=pick())
+                last = d.snapshot()['lastChange']
+                if n in (5, 6): self.assertTrue(last and last['items'] and all(i['side'] in 'AB' and i['text'] for i in last['items'])); shown += 1
+                if n == 3: self.assertIsNone(d.snapshot()['lastChange'])  # starts changed nothing
+            if (d.confirm or {}).get('kind') != 'tuning': d.close(); continue
+            first, root = d.pair if d.pair[0] == d.confirm['first'] else d.pair[::-1]
+            self.assertEqual(d._root(first), root); self.assertIn(d.candidates[root]['origin']['kind'], ('opening', 'motion')); self.assertNotEqual(first, root)
+            d.feedback(choice='A' if d.pair[0] == first else 'B')
+            self.assertEqual(d.export()['tuning_check'], {'pick': first, 'start': root, 'chose': 'pick'}); checked += 1
+            d.close()
+        self.assertGreater(shown, 8); self.assertGreater(checked, 0)
 
     def test_both_good_marks_both_liked(self):
         d = self.session(); d.feedback(choice='A'); pair = list(d.pair); d.feedback(choice='good')

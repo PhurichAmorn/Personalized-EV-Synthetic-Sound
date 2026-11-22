@@ -1576,12 +1576,12 @@ class HeardMapDiscovery(StyleMapDiscovery):
 
 BLOCK_POLICY='source-blocks-v1'
 BLOCK_STEPS=16     # pairs after the motion pairs
-BLOCK_MOTION=('glass','pad','pure','digital','bell')  # starts tried, in order, for the two Rising vs Evolving pairs
-BLOCK_OPENING=3    # pairs 2-4 (after the motion pair): the six starts, two new ones per pair (with five: pair 4 puts the fifth against the best so far)
+BLOCK_MOTION=('glass','pure','bell','moody')  # starts tried, in order, for the Rising vs Evolving pair
+BLOCK_OPENING=2    # pairs 2-3 (after the motion pair): the four starts, two per pair (a lone start, left out by the table, meets the best so far)
 BLOCK_BRIGHT_STEP=.15  # acum, measured: medium (.10 is the smallest gap heard; .20 with 8-semitone pitch jumps was heard as too large, 2026-11-21)
-BLOCK_BROAD=(4,11)     # pairs 6-13 (counted after the motion pair): broad challengers, 2 blocks changed at once
+BLOCK_BROAD=(3,11)     # pairs 5-13 (counted after the motion pair): broad challengers, 2 blocks changed at once
 BLOCK_BIG=(13,14)      # pairs 15-16: one medium change (pitch 4 semitones or brightness 0.15 acum)
-BLOCK_REPLAY=12        # pair 14: the playoff pair (pair 5) again, A and B swapped
+BLOCK_REPLAY=12        # pair 14: the playoff pair (pair 4) again, A and B swapped
 BLOCK_GAP_GROUPS=('body','level','synth')  # changes where other settings can cover them, checked against the measured spectrum gap. Not the top
 # texture: swaps were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass .33). Pitch, brightness and
 # space have their own rules: 4 semitones is always heard, brightness is a measured 0.15 acum, reverb changes over time.
@@ -1618,8 +1618,8 @@ class BlockDiscovery(SoundMapDiscovery):
     """17 choices over building-block sounds (experiment/sound_blocks.py, 2026-11-21): body texture, top texture, top level, synth knobs,
     pitch, brightness, space. No pool: every sound is built on the spot, and only offered if the safe-area table
     (tools/sound_map/block_sweep.py) says it passes the drive check; brightness changes are measured (0.15 acum), not fixed filter amounts.
-    Pair 1 Rising vs Evolving (Glass start); 2-4 the six starts; 5 playoff of their two best winners; 6-13 the champion against broad challengers
-    (2 blocks changed at once); 14 replay of pair 5; 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); 17 confirmation.
+    Pair 1 Rising vs Evolving (Glass start); 2-3 the four starts; 4 playoff of their two best winners; 5-13 the champion against broad challengers
+    (2 blocks changed at once); 14 replay of pair 4; 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); 17 confirmation.
     Answers, Bradley-Terry ranking (answers alone), shortlist and export as SoundMapDiscovery."""
     policy=BLOCK_POLICY
     feature_names=BLOCK_FEATURE_NAMES
@@ -1648,6 +1648,24 @@ class BlockDiscovery(SoundMapDiscovery):
         if self.table:fx['gain']=sb.gain_for(self.table,entry,cutoff)  # loudness matched (block_loudness.py); 1 until the table has loudness
         return {'version':5,'kind':'map','seed':0,'motion':motion,'cell':sb.key(s),'voice':voice,'fx':fx,'blocks':s,'label':sb.describe(s),'checked':bool(self.table)}
     def _space(self):return []
+    def snapshot(self):
+        data=super().snapshot()
+        with self.lock:data['lastChange']=self._last_change()
+        return data
+    def _last_change(self):
+        """What the last answered pair changed (shown after the answer, never before the listener hears the pair): [{side, text}] for each side that was a change of the champion."""
+        rows=self._choices()
+        if not rows:return None
+        items=[{'side':side,'text':self.candidates[i]['origin']['summary'].split(': ',1)[-1]} for side,i in zip('AB',rows[-1]['pair']) if self.candidates[i].get('origin',{}).get('kind') in ('broad','change')]
+        return {'pair':self.completed,'items':items} if items else None
+    def _root(self,ident):
+        """The start (or motion sound) a sound was tuned from, by following its parents."""
+        seen=set()
+        while ident not in seen:
+            seen.add(ident);parent=self.candidates[ident].get('origin',{}).get('parent')
+            if not parent or parent not in self.candidates:break
+            ident=parent
+        return ident
     def _gap(self,a,b):
         """Octave-band gap between two block recipes, from the table's measured spectra (nearest entries, at each one's low-pass point).
         ponytail: a combination the sweep did not measure uses its nearest entry, so its gap is an estimate; two that share an entry
@@ -1704,13 +1722,11 @@ class BlockDiscovery(SoundMapDiscovery):
         rows=rows[mp:]
         if step==0:
             starts=self._starts();self.rng.shuffle(starts)
-            names=[n for n,_ in starts]  # Moody and Synth pad differ only by ensemble (spectrum gap 0): never in the same opening pair (2026-11-22)
-            if 'moody' in names and 'pad' in names and names.index('moody')//2==names.index('pad')//2:
-                i=names.index('pad');j=(i+2)%len(starts);starts[i],starts[j]=starts[j],starts[i]
             self.opening=[i for i in (self._add_block(s,'opening',f'Start: {name}') for name,s in starts) if i]
-        if step<BLOCK_OPENING-1 and 2*step+1<len(self.opening):self.rematch=self.opening[2*step:2*step+2];return []
-        if step==BLOCK_OPENING-1 and len(self.opening)>4:  # starts 5 and 6; a lone fifth (a start left out by the table) meets the best so far
-            self.rematch=self.opening[4:6] if len(self.opening)>5 else [self.opening[4],next(i for i in self._bt_ranked() if i in self.opening[:4])];return []
+        if step<BLOCK_OPENING and 2*step<len(self.opening):
+            pair=self.opening[2*step:2*step+2]
+            if len(pair)==1:pair=[pair[0],next(i for i in self._bt_ranked() if i in self.opening[:2*step])] if step else []  # a lone start meets the best so far
+            if len(pair)==2:self.rematch=pair;return []
         winners=set()
         for r in rows[:BLOCK_OPENING]:winners|={r['winner']} if r['winner'] else set(r['pair']) if r['choice']=='good' else set()
         winners=[i for i in self._bt_ranked() if i in winners]
@@ -1729,10 +1745,11 @@ class BlockDiscovery(SoundMapDiscovery):
             self.champion=next((i for i in self._bt_ranked() if i not in rejected),None) or self._bt_ranked()[0]
             self.champion_starts.append({'pair':self.completed+1,'id':self.champion,'by':'answers','after':'neither' if rejected else 'start'})
         elif self.champion in last.get('pair',()) and last.get('winner') not in (None,self.champion):self.champion=last['winner']
-        if self.completed==self.pairs-1:  # confirmation: the shortlist #1 against the strongest sound it has not met
+        if self.completed==self.pairs-1:  # confirmation: a tuned #1 against the start it came from (does the tuning help?), else against the strongest sound it has not met
             self._rank_finalists()
             if self.finalists:
-                first=self.finalists[0];met={j for r in self._ranking_rows() if first in r['pair'] for j in r['pair']}
+                first=self.finalists[0];met={j for r in self._ranking_rows() if first in r['pair'] for j in r['pair']};root=self._root(first)
+                if root!=first:self.confirm={'first':first,'second':root,'kind':'tuning'};self.rematch=[first,root];return []
                 second=next((i for i in self._bt_ranked() if i not in met and self._distinct(first,i)),self.finalists[1] if len(self.finalists)>1 else None)
                 if second:self.confirm={'first':first,'second':second};self.rematch=[first,second];return []
         best=self.champion;here=self._sound(best);self._sample();self.check_parent=best
@@ -1775,18 +1792,21 @@ class BlockDiscovery(SoundMapDiscovery):
         liked={i for r in rows[self.motion_pairs:] for i in ([r['winner']] if r['winner'] else r['pair'] if r['choice']=='good' else [])}
         data['liked']=[{'id':i,'sound':self._sound(i),'label':self.candidates[i]['label']} for i in liked]
         data['table']={'checked':bool(self.table),'created':(self.table or {}).get('created')}
+        c=self.confirm
+        if c and c.get('kind')=='tuning' and rows and set(rows[-1]['pair'])=={c['first'],c['second']}:  # blind check of the tuned pick against its untuned start
+            r=rows[-1];data['tuning_check']={'pick':c['first'],'start':c['second'],'chose':'pick' if r['winner']==c['first'] else 'start' if r['winner']==c['second'] else r['choice']}
         data['note']=('Building-block search (2026-11-21, broad version). A sound is a body texture (Soft, Blocks, Electric, Glass), a top texture '
             'for the 3 upper octave layers (Glass, Electric, Blocks, Plain, Synth, Bell synth, Moody), an optional partner style on the highest layer (9 mixes heard as good), a top level (soft/medium/strong), synth knobs when the top '
             'is a synth (buzz off/strong, chord on/off, bell, vowel), pitch (47-119 Hz), brightness (measured cruise sharpness); space fixed at large. '
             'Built on the spot; offered only if the safe-area table (tools/sound_map/block_sweep.py, full-drive check at 4 low-pass points) passes it '
             '(table.checked false: no table yet, sounds unchecked and no brightness changes). Pair 1 Rising vs Evolving on the Glass start '
-            '(Both good or Neither keep Rising); 2-4 the six starts, two per pair (Glass, Pure, Synth pad, Digital, Bell synth, Moody); '
-            '5 playoff of the two best opening winners; 6-13 the champion against broad challengers: 2 blocks changed at once, '
+            '(Both good or Neither keep Rising); 2-3 the four starts, two per pair (Glass, Pure, Bell synth, Moody); '
+            '4 playoff of the two best opening winners that have not met; 5-13 the champion against broad challengers: 2 blocks changed at once, '
             'drawn at random and ordered by a Thompson sample of a '
-            f'Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features plus distance from everything heard; 14 replay of pair 5 '
+            f'Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features plus distance from everything heard; 14 replay of pair 4 '
             '(A and B swapped); 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); winner stays. Changes are medium (one-step '
             'guesses were not heard, 8-semitone jumps with 3 blocks were too large); a change of body, top level or synth knob needs a measured octave-band gap of at least 0.35 '
-            '(.15-.31 were not heard). Pair 17: shortlist #1 against the strongest sound it has not met. Liked: every winner and both sounds of a Both '
+            '(.15-.31 were not heard). Pair 17: shortlist #1 against the start it was tuned from (tuning_check: did the tuning help), or against the strongest sound it has not met when #1 is a start. Liked: every winner and both sounds of a Both '
             'good answer. Shortlist: Bradley-Terry on the answers alone, at most 2 per top texture, each clearly different from the others (another '
             'top, body, top level or synth knob, or 8+ semitones; one pitch step or the space alone does not count).')
         return data

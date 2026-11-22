@@ -46,6 +46,7 @@ const JA: Record<string, string> = {
   'Session finished after {n} comparisons.': '{n} 回の比較でセッションを終了しました。',
   '▶ Now playing:': '▶ 再生中：',
   'Preparing…': '準備中…',
+  'Last pair · {items}': '前のペア · {items}',
   'Final round: your four finalists, compared head to head. Pick the one you prefer.': '決勝：4つの候補を直接比較します。好きな方を選んでください。',
   'Sound {x}': 'サウンド {x}',
   'Your sound': 'あなたのサウンド',

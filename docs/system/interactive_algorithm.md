@@ -66,12 +66,13 @@ Added 2026-11-21. No pool: each sound is built on the spot from building blocks 
 - **Medium changes.** The first sessions heard one-step guesses as the same, and the next ones heard 8-semitone jumps with 3 blocks as too large, so changes are medium: pitch 4 semitones (always heard), brightness 0.15 acum (measured; none without a table), top level one step, space dry/large, buzz off/strong. A change of body, top level or synth knob also needs a measured octave-band gap of at least 0.35 (in the listening pages, 0.15-0.31 were not heard and 0.34-0.37 were just heard). Top-texture swaps are exempt: they were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass measures 0.33).
 - **Flow (17 pairs).**
   - Pair 1: the Glass start, Rising vs Evolving (Both good or Neither keep Rising). A second motion pair on Synth pad was tried and removed: it sounded too alike.
-  - Pairs 2-4: the six starts in random pairs: Glass, Pure, Synth pad, Digital, Bell synth, Moody. If the table leaves one out, pair 4 puts the fifth against the best so far.
-  - Pair 5: playoff of the two best winners (Bradley-Terry).
-  - Pairs 6-13: the champion (first and after Neither: Bradley-Terry best on the answers; then winner stays) against broad challengers that change 2 blocks at once. Candidates are drawn at random and ordered by a Thompson sample of a Bayesian Bradley-Terry model over block features, plus distance from every sound heard, so areas not heard yet come first. A change that just lost (a block value of the last pair's losing sound) is not offered again straight away.
-  - Pair 14 replays pair 5 with A and B swapped.
+  - Pairs 2-3: the four starts in random pairs: Glass, Pure, Bell synth, Moody. If the table leaves one out, the lone start meets the best so far. One start for each style heard as different while driving: Moody and Synth pad were heard as near-alike (the same voice and chord; Moody adds ensemble), and so were Pure and Digital (2026-11-22 sessions). Synth pad and Digital stay reachable by changes.
+  - Pair 4: playoff of the two best winners (Bradley-Terry) that have not met yet.
+  - Pairs 5-13: the champion (first and after Neither: Bradley-Terry best on the answers; then winner stays) against broad challengers that change 2 blocks at once. Candidates are drawn at random and ordered by a Thompson sample of a Bayesian Bradley-Terry model over block features, plus distance from every sound heard, so areas not heard yet come first. A change that just lost (a block value of the last pair's losing sound) is not offered again straight away.
+  - Pair 14 replays pair 4 with A and B swapped.
   - Pairs 15-16: one medium change of the champion, pitch or brightness first. If both are used up or fail the table, any other change is used.
-  - Pair 17 plays the shortlist #1 against the strongest sound it has not met.
+  - Pair 17 plays the shortlist #1 against the start it was tuned from (`tuning_check` in the export: did the tuning beat the untuned start), or against the strongest sound it has not met when #1 is a start.
+  - After each answer the page shows what that pair changed (`lastChange`), e.g. "Sound B: higher, top layer: Glass", so the listener knows which change was heard.
 - **Final list.** Bradley-Terry on the answers alone, at most 2 sounds per top texture, each clearly different from the others: another top, body, top level or synth knob, or 8+ semitones. One pitch step or the space alone does not count (final-list #2 and #3 differing only in those sounded alike, 2026-11-22).
 - **Export.** `liked` (every winner, and both sounds of a Both good answer), `repeats` (the replay and whether it agreed), `table`, the shortlist and the ranking as in the sound-map search.
 
