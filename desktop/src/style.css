@@ -102,6 +102,8 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .theme-button.deep.active { border-color: #d2d2d2; color: #d2d2d2; }
 .vehicle-selector { width: 225px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 5px; background: #282828; color: var(--fg); font-size: 13px; }
 .display-customize-button { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 5px; background: #252525; color: var(--fg); font-size: 10px; letter-spacing: .06em; }
+/* Japanese may break between any two characters: header and control labels never wrap or shrink into a column (2026-11-22). */
+.display-customize-button, .theme-button, .controller-status, .personalize-button, .start-button, .beamng-overlay-actions .control { white-space: nowrap; flex-shrink: 0; }
 .display-customize-button:hover { border-color: #7f7f7f; background: #2b2b2b; }
 .display-customize-button.active { border-color: #7f7f7f; }
 .display-customize-button.active .customize-light { background: #5fd38d; box-shadow: 0 0 6px #5fd38d; }

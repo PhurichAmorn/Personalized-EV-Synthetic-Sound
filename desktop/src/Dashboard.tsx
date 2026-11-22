@@ -6,6 +6,8 @@ import type { SoundDebug } from './Diagnostics'
 import NavRail from './NavRail'
 import type { State } from './App'
 import { playWelcome } from './welcomeSound'
+import { LanguageSelect, useT } from './i18n'
+import { Brand } from './PageShell'
 
 type Props = {
   state: State
@@ -39,10 +41,11 @@ function easeInOut(t: number) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 
 function easeOut(t: number) { return 1 - Math.pow(1 - t, 3) }
 
 function InputMeter({ label, level }: { label: 'BRAKE' | 'THROTTLE'; level: number }) {
+  const t = useT()
   return <div className="input-meter">
     <span>{Math.round(level * 100)}%</span>
     <div className="input-meter-track"><div className={label === 'BRAKE' ? 'brake-fill' : 'throttle-fill'} style={{ height: `${Math.max(0, Math.min(1, level)) * 100}%` }} /></div>
-    <small>{label}</small>
+    <small>{t(label)}</small>
   </div>
 }
 
@@ -64,6 +67,7 @@ function PowerChargeBar({ power, charge }: { power: number; charge: number }) {
 export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, searchPanel, personalizeOpen = false, initialSoundLab = false }: Props) {
   const [sourceAudioError, setSourceAudioError] = useState('')
   const car = useCarSound(state, onCommand, personalizeOpen)
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const [soundLabOpen, setSoundLabOpen] = useState(initialSoundLab)
   const [showInputs, setShowInputs] = useState(false)
@@ -145,23 +149,24 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
     <div className={'dashboard-main'}>
       {/* Header and cluster unmount while Sound Lab is open, so backend state updates do not re-render hidden gauges. */}
       {!soundLabOpen && <header className="dashboard-header">
-        <button className="header-sidebar" title="Toggle sidebar" aria-label="Toggle sidebar" onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
-        <div className="dashboard-brand"><strong>EV SOUND LAB</strong><small>DRIVE SIMULATOR</small></div>
+        <button className="header-sidebar" title={t('Toggle sidebar')} aria-label={t('Toggle sidebar')} onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
+        <Brand sub="DRIVE SIMULATOR" />
         <div className="header-spacer" />
-        <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : 'SOUND'}</span>
+        <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : t('SOUND')}</span>
         <div className="theme-buttons" role="group" aria-label="Sound motion">
-          {(['rise', 'evolving'] as const).map(mode => <div className="theme-option" key={mode}><button className={'theme-button' + (car.gs && car.mode === mode ? ' active' : '')} aria-pressed={car.gs && car.mode === mode} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onClick={() => car.select(mode)}>{mode === 'rise' ? 'Rising' : 'Evolving'}</button></div>)}
+          {(['rise', 'evolving'] as const).map(mode => <div className="theme-option" key={mode}><button className={'theme-button' + (car.gs && car.mode === mode ? ' active' : '')} aria-pressed={car.gs && car.mode === mode} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onClick={() => car.select(mode)}>{t(mode === 'rise' ? 'Rising' : 'Evolving')}</button></div>)}
         </div>
         {!!state.mySounds?.length && <select className="vehicle-selector" aria-label="GS sound: final pick of a session" title="GS sound" value={state.mySound?.session ?? ''} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('mySound', { id: event.target.value })}>{state.mySounds.map(s => <option key={s.session} value={s.session}>{s.created.slice(5, 16).replace('T', ' ')} · {s.label || 'sound'}</option>)}</select>}
         <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
-        <button ref={customizeButton} className="display-customize-button" aria-label="Customize dashboard display" aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>DISPLAY</span></button>
-        <button className={'display-customize-button' + (signalOpen ? ' active' : '')} aria-pressed={signalOpen} aria-label="Show or hide the sound signal panel" onClick={() => setSignalOpen(open => !open)}><span className="customize-light" /><span>SIGNAL</span></button>
+        <button ref={customizeButton} className="display-customize-button" aria-label={t('Customize dashboard display')} aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>{t('DISPLAY')}</span></button>
+        <button className={'display-customize-button' + (signalOpen ? ' active' : '')} aria-pressed={signalOpen} aria-label={t('Show or hide the sound signal panel')} onClick={() => setSignalOpen(open => !open)}><span className="customize-light" /><span>{t('SIGNAL')}</span></button>
         <div className="info-holder"><button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button><pre className="specs-popover">{state.specs}</pre></div>
+        <LanguageSelect />
       </header>}
       {customizerOpen && <div className="display-customizer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) { setCustomizerOpen(false); customizeButton.current?.focus() } }}>
         <section className="display-customizer" role="dialog" aria-modal="true" aria-labelledby="display-customizer-title" onKeyDown={trapCustomizerFocus}>
-          <header className="customizer-header"><div><h2 id="display-customizer-title">Display</h2><p>Set your instrument style.</p></div><button ref={closeButton} className="customizer-close" onClick={() => { setCustomizerOpen(false); customizeButton.current?.focus() }}>Close</button></header>
-          <section className="customizer-section" aria-labelledby="display-mode-title"><h3 id="display-mode-title">Instrument display</h3><div className="display-mode-options" role="group" aria-label="Instrument display style">{displays.map(option => <button key={option.id} className={'display-mode-option' + (display === option.id ? ' selected' : '')} aria-pressed={display === option.id} onClick={() => setDisplayMode(option.id)}><DisplayPreview mode={option.id} /><strong>{option.name}</strong></button>)}</div></section>
+          <header className="customizer-header"><div><h2 id="display-customizer-title">{t('Display')}</h2><p>{t('Set your instrument style.')}</p></div><button ref={closeButton} className="customizer-close" onClick={() => { setCustomizerOpen(false); customizeButton.current?.focus() }}>{t('Close')}</button></header>
+          <section className="customizer-section" aria-labelledby="display-mode-title"><h3 id="display-mode-title">{t('Instrument display')}</h3><div className="display-mode-options" role="group" aria-label="Instrument display style">{displays.map(option => <button key={option.id} className={'display-mode-option' + (display === option.id ? ' selected' : '')} aria-pressed={display === option.id} onClick={() => setDisplayMode(option.id)}><DisplayPreview mode={option.id} /><strong>{t(option.name)}</strong></button>)}</div></section>
         </section>
       </div>}
       {!soundLabOpen && <section className={'dashboard-cluster display-' + display} aria-label="Instrument cluster">  {/* mode class on the cluster, not the screen: the previews inside the screen keep their own */}
@@ -176,12 +181,12 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
       </section>}
       <section className={'dashboard-controls' + (personalizeOpen ? ' personalize-active' : '')} hidden={soundLabOpen} aria-label="Driving controls">
         <div className="input-controls">
-          <button className={'controller-status' + (connected ? ' connected' : '')} title={state.controllerError || 'W throttle · S brake · controller triggers'} onClick={() => setShowInputs(!showInputs)}>{connected ? '●  CONTROLLER CONNECTED' : '○  CONTROLLER DISCONNECTED'}</button>
+          <button className={'controller-status' + (connected ? ' connected' : '')} title={state.controllerError || t('W throttle · S brake · controller triggers')} onClick={() => setShowInputs(!showInputs)}>{t(connected ? '●  CONTROLLER CONNECTED' : '○  CONTROLLER DISCONNECTED')}</button>
           <div className="input-meters"><InputMeter label="BRAKE" level={state.brakeInput} /><InputMeter label="THROTTLE" level={state.throttleInput} /></div>
-          {showInputs && <div className="input-options"><label><input type="checkbox" checked={state.controllerEnabled} onChange={event => onCommand('controllerEnabled', { value: event.target.checked })} /> Controller enabled</label><select aria-label="Controller" onChange={event => onCommand('controller', { id: Number(event.target.value) })}><option value="-1">Automatic</option>{state.availableControllers.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}</select></div>}
+          {showInputs && <div className="input-options"><label><input type="checkbox" checked={state.controllerEnabled} onChange={event => onCommand('controllerEnabled', { value: event.target.checked })} /> {t('Controller enabled')}</label><select aria-label="Controller" onChange={event => onCommand('controller', { id: Number(event.target.value) })}><option value="-1">{t('Automatic')}</option>{state.availableControllers.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}</select></div>}
         </div>
         <div className={'controls-spacer' + (searchPanel ? ' has-search-panel' : '')}>{searchPanel && <div className="dashboard-search-slot">{searchPanel}</div>}</div>
-        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button></>}</div>
+        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={t(state.running ? 'Stop vehicle' : 'Start vehicle')} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{t(state.running ? 'STOP' : 'START')}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{t(state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound')}</button></>}</div>
       </section>
       {(error || state.audioError || sourceAudioError) && <div role="alert" className="dashboard-error">{error || state.audioError || sourceAudioError}</div>}
       <SoundEditor onAudioError={setSourceAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />

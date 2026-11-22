@@ -4,6 +4,7 @@ import { liveStems } from './voiceCache'
 import { isLiveRecipe, liveSound, type LiveRecipe } from './levels'
 import { LabPlayer } from './labEngine'
 import { simulatedDrive } from './simulatedDrive'
+import { useT, type T } from './i18n'
 
 // Level sounds are built live in the app (no offline render): the trace plays them on the 22 s simulated drive.
 const traceLab = new LabPlayer()
@@ -35,20 +36,20 @@ function styleOf(recipe: SourceRecipe | LiveRecipe) {
 const OPPOSITE: Record<string, string> = { brighter: 'darker', darker: 'brighter', deeper: 'higher', higher: 'deeper', fuller: 'thinner', thinner: 'fuller', smoother: 'shimmer', shimmer: 'smoother', 'body+': 'body-', 'body-': 'body+' }
 /** Why each pair's sounds were played: a returning winner, or where a new sound came from (and, for fine-tune variations, the move
  * credit that led there: a won move +1 and its opposite -1, as the search counts it). */
-function pairReasons(session: Session) {
+function pairReasons(session: Session, t: T) {
   const credit: Record<string, number> = {}, out: Record<string, string>[] = []
   let lastWinner: { id: string; pair: number } | null = null
   session.history.forEach((row, index) => {
     const reasons: Record<string, string> = {}
     for (const id of row.pair) {
       const c = session.candidates[id], origin = c?.origin ?? {}, style = c ? styleOf(c.recipe) : null, tag = style ? ` · ${style}` : ''
-      if (lastWinner?.id === id) { reasons[id] = `Your pick from pair ${lastWinner.pair}, defending`; continue }
+      if (lastWinner?.id === id) { reasons[id] = t('Your pick from pair {n}, defending', { n: lastWinner.pair }); continue }
       const move = origin.move && origin.move !== 'original' ? origin.move : null
-      reasons[id] = origin.kind === 'motion' ? `Same sound, ${origin.motion === 'evolving' ? 'Evolving' : 'Rising'}`
-        : origin.kind === 'opening' ? `Opening: typical sound${tag}`
-        : origin.kind === 'region' ? `Styles compete${tag}`
-        : origin.kind === 'challenger' ? `Challenger from your leading styles${tag}`
-        : origin.kind === 'variation' ? (move ? `${move} version of your pick${move.split('+').some(m => (credit[m] ?? 0) > 0) ? ` · '${move.split('+').filter(m => (credit[m] ?? 0) > 0).join("', '")}' won before` : ''}` : 'The original of your pick')
+      reasons[id] = origin.kind === 'motion' ? t('Same sound, {motion}', { motion: t(origin.motion === 'evolving' ? 'Evolving' : 'Rising') })
+        : origin.kind === 'opening' ? t('Opening: typical sound') + tag
+        : origin.kind === 'region' ? t('Styles compete') + tag
+        : origin.kind === 'challenger' ? t('Challenger from your leading styles') + tag
+        : origin.kind === 'variation' ? (move ? `${t('{move} version of your pick', { move })}${move.split('+').some(m => (credit[m] ?? 0) > 0) ? ` · '${move.split('+').filter(m => (credit[m] ?? 0) > 0).join("', '")}' won before` : ''}` : t('The original of your pick'))
         : origin.summary ?? ''
     }
     out.push(reasons)
@@ -67,6 +68,7 @@ const settingsOf = (r: LiveRecipe): object => 'base' in r ? r.base : r.voice ? (
 
 export default function TraceHistory({ command, preview }: { command: Command; preview?: HistoryPreview }) {
   const [rows, setRows] = useState<Row[]>([])
+  const t = useT()
   const [session, setSession] = useState<Session | null>(null)
   const [sound, setSound] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -98,79 +100,79 @@ export default function TraceHistory({ command, preview }: { command: Command; p
     const c = session!.candidates[id]
     return <div className={'history-sound' + (sound === id ? ' open' : '')}>
       <span>{tag}</span><strong>{c ? short(id) : id}</strong>
-      <button type="button" className="control" aria-pressed={sound === id} onClick={() => sound === id ? collapse() : expand(id)}>{sound === id ? 'Close' : 'Expand'}</button>
+      <button type="button" className="control" aria-pressed={sound === id} onClick={() => sound === id ? collapse() : expand(id)}>{t(sound === id ? 'Close' : 'Expand')}</button>
     </div>
   }
   return <div className={'history-layout' + (detail ? ' with-detail' : '')}>
     <section className="panel history-list" aria-label="Saved sessions">
-      <h2 className="text-xl">Sound trace</h2>
+      <h2 className="text-xl">{t('Sound trace')}</h2>
       {/* Only finished sessions are listed; unfinished ones stay on disk. */}
-      {!rows.some(row => row.final || row.done) && <p className="text-sm text-neutral-400">No saved sessions yet. Sound discovery sessions save here automatically.</p>}
+      {!rows.some(row => row.final || row.done) && <p className="text-sm text-neutral-400">{t('No saved sessions yet. Sound discovery sessions save here automatically.')}</p>}
       {rows.filter(row => row.final || row.done).map(row => <button key={row.id} className={'control history-item' + (session?.id === row.id ? ' selected' : '')} aria-pressed={session?.id === row.id} onClick={() => void open(row.id)}>
         <strong>{row.starred && <span className="history-star" aria-label="Starred">★ </span>}{when(row.created)}</strong>
-        <span>{row.completed} comparisons · {row.final ? 'favorite chosen' : 'finalists ranked'}</span>
+        <span>{t('{n} comparisons · {state}', { n: row.completed, state: t(row.final ? 'favorite chosen' : 'finalists ranked') })}</span>
       </button>)}
     </section>
     <section className="panel history-trace" aria-label="Session trace">
-      {!session ? <p className="text-neutral-400">Select a session to inspect.</p> : <>
-        <div className="trace-panel-head"><div><h2 className="text-xl">{when(session.created)}</h2><p className="mt-1 text-neutral-400">{session.history.length} rated pairs · {session.playoff_history.length} final-round pairs</p></div>
+      {!session ? <p className="text-neutral-400">{t('Select a session to inspect.')}</p> : <>
+        <div className="trace-panel-head"><div><h2 className="text-xl">{when(session.created)}</h2><p className="mt-1 text-neutral-400">{t('{n} rated pairs · {m} final-round pairs', { n: session.history.length, m: session.playoff_history.length })}</p></div>
           <div className="flex gap-2">
-            <button className={'icon-button star-button' + (starred ? ' on' : '')} aria-pressed={starred} title={starred ? 'Starred: kept at the top. Click to unstar.' : 'Star to mark this session as one to keep'} aria-label="Star session" onClick={() => void star(session.id, !starred)}>{starred ? '★' : '☆'}</button>
-            {confirmDelete ? <><button className="control" onClick={() => setConfirmDelete(false)}>Keep</button><button className="control border-red-500" onClick={() => void remove()}>{starred ? 'Delete starred session' : 'Delete'}</button></>
-              : <button className="icon-button danger" title="Delete session" aria-label="Delete session" onClick={() => setConfirmDelete(true)}><img src="/icons/trash.svg" alt="" /></button>}
+            <button className={'icon-button star-button' + (starred ? ' on' : '')} aria-pressed={starred} title={t(starred ? 'Starred: kept at the top. Click to unstar.' : 'Star to mark this session as one to keep')} aria-label={t('Star session')} onClick={() => void star(session.id, !starred)}>{starred ? '★' : '☆'}</button>
+            {confirmDelete ? <><button className="control" onClick={() => setConfirmDelete(false)}>{t('Keep')}</button><button className="control border-red-500" onClick={() => void remove()}>{t(starred ? 'Delete starred session' : 'Delete')}</button></>
+              : <button className="icon-button danger" title={t('Delete session')} aria-label={t('Delete session')} onClick={() => setConfirmDelete(true)}><img src="/icons/trash.svg" alt="" /></button>}
           </div>
         </div>
         <div className="history-steps history-tree">
           {(() => {
             // Tree: the chosen sound continues down the trunk; the other sound branches off to the side and ends there.
             // A sound that was not the previous pick but wins starts a new trunk segment ("new pick").
-            const reasons = pairReasons(session)
+            const reasons = pairReasons(session, t)
             return session.history.map((row, index) => {
-              const label = (id: string) => `Sound ${row.pair[0] === id ? 'A' : 'B'}`
+              const ab = (id: string) => row.pair[0] === id ? 'A' : 'B', label = (id: string) => t('Sound {x}', { x: ab(id) })
               const sound = (id: string, kept: boolean) => <div className={'tree-sound' + (kept ? ' kept' : ' dropped')}>
-                {soundRow(id, row.rating_source === 'choice' ? `${label(id)}${kept && row.winner ? ' · ★ chosen' : ''}` : `${label(id)} · rated ${row.ratings?.[label(id).slice(-1) as 'A' | 'B']}/7`)}
+                {soundRow(id, row.rating_source === 'choice' ? `${label(id)}${kept && row.winner ? t(' · ★ chosen') : ''}` : `${label(id)}${t(' · rated {n}/7', { n: row.ratings?.[ab(id)] ?? '–' })}`)}
                 <p className="history-why">{reasons[index][id] || row.origin_by_candidate?.[id]}</p></div>
               const trunk = row.winner ? [row.winner] : row.choice === 'good' ? row.pair : []
               const branch = row.pair.filter(id => !trunk.includes(id))
               const fresh = row.winner && index > 0 && session.history[index - 1].winner !== row.winner
-              const answer = row.choice === 'neither' ? 'neither liked' : row.choice === 'good' ? 'both good' : row.choice === 'equal' ? 'liked equally' : ''
+              const answer = t(row.choice === 'neither' ? 'neither liked' : row.choice === 'good' ? 'both good' : row.choice === 'equal' ? 'liked equally' : '')
               return <div className={'tree-node' + (fresh ? ' fresh' : '')} key={index}>
-                <h3>Pair {index + 1}{fresh ? ' · new pick' : ''}{answer ? ` · ${answer}` : ''}</h3>
+                <h3>{t('Pair {n}', { n: index + 1 })}{fresh ? t(' · new pick') : ''}{answer ? ` · ${answer}` : ''}</h3>
                 <div className="tree-row">
-                  <div className="tree-trunk">{trunk.map(id => <div key={id}>{sound(id, true)}</div>)}{!trunk.length && <p className="history-why">— no pick —</p>}</div>
+                  <div className="tree-trunk">{trunk.map(id => <div key={id}>{sound(id, true)}</div>)}{!trunk.length && <p className="history-why">{t('— no pick —')}</p>}</div>
                   <div className="tree-branch">{branch.map(id => <div key={id}>{sound(id, false)}</div>)}</div>
                 </div>
               </div>
             })
           })()}
           {session.playoff_history.map((row, index) => <div className="history-step" key={'p' + index}>
-            <h3>Final round {index + 1} · {row.choice === 'equal' ? 'liked equally' : `Sound ${row.choice} preferred`}</h3>
-            {row.pair.map((id, i) => <div key={id}>{soundRow(id, `Sound ${'AB'[i]}${row.winner === id ? ' · preferred' : ''}`)}</div>)}
+            <h3>{t('Final round {n}', { n: index + 1 })} · {row.choice === 'equal' ? t('liked equally') : t('Sound {x} preferred', { x: row.choice })}</h3>
+            {row.pair.map((id, i) => <div key={id}>{soundRow(id, `${t('Sound {x}', { x: 'AB'[i] })}${row.winner === id ? t(' · preferred') : ''}`)}</div>)}
           </div>)}
-          {session.finalists.length > 0 && <div className="history-step"><h3>Ranked finalists</h3>
-            {session.finalists.map((f, index) => <div key={f.id}>{soundRow(f.id, `#${index + 1}${session.final === f.id ? ' · favorite' : ''} · ${f.wins}/${f.games} wins · mean rating ${f.score.toFixed(1)}`)}</div>)}
+          {session.finalists.length > 0 && <div className="history-step"><h3>{t('Ranked finalists')}</h3>
+            {session.finalists.map((f, index) => <div key={f.id}>{soundRow(f.id, `#${index + 1}${session.final === f.id ? t(' · favorite') : ''} · ${t('{w}/{g} wins · mean rating {r}', { w: f.wins, g: f.games, r: f.score.toFixed(1) })}`)}</div>)}
           </div>}
         </div>
       </>}
     </section>
     {detail && sound && <aside className="panel history-detail" aria-label="Sound details">
-      <div className="trace-panel-head"><h2 className="text-xl">Sound {short(sound)}</h2><button className="control" onClick={collapse}>Close</button></div>
-      <h3>Preview</h3>
-      {isLive(detail.recipe) ? <><button type="button" className="control" onClick={() => livePlaying ? stopLive() : playLive(sound, detail.recipe as LiveRecipe)}>{livePlaying ? 'Stop' : '▶ Play on the 22 s drive'}</button>
-        <h3>Settings</h3>
+      <div className="trace-panel-head"><h2 className="text-xl">{t('Sound {id}', { id: short(sound) })}</h2><button className="control" onClick={collapse}>{t('Close')}</button></div>
+      <h3>{t('Preview')}</h3>
+      {isLive(detail.recipe) ? <><button type="button" className="control" onClick={() => livePlaying ? stopLive() : playLive(sound, detail.recipe as LiveRecipe)}>{t(livePlaying ? 'Stop' : '▶ Play on the 22 s drive')}</button>
+        <h3>{t('Settings')}</h3>
         <dl className="history-params">{[...Object.entries(settingsOf(detail.recipe as LiveRecipe)), ...Object.entries(detail.recipe.fx)].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{String(v)}</dd></div>)}</dl>
       </> : <>
-      {preview?.candidate !== sound || preview.status === 'rendering' || !preview.status ? <p className="loading-note text-sm text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Generating sound…</p>
+      {preview?.candidate !== sound || preview.status === 'rendering' || !preview.status ? <p className="loading-note text-sm text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />{t('Generating sound…')}</p>
         : preview.status === 'error' ? <p className="text-sm text-red-300" role="alert">{preview.error}</p>
         : <audio controls autoPlay src={preview.url} />}
-      <p className="text-xs text-neutral-500">Generated on demand and discarded when you close this or leave the page.</p>
+      <p className="text-xs text-neutral-500">{t('Generated on demand and discarded when you close this or leave the page.')}</p>
       </>}
-      {detail.ratings && <><h3>Ratings</h3><p className="text-sm">{detail.ratings.join(', ')} <span className="text-neutral-400">(1–7)</span></p></>}
-      {!isLive(detail.recipe) && <h3>Parameters</h3>}
+      {detail.ratings && <><h3>{t('Ratings')}</h3><p className="text-sm">{detail.ratings.join(', ')} <span className="text-neutral-400">(1–7)</span></p></>}
+      {!isLive(detail.recipe) && <h3>{t('Parameters')}</h3>}
       {!isLive(detail.recipe) && detail.recipe.layers.map((layer, index) => <details key={index} open={index === 0}><summary>{layer.role} · {layer.method} · gain {layer.gain.toFixed(2)}</summary>
         <dl className="history-params">{Object.entries(layer.shape as Record<string, unknown>).filter(([, v]) => typeof v === 'number').map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{(v as number).toFixed(3)}</dd></div>)}</dl>
       </details>)}
-      {detail.audio_descriptor && <><h3>Spectrum (energy share by Hz band)</h3>
+      {detail.audio_descriptor && <><h3>{t('Spectrum (energy share by Hz band)')}</h3>
         <div className="history-bands" role="img" aria-label="Spectral energy by band">{detail.audio_descriptor.map((v, i) => <div key={i}><b style={{ height: `${Math.min(100, v * 250)}%` }} /><small>{BANDS[i]}</small></div>)}</div></>}
     </aside>}
   </div>

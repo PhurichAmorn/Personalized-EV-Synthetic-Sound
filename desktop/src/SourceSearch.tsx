@@ -4,6 +4,7 @@ import type { GranularMode } from './granularPlayer'
 import type { SourceRecipe } from './sourceRecipe'
 import { describeSound, isLiveRecipe, isTuningRecipe, tooSimilar, type LiveRecipe } from './levels'
 import { liveStems } from './voiceCache'
+import { describeBlocks, useLang, useT } from './i18n'
 import { playWelcome } from './welcomeSound'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
@@ -25,6 +26,9 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const heard = useRef(new Set<string>())
   // What is sounding now, for the label: a sound of this pair, or the pick from the last pair that keeps playing while the next pair builds.
   const [nowPlaying, setNowPlaying] = useState<{ id: string; label: string } | null>(null)
+  const t = useT(), lang = useLang()
+  // Plain-words sound description in the chosen language (building blocks), else the English one.
+  const describe = (recipe: unknown) => { const r = recipe as { blocks?: Parameters<typeof describeBlocks>[0]; motion?: string } | null; return (r?.blocks && describeBlocks(r.blocks, r.motion, lang)) || describeSound(recipe) }
   const [pairReady, setPairReady] = useState<string | null>(null)  // revision whose two sounds are built (buttons wait for both)
   const revision = discovery?.pair.map(c => c.id).join(':')
   // Too-similar pairs: the app measures each new pair and asks the search for another (motion pair excluded: same sound on purpose).
@@ -61,11 +65,11 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const listen = async (candidate: DiscoveryCandidate) => {
     void onCommand('sourceDiscoveryPlayed', { id: candidate.id })  // every press, for the record (heard() needs driving)
     const token = ++auditionSequence.current; heard.current.delete(candidate.id); setAudition(candidate.id); setReadyAudition(null); setError('')
-    try { const ready = await onAudition(candidate, 'driving'); if (token === auditionSequence.current) { if (ready === true) { setReadyAudition(candidate.id); setNowPlaying({ id: candidate.id, label: `Sound ${discovery?.pair[0]?.id === candidate.id ? 'A' : discovery?.pair[1]?.id === candidate.id ? 'B' : ''}`.trim() }) } else setError(typeof ready === 'string' ? `Candidate audio failed: ${ready}` : 'Candidate audio could not start. Try replaying it.') } }
+    try { const ready = await onAudition(candidate, 'driving'); if (token === auditionSequence.current) { if (ready === true) { setReadyAudition(candidate.id); setNowPlaying({ id: candidate.id, label: t('Sound {x}', { x: discovery?.pair[0]?.id === candidate.id ? 'A' : discovery?.pair[1]?.id === candidate.id ? 'B' : '' }).trim() }) } else setError(typeof ready === 'string' ? `Candidate audio failed: ${ready}` : 'Candidate audio could not start. Try replaying it.') } }
     catch (problem) { if (token === auditionSequence.current) setError(problem instanceof Error ? problem.message : 'Audition failed.') }
   }
   // After the session the final sound keeps playing (through the last question and the thank-you), labelled as the driver's sound.
-  const playFinal = (candidate: DiscoveryCandidate) => { auditionSequence.current++; if (nowPlaying?.id !== candidate.id || !playing) void onAudition(candidate, 'driving'); setNowPlaying({ id: candidate.id, label: 'Your sound' }) }
+  const playFinal = (candidate: DiscoveryCandidate) => { auditionSequence.current++; if (nowPlaying?.id !== candidate.id || !playing) void onAudition(candidate, 'driving'); setNowPlaying({ id: candidate.id, label: t('Your sound') }) }
   // Pair 1 asks Rising vs Evolving (same sound), so the session starts with one button.
   const begin = async () => {
     onStop(); if (!running) playWelcome()  // the session starts the car too: same welcome as the START button
@@ -88,8 +92,8 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     const pick = choice === 'A' ? discovery.pair[0] : choice === 'B' ? discovery.pair[1] : null
     setPending(true);setAudition(null);auditionSequence.current++
     if (choice === 'neither') { onStop(); setNowPlaying(null) }
-    else if (pick) { if (nowPlaying?.id !== pick.id) void onAudition(pick, 'driving'); setNowPlaying({ id: pick.id, label: `Your pick (Sound ${choice})` }) }
-    else if (nowPlaying) setNowPlaying({ ...nowPlaying, label: `Previous ${nowPlaying.label}` })
+    else if (pick) { if (nowPlaying?.id !== pick.id) void onAudition(pick, 'driving'); setNowPlaying({ id: pick.id, label: t('Your pick (Sound {x})', { x: choice }) }) }
+    else if (nowPlaying) setNowPlaying({ ...nowPlaying, label: t('Previous {label}', { label: nowPlaying.label }) })
     try { await onCommand(final ? 'sourceDiscoveryPlayoff' : 'sourceDiscoveryFeedback', { choice, context: onContext() }) }
     finally { setPending(false) }
   }
@@ -102,75 +106,75 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const preparing = discovery?.active && (discovery.busy || pairReady !== (revision ?? null))
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
     <section className="panel p-3 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">Broad sound discovery</h3>{discovery && <span>{final ? `Final round ${(discovery.playoffDone ?? 0) + 1} / ${discovery.playoffTotal ?? 6} · ` : ''}{discovery.step ?? discovery.completed} / {discovery.totalSteps ?? 20} comparisons</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map' | 'blocks')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option><option value="blocks">Building blocks</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? 'New session' : 'Start session'}</button>}</div></div>
+      <div className="source-comparison-header"><div className="source-session-summary"><h3 className="text-lg">{t('Broad sound discovery')}</h3>{discovery && <span>{final ? t('Final round {n} / {total} · ', { n: (discovery.playoffDone ?? 0) + 1, total: discovery.playoffTotal ?? 6 }) : ''}{t('{n} / {total} comparisons', { n: discovery.step ?? discovery.completed, total: discovery.totalSteps ?? 20 })}</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery && !discovery.active && <select className="control" aria-label="Search" value={search} onChange={event => setSearch(event.target.value as 'tuning' | 'map' | 'blocks')}><option value="tuning">Sound families (baseline)</option><option value="map">Sound map (generated)</option><option value="blocks">Building blocks</option></select>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => void begin()}>{discovery.completed ? t('New session') : t('Start session')}</button>}</div></div>
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
-      {discovery && !discovery.active ? <p className="mt-3 text-sm text-neutral-300" role="status">{discovery.finalists?.length ? `Session complete · ${discovery.step ?? discovery.completed} comparisons.${discovery.final ? '' : ' Choose your final sound from your shortlist below.'}` : discovery.completed ? `Session finished after ${discovery.completed} comparisons.` : 'Start a session to compare sources.'}</p> : null}
+      {discovery && !discovery.active ? <p className="mt-3 text-sm text-neutral-300" role="status">{discovery.finalists?.length ? t('Session complete · {n} comparisons.', { n: discovery.step ?? discovery.completed }) + (discovery.final ? '' : t(' Choose your final sound from your shortlist below.')) : discovery.completed ? t('Session finished after {n} comparisons.', { n: discovery.completed }) : t('Start a session to compare sources.')}</p> : null}
       {discovery && ((nowPlaying && playing) || preparing) && <div className="mt-3 flex items-center gap-x-5 whitespace-nowrap">
-        {nowPlaying && playing && <p className="text-sm text-neutral-200" role="status">▶ Now playing: <strong>{nowPlaying.label}</strong></p>}
-        {preparing && <p className="loading-note text-xs text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />Preparing…</p>}
+        {nowPlaying && playing && <p className="text-sm text-neutral-200" role="status">{t('▶ Now playing:')} <strong>{nowPlaying.label}</strong></p>}
+        {preparing && <p className="loading-note text-xs text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />{t('Preparing…')}</p>}
       </div>}
       {discovery?.active ? <>
-        {final && <p className="mt-3 text-sm text-neutral-300" role="status">Final round: your four finalists, compared head to head. Pick the one you prefer.</p>}
+        {final && <p className="mt-3 text-sm text-neutral-300" role="status">{t('Final round: your four finalists, compared head to head. Pick the one you prefer.')}</p>}
         {!discovery.busy && <>
         <div className="source-search-candidates" role="group" aria-label="Source A and B">
           {discovery.pair.map((candidate, index) => <div key={candidate.id} className="source-search-candidate">
-            <button type="button" className={'control source-search-listen' + (audition === candidate.id ? ' selected' : '')} disabled={discovery.busy || preparing} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}><strong>Sound {index === 0 ? 'A' : 'B'}</strong></button>
+            <button type="button" className={'control source-search-listen' + (audition === candidate.id ? ' selected' : '')} disabled={discovery.busy || preparing} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}><strong>{t('Sound {x}', { x: index === 0 ? 'A' : 'B' })}</strong></button>
             {!choosing && (() => {
               // One-line like/dislike slider, stored as 1-7. Unrated until touched: clicking or a key press on the neutral start position also counts.
               const value = ratings[candidate.id], set = (next: number) => setRatings(current => ({ ...current, [candidate.id]: next }))
               return <label className={'source-rating' + (value === undefined ? ' unset' : '')}>
-                <span aria-hidden="true">Dislike</span>
+                <span aria-hidden="true">{t('Dislike')}</span>
                 <input type="range" min={1} max={7} step={1} value={value ?? 4} aria-label={`Rate sound ${index === 0 ? 'A' : 'B'}: 1 strongly dislike, 4 neutral, 7 strongly like`} aria-valuetext={value === undefined ? 'Not rated' : String(value)}
                   onChange={event => set(Number(event.currentTarget.value))} onPointerUp={event => set(Number(event.currentTarget.value))} onKeyUp={event => set(Number(event.currentTarget.value))} />
-                <span aria-hidden="true">Like</span>
+                <span aria-hidden="true">{t('Like')}</span>
                 <output>{value ?? '–'}</output>
               </label>
             })()}
           </div>)}
         </div>
-        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending || preparing} onClick={() => void submitChoice(value)}>{label}</button>)}</div>
-        : <div className="source-search-preferences"><button type="button" className="control" disabled={!ready} onClick={() => void feedback()}>Next</button></div>}
+        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending || preparing} onClick={() => void submitChoice(value)}>{t(label)}</button>)}</div>
+        : <div className="source-search-preferences"><button type="button" className="control" disabled={!ready} onClick={() => void feedback()}>{t('Next')}</button></div>}
         </>}
-        {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>Retry preparation</button></p>}
+        {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>{t('Retry preparation')}</button></p>}
       </> : null}
     </section>
     {!discovery?.active && !!discovery?.finalists?.length && (discovery.final && discovery.acceptable == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
-      <h3 className="text-lg">One last question</h3>
-      <p className="mt-1 text-sm text-neutral-300">Would you be happy with this sound in your car?</p>
-      <div className="mt-4 flex flex-wrap justify-center gap-2"><button type="button" className="control" onClick={() => { const c = discovery.finalists!.find(c => c.id === discovery.final); if (c) playFinal(c) }}>▶ Play it again</button>
-        {([[true, 'Yes'], [false, 'No']] as const).map(([answer, label]) => <button key={label} type="button" className="control" onClick={() => void onCommand('sourceDiscoveryAccept', { answer })}>{label}</button>)}</div>
+      <h3 className="text-lg">{t('One last question')}</h3>
+      <p className="mt-1 text-sm text-neutral-300">{t('Would you be happy with this sound in your car?')}</p>
+      <div className="mt-4 flex flex-wrap justify-center gap-2"><button type="button" className="control" onClick={() => { const c = discovery.finalists!.find(c => c.id === discovery.final); if (c) playFinal(c) }}>{t('▶ Play it again')}</button>
+        {([[true, 'Yes'], [false, 'No']] as const).map(([answer, label]) => <button key={label} type="button" className="control" onClick={() => void onCommand('sourceDiscoveryAccept', { answer })}>{t(label)}</button>)}</div>
     </section> : discovery.final ? <section className="panel p-6 source-search-thanks" aria-label="Final sound saved" role="status">
       <div className="thanks-check" aria-hidden="true">✓</div>
-      <h3 className="text-lg">Saved · thank you!</h3>
-      <p className="mt-1 text-sm text-neutral-300">Your final sound is #{discovery.finalists.findIndex(c => c.id === discovery.final) + 1} of your ranked sounds. This session is saved in Sound trace.</p>
-      <p className="mt-2 text-sm">{describeSound(discovery.finalists.find(c => c.id === discovery.final)?.recipe)}</p>
-      <button type="button" className="control mt-4" onClick={() => { const c = discovery.finalists!.find(c => c.id === discovery.final); if (c) playFinal(c) }}>Play your final sound</button>
+      <h3 className="text-lg">{t('Saved · thank you!')}</h3>
+      <p className="mt-1 text-sm text-neutral-300">{t('Your final sound is #{n} of your ranked sounds. This session is saved in Sound trace.', { n: discovery.finalists.findIndex(c => c.id === discovery.final) + 1 })}</p>
+      <p className="mt-2 text-sm">{describe(discovery.finalists.find(c => c.id === discovery.final)?.recipe)}</p>
+      <button type="button" className="control mt-4" onClick={() => { const c = discovery.finalists!.find(c => c.id === discovery.final); if (c) playFinal(c) }}>{t('Play your final sound')}</button>
     </section> : podiumReady !== podiumKey ? <section className="panel p-6 source-search-ranking" aria-label="Ranking" role="status">
-      <span className="spinner" aria-hidden="true" /><h3 className="text-lg">Ranking your best sounds…</h3>
-      <p className="mt-1 text-sm text-neutral-400">Preparing your top three so each one plays at once.</p>
+      <span className="spinner" aria-hidden="true" /><h3 className="text-lg">{t('Ranking your best sounds…')}</h3>
+      <p className="mt-1 text-sm text-neutral-400">{t('Preparing your top three so each one plays at once.')}</p>
     </section> : <section className="panel p-4 source-search-favourites" aria-label="Ranked finalists">
       <Confetti key={podiumKey} />
-      <h3 className="text-lg">Your top three · choose your final sound</h3>
-      <p className="mt-1 text-xs text-neutral-400">Ranked by all your choices in this session. The final choice is yours.</p>
+      <h3 className="text-lg">{t('Your top three · choose your final sound')}</h3>
+      <p className="mt-1 text-xs text-neutral-400">{t('Ranked by all your choices in this session. The final choice is yours.')}</p>
       <div className="podium">{[1, 0, 2].filter(rank => discovery.finalists![rank]).map(rank => { const candidate = discovery.finalists![rank]; return <div className={'podium-place place-' + (rank + 1)} key={candidate.id}>
         <div className="podium-card">
-          <button type="button" className={'control' + (audition === candidate.id ? ' selected' : '')} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}>▶ Play</button>
-          <small className="podium-describe">{describeSound(candidate.recipe)}</small>
-          <small>{candidate.games ? `won ${candidate.wins} of ${candidate.games} choices` : 'not compared yet'}</small>
-          <button type="button" className="control podium-choose" onClick={() => setPendingFinal(candidate.id)}>Choose this sound</button>
+          <button type="button" className={'control' + (audition === candidate.id ? ' selected' : '')} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}>{t('▶ Play')}</button>
+          <small className="podium-describe">{describe(candidate.recipe)}</small>
+          <small>{candidate.games ? t('won {w} of {g} choices', { w: candidate.wins ?? 0, g: candidate.games }) : t('not compared yet')}</small>
+          <button type="button" className="control podium-choose" onClick={() => setPendingFinal(candidate.id)}>{t('Choose this sound')}</button>
         </div>
         <div className="podium-step"><b>{rank + 1}</b></div>
       </div> })}</div>
       {discovery.finalists.length > 3 && (showMore ? <div className="mt-4 space-y-2">{discovery.finalists.slice(3).map((candidate, index) => <div className="source-favourite-row" key={candidate.id}>
         <b>#{index + 4}</b>
-        <button type="button" className={'control' + (audition === candidate.id ? ' selected' : '')} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}>▶ Play</button>
-        <small className="text-neutral-400">{describeSound(candidate.recipe)} · {candidate.games ? `won ${candidate.wins} of ${candidate.games} choices` : 'not compared yet'}</small>
-        <button type="button" className="control" onClick={() => setPendingFinal(candidate.id)}>Choose this sound</button>
-      </div>)}</div> : <button type="button" className="control mt-4" onClick={() => setShowMore(true)}>Show more ({discovery.finalists.length - 3})</button>)}
+        <button type="button" className={'control' + (audition === candidate.id ? ' selected' : '')} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}>{t('▶ Play')}</button>
+        <small className="text-neutral-400">{describe(candidate.recipe)} · {candidate.games ? t('won {w} of {g} choices', { w: candidate.wins ?? 0, g: candidate.games }) : t('not compared yet')}</small>
+        <button type="button" className="control" onClick={() => setPendingFinal(candidate.id)}>{t('Choose this sound')}</button>
+      </div>)}</div> : <button type="button" className="control mt-4" onClick={() => setShowMore(true)}>{t('Show more ({n})', { n: discovery.finalists.length - 3 })}</button>)}
     </section>)}
-    {pendingFinal && <Confirm title="Are you sure this is your final sound?" text={<>You picked #{discovery!.finalists!.findIndex(c => c.id === pendingFinal) + 1}. It will be saved as the result of this session.</>}>
-      <button type="button" className="control" autoFocus onClick={() => setPendingFinal(null)}>Go back</button><button type="button" className="control" onClick={() => { const id = pendingFinal, c = discovery!.finalists!.find(c => c.id === id); setPendingFinal(null); setAudition(null); if (c) playFinal(c); void onCommand('sourceDiscoveryFinish', { id }) }}>Yes, save it</button>
+    {pendingFinal && <Confirm title={t('Are you sure this is your final sound?')} text={t('You picked #{n}. It will be saved as the result of this session.', { n: discovery!.finalists!.findIndex(c => c.id === pendingFinal) + 1 })}>
+      <button type="button" className="control" autoFocus onClick={() => setPendingFinal(null)}>{t('Go back')}</button><button type="button" className="control" onClick={() => { const id = pendingFinal, c = discovery!.finalists!.find(c => c.id === id); setPendingFinal(null); setAudition(null); if (c) playFinal(c); void onCommand('sourceDiscoveryFinish', { id }) }}>{t('Yes, save it')}</button>
     </Confirm>}
   </div>
 }

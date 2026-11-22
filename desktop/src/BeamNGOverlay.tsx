@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { InputGraph, LoadGraph, SoundGraph, VerticalBars } from './OverlayGraphs'
 import type { State } from './App'
+import { LanguageSelect, useT } from './i18n'
 
 type Props = {
   state: State
@@ -17,6 +18,7 @@ type Props = {
 }
 
 export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, onStartStop, analyser, granular, granularMode, onGranular, onGranularCycle, personalize }: Props) {
+  const t = useT()
   const connected = state.sourceMode !== 'BeamNG' || state.beamngConnected
   const throttle = state.sourceMode === 'BeamNG' ? state.beamngThrottle : state.throttleInput
   const brake = state.sourceMode === 'BeamNG' ? state.beamngBrake : state.brakeInput
@@ -49,9 +51,10 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   return <main ref={card} className={'beamng-overlay-card' + (personalize ? ' personalizing' : '')}>
     <div className="beamng-overlay-grip" aria-hidden="true" onMouseDown={startDrag} />
     <header className="beamng-overlay-header" onMouseDown={startDrag}>
-      <div><span className="beamng-overlay-kicker">EV SOUND LAB</span><h1>{personalize ? 'Personalize sound' : 'Drive audio'}</h1></div>
+      <div><span className="beamng-overlay-kicker">{t('EV SOUND LAB')}</span><h1>{t(personalize ? 'Personalize sound' : 'Drive audio')}</h1></div>
+      <span onMouseDown={event => event.stopPropagation()}><LanguageSelect className="control" /></span>
       <span className={'beamng-overlay-status' + (connected ? ' connected' : '')} role="status">
-        <i />{state.sourceMode === 'Simulator' ? 'SIMULATOR' : connected ? 'BEAMNG LINK' : 'DISCONNECTED'}
+        <i />{t(state.sourceMode === 'Simulator' ? 'SIMULATOR' : connected ? 'BEAMNG LINK' : 'DISCONNECTED')}
       </span>
       <button className="beamng-overlay-close" type="button" aria-label="Close overlay" onClick={() => void window.__TAURI__?.window?.getCurrentWindow().close()}><svg className="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4L20 20M20 4L4 20" /></svg></button>
     </header>
@@ -64,19 +67,19 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
     </div>}
     <div className="overlay-grid">
       <div>
-        <div className="overlay-caption">INPUT</div>
+        <div className="overlay-caption">{t('INPUT')}</div>
         <div className="overlay-input-row">
           <VerticalBars throttle={state.controllerThrottle} brake={state.controllerBrake} regen={regen} />
           <InputGraph throttle={throttle} brake={brake} />
         </div>
       </div>
       <div>
-        <div className="overlay-caption">MOTOR LOAD</div>
+        <div className="overlay-caption">{t('MOTOR LOAD')}</div>
         <LoadGraph load={state.motorLoad ?? 0} />
       </div>
     </div>
     {!personalize && !session && <div>
-      <div className="overlay-caption">SOUND</div>
+      <div className="overlay-caption">{t('SOUND')}</div>
       {(['wave', 'spectrogram'] as const).map(view => <SoundGraph key={view} granular={granular} active={state.running && !state.starting} view={view} analyser={analyser} onCommand={onCommand} />)}
     </div>}
     {personalize && <section className="overlay-personalize" aria-label="Personalize sound">{personalize}</section>}
@@ -84,9 +87,9 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
     {!personalize && <footer className="beamng-overlay-actions">
       <button className="control beamng-overlay-start" disabled={state.starting || state.soundSweepActive} onClick={onStartStop}>
         <i className={'overlay-led' + (state.starting ? ' starting' : state.running ? ' on' : '')} aria-hidden="true" />
-        {state.starting ? 'Starting…' : state.running ? 'Stop sound' : 'Start sound'}
+        {t(state.starting ? 'Starting…' : state.running ? 'Stop sound' : 'Start sound')}
       </button>
-      <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button>
+      <button className="control" disabled={state.soundSweepActive} onClick={onPersonalize}>{t(state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound')}</button>
     </footer>}
     <div className="beamng-overlay-resize" role="separator" aria-label="Resize overlay" onMouseDown={startResize} />
   </main>
