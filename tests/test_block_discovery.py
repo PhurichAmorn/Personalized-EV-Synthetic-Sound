@@ -195,6 +195,20 @@ class BlockDiscoveryTest(unittest.TestCase):
             d.close()
         self.assertGreater(shown, 8); self.assertGreater(checked, 0)
 
+    def test_pair_17_tuning_check_when_number_one_is_the_start(self):
+        # 2026-11-22 session: #1 was the Bell start and the strongest unmet sound was its own tuned version, so pair 17 was a tuning check
+        d = self.session(seed=2)
+        for _ in range(15): d.feedback(choice='A' if d.champion is None or d.pair[0] == d.champion else 'B')
+        start = d.champion
+        tuned = next(i for i, c in d.candidates.items() if c['origin'].get('kind') in ('broad', 'change') and d._root(i) == start)
+        d._rank_finalists = lambda: setattr(d, 'finalists', [start]); d._ranking_rows = lambda inherit=True: []; d._bt_ranked = lambda: [tuned, start]
+        d.feedback(choice='A' if d.pair[0] == d.champion else 'B')
+        self.assertEqual({k: d.confirm[k] for k in ('kind', 'tuned', 'start')}, {'kind': 'tuning', 'tuned': tuned, 'start': start})
+        self.assertEqual(set(d.pair), {tuned, start})
+        d.feedback(choice='A' if d.pair[0] == tuned else 'B')
+        self.assertEqual(d.export()['tuning_check'], {'pick': tuned, 'start': start, 'chose': 'pick'})
+        d.close()
+
     def test_both_good_marks_both_liked(self):
         d = self.session(); d.feedback(choice='A'); pair = list(d.pair); d.feedback(choice='good')
         liked = {x['id'] for x in d.export()['liked']}

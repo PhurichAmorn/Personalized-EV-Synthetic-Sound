@@ -1749,9 +1749,10 @@ class BlockDiscovery(SoundMapDiscovery):
             self._rank_finalists()
             if self.finalists:
                 first=self.finalists[0];met={j for r in self._ranking_rows() if first in r['pair'] for j in r['pair']};root=self._root(first)
-                if root!=first:self.confirm={'first':first,'second':root,'kind':'tuning'};self.rematch=[first,root];return []
+                if root!=first:self.confirm={'first':first,'second':root,'kind':'tuning','tuned':first,'start':root};self.rematch=[first,root];return []
                 second=next((i for i in self._bt_ranked() if i not in met and self._distinct(first,i)),self.finalists[1] if len(self.finalists)>1 else None)
-                if second:self.confirm={'first':first,'second':second};self.rematch=[first,second];return []
+                if second:  # the strongest unmet sound can be the tuned version of #1 (the #1 is its start): that is a tuning check too (2026-11-22 session)
+                    self.confirm={'first':first,'second':second,**({'kind':'tuning','tuned':second,'start':first} if self._root(second)==first else {})};self.rematch=[first,second];return []
         best=self.champion;here=self._sound(best);self._sample();self.check_parent=best
         heard=[self._sound(i) for r in self._choices() for i in r['pair']]
         def ok(r,g,words):
@@ -1794,7 +1795,7 @@ class BlockDiscovery(SoundMapDiscovery):
         data['table']={'checked':bool(self.table),'created':(self.table or {}).get('created')}
         c=self.confirm
         if c and c.get('kind')=='tuning' and rows and set(rows[-1]['pair'])=={c['first'],c['second']}:  # blind check of the tuned pick against its untuned start
-            r=rows[-1];data['tuning_check']={'pick':c['first'],'start':c['second'],'chose':'pick' if r['winner']==c['first'] else 'start' if r['winner']==c['second'] else r['choice']}
+            r=rows[-1];data['tuning_check']={'pick':c['tuned'],'start':c['start'],'chose':'pick' if r['winner']==c['tuned'] else 'start' if r['winner']==c['start'] else r['choice']}
         data['note']=('Building-block search (2026-11-21, broad version). A sound is a body texture (Soft, Blocks, Electric, Glass), a top texture '
             'for the 3 upper octave layers (Glass, Electric, Blocks, Plain, Synth, Bell synth, Moody), an optional partner style on the highest layer (9 mixes heard as good), a top level (soft/medium/strong), synth knobs when the top '
             'is a synth (buzz off/strong, chord on/off, bell, vowel), pitch (47-119 Hz), brightness (measured cruise sharpness); space fixed at large. '
