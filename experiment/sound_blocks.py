@@ -140,6 +140,10 @@ def nearest_entry(table, sound):
     k = key(sound)
     if k in table['entries']: return table['entries'][k]
     s = full(sound)
+    # Rows not measured yet stand in for their closest relative: a partner mix for its main style alone, Moody for Synth with the chord
+    # (the same voice; Moody adds ensemble). ponytail: estimates until the sweep adds the real rows.
+    if s['partner']: return nearest_entry(table, {**s, 'partner': None})
+    if s['top'] == 'moody': return nearest_entry(table, {**s, 'top': 'synth', 'chord': 'on'})
     def cost(entry_key):
         e = dict(zip(('body', 'top', 'level', 'pitch', 'movement'), entry_key.split('|')[:5]))
         return (e['top'] != s['top']) * 10 + (e['body'] != s['body']) + (e['level'] != s['level']) + abs(int(e['pitch']) - s['pitch']) + (e['movement'] != s['movement']) * 2 \

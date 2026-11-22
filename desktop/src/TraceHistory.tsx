@@ -42,11 +42,12 @@ function pairReasons(session: Session, t: T) {
   session.history.forEach((row, index) => {
     const reasons: Record<string, string> = {}
     for (const id of row.pair) {
-      const c = session.candidates[id], origin = c?.origin ?? {}, style = c ? styleOf(c.recipe) : null, tag = style ? ` · ${style}` : ''
+      const c = session.candidates[id], origin = c?.origin ?? {}, blocks = (c?.recipe as { blocks?: { top: string } } | undefined)?.blocks
+      const style = blocks ? blocks.top : c ? styleOf(c.recipe) : null, tag = style ? ` · ${style}` : ''  // block sounds: their own top, not the old sound-map style groups
       if (lastWinner?.id === id) { reasons[id] = t('Your pick from pair {n}, defending', { n: lastWinner.pair }); continue }
       const move = origin.move && origin.move !== 'original' ? origin.move : null
       reasons[id] = origin.kind === 'motion' ? t('Same sound, {motion}', { motion: t(origin.motion === 'evolving' ? 'Evolving' : 'Rising') })
-        : origin.kind === 'opening' ? t('Opening: typical sound') + tag
+        : origin.kind === 'opening' ? (blocks ? origin.summary ?? t('Opening: typical sound') + tag : t('Opening: typical sound') + tag)
         : origin.kind === 'region' ? t('Styles compete') + tag
         : origin.kind === 'challenger' ? t('Challenger from your leading styles') + tag
         : origin.kind === 'variation' ? (move ? `${t('{move} version of your pick', { move })}${move.split('+').some(m => (credit[m] ?? 0) > 0) ? ` · '${move.split('+').filter(m => (credit[m] ?? 0) > 0).join("', '")}' won before` : ''}` : t('The original of your pick'))

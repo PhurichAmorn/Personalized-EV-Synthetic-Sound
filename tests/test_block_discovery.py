@@ -152,6 +152,30 @@ class BlockDiscoveryTest(unittest.TestCase):
         self.assertTrue(seen)  # partners are reachable in a session
         d.close()
 
+    def test_a_change_that_just_lost_is_not_offered_again_next(self):
+        repeats = broad = 0
+        for seed in range(6):
+            d = self.session(seed=seed)
+            for _ in range(5): d.feedback(choice='A')  # motion, starts, playoff
+            lost = {}
+            for _ in range(7):  # broad pairs: the champion always wins
+                champ = d.champion; new = next(d._sound(i) for i in d.pair if i != champ)
+                if d.candidates[next(i for i in d.pair if i != champ)]['origin'].get('kind') == 'broad':
+                    broad += 1; repeats += any(new.get(k) == v for k, v in lost.items())
+                here = d._sound(champ); lost = {k: v for k, v in new.items() if here.get(k) != v and k != 'brightness'}
+                d.feedback(choice='A' if d.pair[0] == champ else 'B')
+            d.close()
+        self.assertGreater(broad, 20); self.assertLessEqual(repeats, broad // 10)  # rare: only when nothing else is left
+
+    def test_opening_never_pairs_moody_with_pad_and_playoff_is_a_new_pair(self):
+        for seed in range(12):
+            d = self.session(seed=seed); d.feedback(choice='A'); met = []
+            for _ in range(3):
+                tops = {(d._sound(i)['top'], d._sound(i)['chord']) for i in d.pair}
+                self.assertNotEqual(tops, {('moody', 'off'), ('synth', 'on')}); met.append(frozenset(d.pair)); d.feedback(choice='good')
+            self.assertNotIn(frozenset(d.pair), met)  # pair 5 is not a replay of an opening pair
+            d.close()
+
     def test_both_good_marks_both_liked(self):
         d = self.session(); d.feedback(choice='A'); pair = list(d.pair); d.feedback(choice='good')
         liked = {x['id'] for x in d.export()['liked']}

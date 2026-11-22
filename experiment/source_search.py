@@ -1641,7 +1641,7 @@ class BlockDiscovery(SoundMapDiscovery):
         s=sb.full(sound);motion=motion or self.motion
         if self.table:
             entry=sb.nearest_entry(self.table,s);cutoff=sb.cutoff_for(entry,s['brightness'])
-            if not sb.safe(entry,cutoff,('rise',) if motion=='rise' else ('rise','evolving')):return None
+            if not sb.safe(entry,cutoff,('rise',)):return None  # Rising decides for both motions (as GATE in drive.py): Evolving's F fails come from its own stage loop
             s['brightness']=round(sb.sharpness_at(entry,cutoff),2)
         else:cutoff=round(2000*4**((s['brightness']-.5)/.4))  # rough: about 0.10 acum per 1.4x
         voice,fx=sb.build(s,cutoff)
@@ -1704,6 +1704,9 @@ class BlockDiscovery(SoundMapDiscovery):
         rows=rows[mp:]
         if step==0:
             starts=self._starts();self.rng.shuffle(starts)
+            names=[n for n,_ in starts]  # Moody and Synth pad differ only by ensemble (spectrum gap 0): never in the same opening pair (2026-11-22)
+            if 'moody' in names and 'pad' in names and names.index('moody')//2==names.index('pad')//2:
+                i=names.index('pad');j=(i+2)%len(starts);starts[i],starts[j]=starts[j],starts[i]
             self.opening=[i for i in (self._add_block(s,'opening',f'Start: {name}') for name,s in starts) if i]
         if step<BLOCK_OPENING-1 and 2*step+1<len(self.opening):self.rematch=self.opening[2*step:2*step+2];return []
         if step==BLOCK_OPENING-1 and len(self.opening)>4:  # starts 5 and 6; a lone fifth (a start left out by the table) meets the best so far
@@ -1711,9 +1714,10 @@ class BlockDiscovery(SoundMapDiscovery):
         winners=set()
         for r in rows[:BLOCK_OPENING]:winners|={r['winner']} if r['winner'] else set(r['pair']) if r['choice']=='good' else set()
         winners=[i for i in self._bt_ranked() if i in winners]
-        if step==BLOCK_OPENING:
-            pair=(winners+[i for i in self._bt_ranked() if i not in winners])[:2]
-            if len(pair)==2:self.rematch=pair;return []
+        if step==BLOCK_OPENING:  # the two best winners that have not met yet (a Both good pair made both winners and was replayed, 2026-11-22)
+            order=winners+[i for i in self._bt_ranked() if i not in winners];met={frozenset(r['pair']) for r in rows}
+            pair=next(([a,b] for n,a in enumerate(order) for b in order[n+1:] if frozenset((a,b)) not in met),None)
+            if pair:self.rematch=pair;return []
         if step==BLOCK_REPLAY and len(rows)>BLOCK_OPENING and len(set(rows[BLOCK_OPENING]['pair']))==2:
             old=rows[BLOCK_OPENING]['pair'];self.repeats.append({'at':self.completed,'of':mp+BLOCK_OPENING,'kind':'playoff','pair':old[::-1]})
             self._repeat_order=old[::-1];self.rematch=list(old);return []
@@ -1743,6 +1747,9 @@ class BlockDiscovery(SoundMapDiscovery):
         if BLOCK_BIG[0]<=step<=BLOCK_BIG[1]:return single(('pitch','brightness'))+single(BLOCK_BROAD_GROUPS)
         # Broad (pairs 6-13): 2 blocks changed at once, so every pair is clearly different. Candidates are drawn at random, then ordered by a
         # Thompson sample of the taste plus how far each is from everything heard (areas not heard yet come first).
+        last=rows[-1] if rows else {};lost={}
+        if last.get('winner') in last.get('pair',()):  # what the losing sound of the last pair changed (2026-11-22: Electric body offered twice in a row)
+            w,l=self._sound(last['winner']),self._sound(next(i for i in last['pair'] if i!=last['winner']));lost={k:v for k,v in l.items() if w.get(k)!=v and k!='brightness'}
         out=[]
         for _ in range(300):
             x,words,groups=dict(here),[],self.rng.sample(BLOCK_BROAD_GROUPS,2)
@@ -1752,7 +1759,7 @@ class BlockDiscovery(SoundMapDiscovery):
             r=self._recipe(x)
             if r is None or len(words)<2 or sum(r['blocks'][k]!=here[k] for k in here)<2:continue
             if any(w in ('darker','brighter') for w in words) and (not self.table or abs(r['blocks']['brightness']-here['brightness'])<BLOCK_BRIGHT_STEP-.03):continue
-            far=min((sum(r['blocks'][k]!=h[k] for k in h) for h in heard),default=9)
+            far=min((sum(r['blocks'][k]!=h[k] for k in h) for h in heard),default=9)-sum(r['blocks'].get(k)==v for k,v in lost.items())  # a change that just lost is not offered again straight away
             out.append((r,{'kind':'broad','groups':groups,'parent':best,'summary':'Broad: '+', '.join(words),'far':far}))
         out.sort(key=lambda m:-(self._sampled(m[0])+.5*m[1]['far']))
         return out+single(BLOCK_BROAD_GROUPS)
