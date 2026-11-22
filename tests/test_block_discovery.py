@@ -37,7 +37,7 @@ class BlockDiscoveryTest(unittest.TestCase):
         self.assertEqual(d.motion, 'evolving'); self.assertEqual(d.pairs, 17)
         starts = set()
         for _ in range(3): starts |= {json.dumps(d._sound(i), sort_keys=True) for i in d.pair}; rows.append(list(d.pair)); d.feedback(choice='A')
-        self.assertEqual(len(starts), 5)  # pairs 2-4: the five starts (the fifth meets the best of pairs 3-4)
+        self.assertEqual(len(starts), 6)  # pairs 2-4: the six starts, two new ones per pair
         playoff = list(d.pair); winners = {r[0] for r in rows}
         self.assertTrue(set(playoff) <= winners)  # pair 5: opening winners
         d.feedback(choice='A')
@@ -112,6 +112,28 @@ class BlockDiscoveryTest(unittest.TestCase):
             for b in d.finalists:
                 if a != b: self.assertTrue(d._distinct(a, b))
         d.close()
+
+    def test_champion_beaten_just_before_the_replay_is_replaced(self):
+        d = self.session()
+        for _ in range(12): d.feedback(choice='A')  # through pair 12
+        a, b = d.pair; champ = d.champion; challenger = b if a == champ else a
+        d.feedback(choice='A' if d.pair[0] == challenger else 'B')  # pair 13: the challenger wins
+        d.feedback(choice='A')  # pair 14: the replay
+        o = d.candidates[next(i for i in d.pair if d.candidates[i]['origin'].get('parent'))]['origin']
+        self.assertEqual(o['parent'], challenger)  # pair 15 starts from the pair-13 winner
+        d.close()
+
+    def test_loudness_from_the_table_sets_playback_gain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'table.json'; fake_table(path)
+            t = json.loads(path.read_text())
+            for k, e in t['entries'].items(): e['sones'] = [4.5] * 4 if sb.full(e['sound'])['top'] == 'glass' else [9.] * 4
+            t['loudness'] = {'target_sones': 9.}; path.write_text(json.dumps(t))
+            d = self.session(path)
+            for i in d.pair:
+                r = d.candidates[i]['recipe']
+                self.assertAlmostEqual(r['fx']['gain'], 10 ** .5 if r['blocks']['top'] == 'glass' else 1, places=3)  # half as loud: +10 dB
+            d.close()
 
     def test_both_good_marks_both_liked(self):
         d = self.session(); d.feedback(choice='A'); pair = list(d.pair); d.feedback(choice='good')

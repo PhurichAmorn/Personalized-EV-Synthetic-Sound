@@ -11,7 +11,8 @@ import json
 from pathlib import Path
 
 BODIES = {'soft': 0, 'blocks': 11, 'electric': 9, 'glass': 3}  # stackVoice.ts STACK_TEXTURES index
-TOPS = {'glass': 3, 'electric': 9, 'blocks': 11, 'plain': 0, 'synth': 10, 'bell': 10}  # 'bell' = Bell synth: the synth voice with glass bell modes
+TOPS = {'glass': 3, 'electric': 9, 'blocks': 11, 'plain': 0, 'synth': 10, 'bell': 10, 'moody': 10}  # 'bell' = Bell synth: the synth voice with glass bell modes;
+# 'moody' = the synth voice on a minor chord with ensemble (detuned copies) on the upper layers: fixed settings, no synth knobs
 TOP_LEVELS = {'soft': .35, 'medium': .49, 'strong': .8}  # stack 'fall': each layer's level relative to the one below
 PITCHES = [round(75 * 2 ** (k * 4 / 12), 1) for k in (-2, -1, 0, 1, 2)]  # 4-semitone steps (always heard), 47-119 Hz inside 41-130
 CUTOFFS = [800, 1500, 2800, 5200]  # outer low-pass points measured by the sweep; brightness between them is interpolated
@@ -23,6 +24,8 @@ CHORDS = {'off': {}, 'on': {'chord': .8, 'chordType': 1, 'width': 1}}  # minor c
 _OFF = dict(vowel=0, vowelShape=.5, fundamental=1, whine=0, whineRatio=8.75, bellModes=0, detune=0, chordType=0, lowDetune=0, lowCut=0, width=0)
 SYNTH = {**_OFF, 'brightness': .45, 'hollow': .2, 'bell': 0, 'air': 0, 'softTop': 1800, 'chord': 0}
 BELL = {**SYNTH, 'hollow': 1, 'bell': 1, 'bellModes': 1}  # 'Bell synth': heard as a light electric shimmer (knob test 2026-11-21)
+MOODY = {**SYNTH, **CHORDS['on']}
+ENSEMBLE = 12  # cents, Moody top only (knob test 2026-11-22: ensemble good on Synth, not on Glass; resonance, drift and pulse not heard)
 # Blocks voice from pool sound f41ca6c825 with its noise removed (noise mix .55 was heard as weird noise, 2026-11-21).
 BLOCKS = {'shape': {'rootRatio': .9843, 'slope': .8841, 'evenGain': .1779, 'peak1Hz': 343.07, 'peak1Gain': 2.114, 'peak2Hz': 2596.9, 'peak2Gain': .2036,
                     'peakWidth': .6725, 'cutoff': 464.1, 'inharm': .0053, 'fmMix': 0, 'fmRatio': 6.461, 'fmIndex': 2.461, 'noiseMix': 0,
@@ -35,8 +38,10 @@ DEFAULT = {'body': 'soft', 'top': 'glass', 'level': 'medium', 'buzz': 0, 'chord'
            'pitch': 2, 'brightness': .5, 'space': 'large', 'movement': 'still'}
 # Starts: the styles kept by ear (style auditions 2026-11-21), written as blocks. Pure is the Plain top (sine layers, 0.34 acum).
 # Moody synth and Synth became one 'pad' start: they differed only in chord type, heard as the same (first session, 2026-11-21).
-STARTS = {'glass': {'top': 'glass'}, 'pure': {'top': 'plain'}, 'pad': {'top': 'synth', 'chord': 'on'}, 'digital': {'top': 'blocks'}, 'bell': {'top': 'bell'}}
-NAMES = {'glass': 'Glass', 'electric': 'Electric', 'blocks': 'Blocks', 'plain': 'Plain', 'synth': 'Synth', 'bell': 'Bell synth', 'soft': 'Soft'}
+# Moody returned as its own start with ensemble (moody compare 2026-11-22: kept beside Glass and Synth pad).
+STARTS = {'glass': {'top': 'glass'}, 'pure': {'top': 'plain'}, 'pad': {'top': 'synth', 'chord': 'on'}, 'digital': {'top': 'blocks'}, 'bell': {'top': 'bell'},
+          'moody': {'top': 'moody'}}
+NAMES = {'glass': 'Glass', 'electric': 'Electric', 'blocks': 'Blocks', 'plain': 'Plain', 'synth': 'Synth', 'bell': 'Bell synth', 'moody': 'Moody', 'soft': 'Soft'}
 
 
 def full(sound):
@@ -50,6 +55,7 @@ def has_synth(sound):
 
 def synth_settings(sound):
     s = full(sound)
+    if s['top'] == 'moody': return dict(MOODY)
     base = BELL if s['top'] == 'bell' else SYNTH
     knobs = {**BUZZ[s['buzz']], **CHORDS[s['chord']], **({'bell': 1} if s['bell'] else {}), **({'vowel': 1} if s['vowel'] else {})}
     return {**base, **knobs}
@@ -60,9 +66,9 @@ def build(sound, cutoff):
     s = full(sound)
     top = TOPS[s['top']]
     stack = {'rootHz': PITCHES[s['pitch']], 'layers': 4, 'timbres': [BODIES[s['body']], top, top, top, top], 'fall': TOP_LEVELS[s['level']],
-             'depth': .45 if s['chord'] != 'off' else .2,  # a chord pad breathes more slowly and deeply (Moody / Synth starts)
+             'depth': .45 if s['chord'] != 'off' or s['top'] == 'moody' else .2,  # a chord pad breathes more slowly and deeply (Moody / Synth starts)
              'seed': 0, 'fifth': 0, 'shimmer': 0, 'spread': .3, 'peakHz': 99.34, 'peakDb': 3.47, 'cutoff': cutoff, 'twinkle': 0,
-             'trend': TREND, 'plain': synth_settings(s), 'blocks': BLOCKS}
+             'trend': TREND, 'plain': synth_settings(s), 'blocks': BLOCKS, **({'ensemble': ENSEMBLE} if s['top'] == 'moody' else {})}
     fx = {'tone': cutoff, 'res': 2.165, 'tremDepth': 0, 'tremRate': .335, 'chorus': 0, 'vibDepth': MOVEMENTS[s['movement']], 'vibRate': 5.2,
           'bodyHz': 562.4, 'bodyDb': 0, 'pump': 0, 'drift': 0, 'follow': 1, 'gain': 1, **SPACES[s['space']]}
     return {'kind': 'stack', 'stack': stack}, fx
@@ -164,6 +170,18 @@ def sharpness_at(entry, cutoff):
     return entry['S'][-1]
 
 
+MAX_GAIN_DB = 12  # never boost or cut a sound by more than this (as loudness.py)
+
+
+def gain_for(table, entry, cutoff):
+    """Playback gain (linear) that brings this sound to the table's loudness target (median), from its loudness at this low-pass
+    (interpolated in log cutoff, as sharpness_at); 1 when the table has no loudness yet. Sones double per +10 dB."""
+    if 'sones' not in entry or not table.get('loudness'): return 1.
+    import math
+    n = sharpness_at({'S': entry['sones']}, cutoff)
+    db = max(-MAX_GAIN_DB, min(MAX_GAIN_DB, 10 * math.log2(table['loudness']['target_sones'] / max(n, 1e-6))))
+    return round(10 ** (db / 20), 4)
+
 if __name__ == '__main__':  # self-check
     items = sweep_items()
     assert len({k for k, _ in items}) == len(items)
@@ -174,4 +192,7 @@ if __name__ == '__main__':  # self-check
     e = {'S': [.3, .4, .5, .6], 'pass': [{'rise': True}] * 3 + [{'rise': False}]}
     assert cutoff_for(e, .45) and 1500 < cutoff_for(e, .45) < 2800 and cutoff_for(e, .1) == 800 and cutoff_for(e, .9) == 5200
     assert safe(e, 2000) and not safe(e, 5000) and abs(sharpness_at(e, 1500) - .4) < 1e-9
+    t = {'loudness': {'target_sones': 9.}}
+    assert gain_for(t, {'sones': [9.] * 4}, 2000) == 1 and abs(gain_for(t, {'sones': [4.5] * 4}, 2000) - 10 ** .5) < 1e-3  # half as loud: +10 dB
+    assert gain_for({}, e, 2000) == 1 and gain_for(t, {'sones': [.01] * 4}, 2000) == round(10 ** .6, 4)  # no loudness: 1; capped at +12 dB
     print(len(items), 'sweep items; self-check OK;', describe(STARTS['pad']))

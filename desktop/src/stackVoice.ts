@@ -8,7 +8,8 @@
  * and the pool's plain synth and blocks voices as layers. A layer is built in its source's own pitch range and moved up by whole
  * octaves (low-passed, then every 2nd/4th... sample, tiled: exact and seamless); a family layer below its range falls back to strings.
  * Inside a stack every source plays one clean copy (family and blocks ensemble 0, plain synth detune 0): stacked detuned copies beat
- * and were heard as pulsing, "up and down like a jet ski" (listening marks, 2026-11-18). */
+ * and were heard as pulsing, "up and down like a jet ski" (listening marks, 2026-11-18). Exception: `ensemble`, small fixed detune on the
+ * upper layers only (Moody top, 12 cents), heard as good on the synth texture (knob test 2026-11-22). */
 import { createSourceStems, DEFAULT_SOURCE_CONTROLS, type SourceFamily, type SourceShape, type SourceControls } from './sourceDesigner'
 import { createPlainVoices, EXTRAS_OFF, type PlainParams } from './plainSource'
 import { renderRecipe } from './sourceRecipe'
@@ -26,6 +27,7 @@ export type StackParams = {
   twinkle?: number      // sparkle: bell pings per loop
   trend?: StackTrend    // roles (2026-11-18): body / middle / top players each follow the drive their own way; absent = the old layout and one level for all
   plain?: Partial<PlainParams>                                // texture 10: the plain synth voice (its rootHz is set per layer)
+  ensemble?: number     // cents: two detuned copies (+-) of every upper layer; the body stays one clean copy (Moody top, knob test 2026-11-22: good on Synth)
   blocks?: { shape: SourceShape; controls: SourceControls }  // texture 11: the blocks voice (its rootRatio is set per layer)
 }
 /** Per player (stem): its level at rest and at full drive (0-1), and what drives it: 0 = the pedal, 1 = the speed. Body = lowest layer,
@@ -113,16 +115,19 @@ export function stackStems(p: StackParams): Float32Array[][] {
   }
   const layers = Math.max(1, Math.min(5, Math.round(p.layers)))
   for (let k = 0; k < layers; k++) {
-    const f = grid(p.rootHz * 2 ** k), level = p.fall ** k, cycles = swell[k]
+    const copies = k > 0 && p.ensemble ? [[0, 1, 0], [-p.ensemble, .8, .31], [p.ensemble, .8, .67]] : [[0, 1, 0]]  // [cents, level, phase]
+    for (const [cents, gain, phase] of copies) {
+    const f = grid(p.rootHz * 2 ** k * 2 ** (cents / 1200)), level = p.fall ** k * gain, cycles = swell[k]
     const stem = k === 0 ? 0 : p.trend ? (k === layers - 1 ? 2 : 1) : k < 3 ? 1 : 2  // with roles the top layer is the top player, whatever the layer count
     const t = Math.round(p.timbres[k] ?? 0), loop = t >= TIMBRES.length ? texture(t, f, p, k) : null
     if (loop) {  // as loud as a plain layer at this level (RMS level/sqrt 2), with the layer's own swell
       const rms = Math.sqrt(loop[0].reduce((s, v) => s + v * v, 0) / FRAMES) || 1, scale = level / Math.SQRT2 / rms
       for (let c = 0; c < 2; c++) for (let i = 0; i < FRAMES; i++)
         stems[stem][c][i] += loop[c][i] * scale * (1 - p.depth / 2 + p.depth / 2 * Math.sin(2 * Math.PI * (cycles * i / FRAMES + k * .43 + c * .25)))
-    } else TIMBRES[t < TIMBRES.length ? t : 1].forEach(([h, a], j) => add(stem, grid(f * h), level * a, cycles, (k * .43 + j * .17) % 1))
+    } else TIMBRES[t < TIMBRES.length ? t : 1].forEach(([h, a], j) => add(stem, grid(f * h), level * a, cycles, (k * .43 + j * .17 + phase) % 1))
     if (f >= 220 && p.fifth > 0) add(2, grid(f * 1.5), level * p.fifth, swell[(k + 2) % 5], (k * .31 + .5) % 1)
     if (k === layers - 1 && p.shimmer > 0) for (const [h, a] of TIMBRES[3]) add(2, grid(f * 2 * h), level * p.shimmer * a, swell[(k + 1) % 5], (k * .7 + h * .1) % 1)
+    }
   }
   const peak = Math.max(...stems.flatMap(s => s.map(c => c.reduce((m, v) => Math.max(m, Math.abs(v)), 0))))
   const total = Math.max(1e-9, peak * 3)  // the three stems are summed by the players
