@@ -35,7 +35,12 @@ BLOCKS = {'shape': {'rootRatio': .9843, 'slope': .8841, 'evenGain': .1779, 'peak
 TREND = {'rest': [.9206, .3494, .9367], 'full': [.9953, .8371, .8221], 'mix': [.9565, .3234, .4426]}
 
 DEFAULT = {'body': 'soft', 'top': 'glass', 'level': 'medium', 'buzz': 0, 'chord': 'off', 'bell': False, 'vowel': False,
-           'pitch': 2, 'brightness': .5, 'space': 'large', 'movement': 'still'}
+           'pitch': 2, 'brightness': .5, 'space': 'large', 'movement': 'still', 'partner': None}
+# Partner: a second style on the highest layer (layer 4) only, kept where heard as good (mixed-top tests 1-2, 2026-11-22). Two layers sounded
+# nice on Moody but one keeps each style's own character; Moody + Electric, Digital + Glass were worse; Electric's partners and Synth pad +
+# Digital were not heard. A sound has one synth voice, so a synth-voice main top only takes non-synth partners.
+PARTNERS = {'moody': ('glass',), 'glass': ('moody', 'synth'), 'blocks': ('bell',), 'bell': ('glass', 'blocks'), 'plain': ('glass', 'moody'), 'synth': ('glass',)}
+PARTNER_LAYER = 3  # timbres index of layer 4
 # Starts: the styles kept by ear (style auditions 2026-11-21), written as blocks. Pure is the Plain top (sine layers, 0.34 acum).
 # Moody synth and Synth became one 'pad' start: they differed only in chord type, heard as the same (first session, 2026-11-21).
 # Moody returned as its own start with ensemble (moody compare 2026-11-22: kept beside Glass and Synth pad).
@@ -56,6 +61,8 @@ def has_synth(sound):
 def synth_settings(sound):
     s = full(sound)
     if s['top'] == 'moody': return dict(MOODY)
+    if not has_synth(s) and s['partner'] in ('synth', 'bell', 'moody'):  # a synth-voice partner on a non-synth top brings its own settings
+        return synth_settings({'top': s['partner'], 'chord': 'on' if s['partner'] == 'synth' else 'off'})
     base = BELL if s['top'] == 'bell' else SYNTH
     knobs = {**BUZZ[s['buzz']], **CHORDS[s['chord']], **({'bell': 1} if s['bell'] else {}), **({'vowel': 1} if s['vowel'] else {})}
     return {**base, **knobs}
@@ -65,10 +72,13 @@ def build(sound, cutoff):
     """Block sound + outer low-pass (Hz) -> (voice, fx) as mapVoice.ts / drive.py play them."""
     s = full(sound)
     top = TOPS[s['top']]
-    stack = {'rootHz': PITCHES[s['pitch']], 'layers': 4, 'timbres': [BODIES[s['body']], top, top, top, top], 'fall': TOP_LEVELS[s['level']],
-             'depth': .45 if s['chord'] != 'off' or s['top'] == 'moody' else .2,  # a chord pad breathes more slowly and deeply (Moody / Synth starts)
+    timbres = [BODIES[s['body']], top, top, top, top]
+    if s['partner']: timbres[PARTNER_LAYER] = TOPS[s['partner']]
+    pad = s['chord'] != 'off' or 'moody' in (s['top'], s['partner']) or (s['partner'] == 'synth' and not has_synth(s))
+    stack = {'rootHz': PITCHES[s['pitch']], 'layers': 4, 'timbres': timbres, 'fall': TOP_LEVELS[s['level']],
+             'depth': .45 if pad else .2,  # a chord pad breathes more slowly and deeply (Moody / Synth starts)
              'seed': 0, 'fifth': 0, 'shimmer': 0, 'spread': .3, 'peakHz': 99.34, 'peakDb': 3.47, 'cutoff': cutoff, 'twinkle': 0,
-             'trend': TREND, 'plain': synth_settings(s), 'blocks': BLOCKS, **({'ensemble': ENSEMBLE} if s['top'] == 'moody' else {})}
+             'trend': TREND, 'plain': synth_settings(s), 'blocks': BLOCKS, **({'ensemble': ENSEMBLE} if 'moody' in (s['top'], s['partner']) else {})}
     fx = {'tone': cutoff, 'res': 2.165, 'tremDepth': 0, 'tremRate': .335, 'chorus': 0, 'vibDepth': MOVEMENTS[s['movement']], 'vibRate': 5.2,
           'bodyHz': 562.4, 'bodyDb': 0, 'pump': 0, 'drift': 0, 'follow': 1, 'gain': 1, **SPACES[s['space']]}
     return {'kind': 'stack', 'stack': stack}, fx
@@ -77,7 +87,8 @@ def build(sound, cutoff):
 def describe(sound):
     """Plain words, shown to the listener: 'Soft body · Glass top (medium) · 75 Hz · chord minor'."""
     s = full(sound)
-    words = [f"{NAMES[s['body']]} body", f"{NAMES[s['top']]} top ({s['level']})", f"{PITCHES[s['pitch']]:g} Hz", f"brightness {s['brightness']:.2f}"]
+    words = [f"{NAMES[s['body']]} body", f"{NAMES[s['top']]} top ({s['level']})" + (f" + {NAMES[s['partner']]} on top layer" if s['partner'] else ''),
+             f"{PITCHES[s['pitch']]:g} Hz", f"brightness {s['brightness']:.2f}"]
     if has_synth(s):
         words += [w for w in (('buzz ' + ('some', 'strong')[s['buzz'] - 1]) if s['buzz'] else '', 'chord' if s['chord'] != 'off' else '',
                               'bell' if s['bell'] else '', 'vowel' if s['vowel'] else '') if w]
@@ -88,7 +99,7 @@ def key(sound):
     """Table key of the parts the sweep measured (brightness and space are set on top)."""
     s = full(sound)
     synth = f"|b{s['buzz']}c{s['chord']}{'B' if s['bell'] else ''}{'V' if s['vowel'] else ''}" if has_synth(s) else ''
-    return f"{s['body']}|{s['top']}|{s['level']}|{s['pitch']}|{s['movement']}{synth}"
+    return f"{s['body']}|{s['top']}|{s['level']}|{s['pitch']}|{s['movement']}{synth}" + (f"|p{s['partner']}" if s['partner'] else '')
 
 
 def sweep_items():
@@ -101,6 +112,11 @@ def sweep_items():
         for t in TOPS:
             for lv in TOP_LEVELS:
                 for p in range(len(PITCHES)): add({'body': b, 'top': t, 'level': lv, 'pitch': p})
+    for t, ps in PARTNERS.items():  # partners at 3 pitches (knobs off), as the synth knobs; other pitches and knobs use the nearest entry
+        for p in ps:
+            for b in BODIES:
+                for lv in TOP_LEVELS:
+                    for pi in (0, 2, 4): add({'body': b, 'top': t, 'level': lv, 'pitch': pi, 'partner': p})
     for t in ('synth', 'bell'):
         for buzz in (0, 2):  # the session moves buzz off <-> strong only
             for ch in CHORDS:
@@ -189,6 +205,8 @@ if __name__ == '__main__':  # self-check
     assert v['stack']['timbres'][1] == 10 and v['stack']['plain']['chordType'] == 1 and fx['tone'] == 2000
     assert gap([0] * 9, [-3.5] * 9) == .35
     assert build({'top': 'bell'}, 800)[0]['stack']['plain']['bellModes'] == 1
+    v = build({'top': 'glass', 'partner': 'moody'}, 2000)[0]['stack']; assert v['timbres'] == [0, 3, 3, 10, 3] and v['ensemble'] == ENSEMBLE and v['plain']['chord'] == .8
+    assert all(t not in ('synth', 'bell', 'moody') or not set(ps) & {'synth', 'bell', 'moody'} for t, ps in PARTNERS.items())  # one synth voice
     e = {'S': [.3, .4, .5, .6], 'pass': [{'rise': True}] * 3 + [{'rise': False}]}
     assert cutoff_for(e, .45) and 1500 < cutoff_for(e, .45) < 2800 and cutoff_for(e, .1) == 800 and cutoff_for(e, .9) == 5200
     assert safe(e, 2000) and not safe(e, 5000) and abs(sharpness_at(e, 1500) - .4) < 1e-9

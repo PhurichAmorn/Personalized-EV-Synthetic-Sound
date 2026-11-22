@@ -27,7 +27,8 @@ export type StackParams = {
   twinkle?: number      // sparkle: bell pings per loop
   trend?: StackTrend    // roles (2026-11-18): body / middle / top players each follow the drive their own way; absent = the old layout and one level for all
   plain?: Partial<PlainParams>                                // texture 10: the plain synth voice (its rootHz is set per layer)
-  ensemble?: number     // cents: two detuned copies (+-) of every upper layer; the body stays one clean copy (Moody top, knob test 2026-11-22: good on Synth)
+  ensemble?: number     // cents: two detuned copies (+-) of every upper synth layer (texture 10); the body and other textures stay one clean copy
+                        // (Moody, knob test 2026-11-22: good on Synth, worse on Glass)
   blocks?: { shape: SourceShape; controls: SourceControls }  // texture 11: the blocks voice (its rootRatio is set per layer)
 }
 /** Per player (stem): its level at rest and at full drive (0-1), and what drives it: 0 = the pedal, 1 = the speed. Body = lowest layer,
@@ -115,7 +116,7 @@ export function stackStems(p: StackParams): Float32Array[][] {
   }
   const layers = Math.max(1, Math.min(5, Math.round(p.layers)))
   for (let k = 0; k < layers; k++) {
-    const copies = k > 0 && p.ensemble ? [[0, 1, 0], [-p.ensemble, .8, .31], [p.ensemble, .8, .67]] : [[0, 1, 0]]  // [cents, level, phase]
+    const copies = k > 0 && p.ensemble && Math.round(p.timbres[k] ?? 0) === 10 ? [[0, 1, 0], [-p.ensemble, .8, .31], [p.ensemble, .8, .67]] : [[0, 1, 0]]  // [cents, level, phase]
     for (const [cents, gain, phase] of copies) {
     const f = grid(p.rootHz * 2 ** k * 2 ** (cents / 1200)), level = p.fall ** k * gain, cycles = swell[k]
     const stem = k === 0 ? 0 : p.trend ? (k === layers - 1 ? 2 : 1) : k < 3 ? 1 : 2  // with roles the top layer is the top player, whatever the layer count

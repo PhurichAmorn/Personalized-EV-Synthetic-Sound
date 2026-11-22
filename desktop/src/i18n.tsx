@@ -176,7 +176,7 @@ export function translate(lang: Lang | null, en: string, values?: Record<string,
 export function useT(): T { const lang = useLang(); return (en, values) => translate(lang, en, values) }
 
 /** Building-block sound in plain words, in the chosen language (the backend label is English). */
-type Blocks = { body: string; top: string; level: string; pitch: number; brightness: number; space: string; buzz?: number; chord?: string; bell?: boolean; vowel?: boolean }
+type Blocks = { body: string; top: string; level: string; pitch: number; brightness: number; space: string; buzz?: number; chord?: string; bell?: boolean; vowel?: boolean; partner?: string | null }
 const PITCHES = [47.2, 59.5, 75, 94.5, 119.1]  // = experiment/sound_blocks.py PITCHES
 const NAMES: Record<string, [string, string]> = { soft: ['Soft', 'ソフト'], blocks: ['Blocks', 'ブロック'], electric: ['Electric', 'エレクトリック'], glass: ['Glass', 'グラス'],
   plain: ['Plain', 'プレーン'], synth: ['Synth', 'シンセ'], bell: ['Bell synth', 'ベルシンセ'], moody: ['Moody', 'ムーディー'] }
@@ -184,7 +184,7 @@ const LEVELS: Record<string, string> = { soft: '弱', medium: '中', strong: '�
 export function describeBlocks(b: Blocks, motion: string | undefined, lang: Lang | null) {
   if (lang !== 'ja') return null
   const synth = b.top === 'synth' || b.top === 'bell'
-  const words = [`ボディ: ${NAMES[b.body]?.[1] ?? b.body}`, `トップ: ${NAMES[b.top]?.[1] ?? b.top}（${LEVELS[b.level] ?? b.level}）`, `${PITCHES[b.pitch] ?? ''} Hz`, `明るさ ${b.brightness.toFixed(2)}`]
+  const words = [`ボディ: ${NAMES[b.body]?.[1] ?? b.body}`, `トップ: ${NAMES[b.top]?.[1] ?? b.top}（${LEVELS[b.level] ?? b.level}）` + (b.partner ? ` + 最上層: ${NAMES[b.partner]?.[1] ?? b.partner}` : ''), `${PITCHES[b.pitch] ?? ''} Hz`, `明るさ ${b.brightness.toFixed(2)}`]
   if (synth && b.buzz) words.push(`バズ ${b.buzz > 1 ? '強' : '弱'}`)
   if (synth && b.chord && b.chord !== 'off') words.push('和音')
   if (synth && b.bell) words.push('ベル')

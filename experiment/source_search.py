@@ -1585,14 +1585,14 @@ BLOCK_REPLAY=12        # pair 14: the playoff pair (pair 5) again, A and B swapp
 BLOCK_GAP_GROUPS=('body','level','synth')  # changes where other settings can cover them, checked against the measured spectrum gap. Not the top
 # texture: swaps were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass .33). Pitch, brightness and
 # space have their own rules: 4 semitones is always heard, brightness is a measured 0.15 acum, reverb changes over time.
-BLOCK_BROAD_GROUPS=('top','body','level','pitch','brightness','space','synth')
+BLOCK_BROAD_GROUPS=('top','partner','body','level','pitch','brightness','synth')  # space fixed at large (2026-11-22: a small change, the listener's choice)
 BLOCK_PER_TOP=2  # final list: at most two sounds with the same top texture (2026-11-22)
-_ONE_HOT=(('body',tuple(sb.BODIES)),('top',tuple(sb.TOPS)),('level',tuple(sb.TOP_LEVELS)),('space',('dry',)),
+_ONE_HOT=(('body',tuple(sb.BODIES)),('top',tuple(sb.TOPS)),('level',tuple(sb.TOP_LEVELS)),('mix',tuple(f'{t}+{p}' for t,ps in sb.PARTNERS.items() for p in ps)),
           ('buzz',(2,)),('chord',('on',)),('bell',(True,)),('vowel',(True,)))
 BLOCK_FEATURE_NAMES=[f'{k}={v}' for k,vs in _ONE_HOT for v in vs]+['pitch','pitch^2','brightness','brightness^2']
 
 def block_features(sound):
-    s=sb.full(sound);zp=(s['pitch']-2)/2;zb=(s['brightness']-.5)/.2
+    s=sb.full(sound);s['mix']=f"{s['top']}+{s['partner']}" if s['partner'] else None;zp=(s['pitch']-2)/2;zb=(s['brightness']-.5)/.2
     return np.array([float(s[k]==v) for k,vs in _ONE_HOT for v in vs]+[zp,zp*zp,zb,zb*zb])
 
 def block_moves(sound,group):
@@ -1601,16 +1601,17 @@ def block_moves(sound,group):
     not heard, 8-semitone jumps with 3 blocks were too large)."""
     s=sb.full(sound);out=[]
     def put(words,**kw):out.append(({**s,**kw},words))
-    if group=='top':[put(f"top: {sb.NAMES[t]}",top=t,**({} if t in ('synth','bell') else {'buzz':0,'chord':'off','bell':False,'vowel':False})) for t in sb.TOPS if t!=s['top']]
+    if group=='top':[put(f"top: {sb.NAMES[t]}",top=t,partner=None,**({} if t in ('synth','bell') else {'buzz':0,'chord':'off','bell':False,'vowel':False})) for t in sb.TOPS if t!=s['top']]
+    if group=='partner':[put(f"top layer: {sb.NAMES[p]}" if p else 'top layer: none',partner=p) for p in (None,*sb.PARTNERS.get(s['top'],())) if p!=s['partner']]
     if group=='body':[put(f"body: {sb.NAMES[b]}",body=b) for b in sb.BODIES if b!=s['body']]
     if group=='level':[put(f"top {v}",level=v) for v in (('soft','strong') if s['level']=='medium' else ('medium',))]
     if group=='pitch':[put('deeper' if d<0 else 'higher',pitch=s['pitch']+d) for d in (-1,1) if 0<=s['pitch']+d<len(sb.PITCHES)]
     if group=='brightness':[put('darker' if d<0 else 'brighter',brightness=round(s['brightness']+d,2)) for d in (-BLOCK_BRIGHT_STEP,BLOCK_BRIGHT_STEP)]
-    if group=='space':put('dry' if s['space']=='large' else 'large space',space='dry' if s['space']=='large' else 'large')
     if group=='synth' and sb.has_synth(s):
         put('buzz off' if s['buzz'] else 'buzz strong',buzz=0 if s['buzz'] else 2)
         put('chord off' if s['chord']!='off' else 'chord on',chord='off' if s['chord']!='off' else 'on')
-        put('bell off' if s['bell'] else 'bell on',bell=not s['bell']);put('vowel off' if s['vowel'] else 'vowel on',vowel=not s['vowel'])
+        if s['top']!='bell':put('bell off' if s['bell'] else 'bell on',bell=not s['bell'])  # Bell synth already has bell on
+        put('vowel off' if s['vowel'] else 'vowel on',vowel=not s['vowel'])
     return out
 
 class BlockDiscovery(SoundMapDiscovery):
@@ -1660,7 +1661,7 @@ class BlockDiscovery(SoundMapDiscovery):
         """Clearly different: another top, or a strong change (body, top level, synth knob, or pitch 8+ semitones). One pitch step and the
         space do not count: final-list #2 and #3 differing only in those sounded alike in Evolving (2026-11-22)."""
         x,y=self._sound(a),self._sound(b)
-        return x['top']!=y['top'] or x['body']!=y['body'] or x['level']!=y['level'] or any(x[k]!=y[k] for k in ('buzz','chord','bell','vowel')) \
+        return x['top']!=y['top'] or x.get('partner')!=y.get('partner') or x['body']!=y['body'] or x['level']!=y['level'] or any(x[k]!=y[k] for k in ('buzz','chord','bell','vowel')) \
             or abs(x['pitch']-y['pitch'])>=2
     def _rank_finalists(self):
         """As SoundMapDiscovery (Bradley-Terry on the answers, heard twice first, a sound that never won left out), kept clearly different
@@ -1768,8 +1769,8 @@ class BlockDiscovery(SoundMapDiscovery):
         data['liked']=[{'id':i,'sound':self._sound(i),'label':self.candidates[i]['label']} for i in liked]
         data['table']={'checked':bool(self.table),'created':(self.table or {}).get('created')}
         data['note']=('Building-block search (2026-11-21, broad version). A sound is a body texture (Soft, Blocks, Electric, Glass), a top texture '
-            'for the 3 upper octave layers (Glass, Electric, Blocks, Plain, Synth, Bell synth, Moody), a top level (soft/medium/strong), synth knobs when the top '
-            'is a synth (buzz off/strong, chord on/off, bell, vowel), pitch (47-119 Hz), brightness (measured cruise sharpness) and space (dry/large). '
+            'for the 3 upper octave layers (Glass, Electric, Blocks, Plain, Synth, Bell synth, Moody), an optional partner style on the highest layer (9 mixes heard as good), a top level (soft/medium/strong), synth knobs when the top '
+            'is a synth (buzz off/strong, chord on/off, bell, vowel), pitch (47-119 Hz), brightness (measured cruise sharpness); space fixed at large. '
             'Built on the spot; offered only if the safe-area table (tools/sound_map/block_sweep.py, full-drive check at 4 low-pass points) passes it '
             '(table.checked false: no table yet, sounds unchecked and no brightness changes). Pair 1 Rising vs Evolving on the Glass start '
             '(Both good or Neither keep Rising); 2-4 the six starts, two per pair (Glass, Pure, Synth pad, Digital, Bell synth, Moody); '

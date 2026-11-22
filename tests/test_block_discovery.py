@@ -119,7 +119,7 @@ class BlockDiscoveryTest(unittest.TestCase):
         a, b = d.pair; champ = d.champion; challenger = b if a == champ else a
         d.feedback(choice='A' if d.pair[0] == challenger else 'B')  # pair 13: the challenger wins
         d.feedback(choice='A')  # pair 14: the replay
-        o = d.candidates[next(i for i in d.pair if d.candidates[i]['origin'].get('parent'))]['origin']
+        o = d.candidates[next(i for i in d.pair if d.candidates[i]['origin'].get('kind') == 'change')]['origin']  # the new sound of pair 15
         self.assertEqual(o['parent'], challenger)  # pair 15 starts from the pair-13 winner
         d.close()
 
@@ -134,6 +134,23 @@ class BlockDiscoveryTest(unittest.TestCase):
                 r = d.candidates[i]['recipe']
                 self.assertAlmostEqual(r['fx']['gain'], 10 ** .5 if r['blocks']['top'] == 'glass' else 1, places=3)  # half as loud: +10 dB
             d.close()
+
+    def test_partners_only_from_the_heard_list_space_fixed_no_bell_on_bell(self):
+        d = self.session(); seen = set()
+        for _ in range(40):
+            if not d.active: break
+            for i in d.pair:
+                s = d._sound(i); v = d.candidates[i]['recipe']['voice']['stack']
+                self.assertEqual(s['space'], 'large')
+                if s['partner']:
+                    seen.add(s['partner'])
+                    self.assertIn(s['partner'], sb.PARTNERS[s['top']])
+                    self.assertEqual(v['timbres'][sb.PARTNER_LAYER], sb.TOPS[s['partner']]); self.assertEqual(v['timbres'][2], sb.TOPS[s['top']])
+                o = d.candidates[i]['origin']
+                if o.get('kind') == 'change' and o['group'] == 'synth' and s['top'] == 'bell': self.assertNotIn('bell', o['summary'])
+            d.feedback(choice='B')
+        self.assertTrue(seen)  # partners are reachable in a session
+        d.close()
 
     def test_both_good_marks_both_liked(self):
         d = self.session(); d.feedback(choice='A'); pair = list(d.pair); d.feedback(choice='good')
