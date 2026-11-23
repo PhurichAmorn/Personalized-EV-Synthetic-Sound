@@ -1648,16 +1648,6 @@ class BlockDiscovery(SoundMapDiscovery):
         if self.table:fx['gain']=sb.gain_for(self.table,entry,cutoff)  # loudness matched (block_loudness.py); 1 until the table has loudness
         return {'version':5,'kind':'map','seed':0,'motion':motion,'cell':sb.key(s),'voice':voice,'fx':fx,'blocks':s,'label':sb.describe(s),'checked':bool(self.table)}
     def _space(self):return []
-    def snapshot(self):
-        data=super().snapshot()
-        with self.lock:data['lastChange']=self._last_change()
-        return data
-    def _last_change(self):
-        """What the last answered pair changed (shown after the answer, never before the listener hears the pair): [{side, text}] for each side that was a change of the champion."""
-        rows=self._choices()
-        if not rows:return None
-        items=[{'side':side,'text':self.candidates[i]['origin']['summary'].split(': ',1)[-1]} for side,i in zip('AB',rows[-1]['pair']) if self.candidates[i].get('origin',{}).get('kind') in ('broad','change')]
-        return {'pair':self.completed,'items':items} if items else None
     def _root(self,ident):
         """The start (or motion sound) a sound was tuned from, by following its parents."""
         seen=set()

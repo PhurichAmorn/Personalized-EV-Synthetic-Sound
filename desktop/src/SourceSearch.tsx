@@ -7,7 +7,7 @@ import { liveStems } from './voiceCache'
 import { describeBlocks, useLang, useT } from './i18n'
 import { playWelcome } from './welcomeSound'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
-export type SourceDiscoveryState = { lastChange?: { pair: number; items: { side: string; text: string }[] } | null; active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
+export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; acceptable?: boolean | null; quarantined: number; checkpoint: boolean }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
 const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
 type Answer = typeof ANSWERS[number][0]
@@ -114,7 +114,6 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
         {nowPlaying && playing && <p className="text-sm text-neutral-200" role="status">{t('▶ Now playing:')} <strong>{nowPlaying.label}</strong></p>}
         {preparing && <p className="loading-note text-xs text-neutral-400" role="status"><span className="spinner" aria-hidden="true" />{t('Preparing…')}</p>}
       </div>}
-      {discovery?.active && discovery.lastChange && <p className="mt-2 text-xs text-neutral-400">{t('Last pair · {items}', { items: discovery.lastChange.items.map(item => `${item.side}: ${item.text}`).join(' · ') })}</p>}
       {discovery?.active ? <>
         {final && <p className="mt-3 text-sm text-neutral-300" role="status">{t('Final round: your four finalists, compared head to head. Pick the one you prefer.')}</p>}
         {!discovery.busy && <>

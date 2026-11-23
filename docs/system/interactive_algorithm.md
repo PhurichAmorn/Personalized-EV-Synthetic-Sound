@@ -72,7 +72,6 @@ Added 2026-11-21. No pool: each sound is built on the spot from building blocks 
   - Pair 14 replays pair 4 with A and B swapped.
   - Pairs 15-16: one medium change of the champion, pitch or brightness first. If both are used up or fail the table, any other change is used.
   - Pair 17 plays the shortlist #1 against the start it was tuned from (`tuning_check` in the export: did the tuning beat the untuned start), or against the strongest sound it has not met when #1 is a start.
-  - After each answer the page shows what that pair changed (`lastChange`), e.g. "Sound B: higher, top layer: Glass", so the listener knows which change was heard.
 - **Final list.** Bradley-Terry on the answers alone, at most 2 sounds per top texture, each clearly different from the others: another top, body, top level or synth knob, or 8+ semitones. One pitch step or the space alone does not count (final-list #2 and #3 differing only in those sounded alike, 2026-11-22).
 - **Export.** `liked` (every winner, and both sounds of a Both good answer), `repeats` (the replay and whether it agreed), `table`, the shortlist and the ranking as in the sound-map search.
 

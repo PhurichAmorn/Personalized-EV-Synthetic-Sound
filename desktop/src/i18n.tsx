@@ -12,6 +12,11 @@ export function setLang(lang: Lang) {
   try { localStorage.setItem(KEY, lang) } catch { /* private window: the choice lasts this visit */ }
   listeners.forEach(listener => listener())
 }
+// Another window (dashboard, overlay, first window) changed the language: follow it, so every open window switches together.
+if (typeof window !== 'undefined') window.addEventListener('storage', event => {
+  if (event.key !== KEY || (event.newValue !== 'en' && event.newValue !== 'ja') || event.newValue === current) return
+  current = event.newValue; listeners.forEach(listener => listener())
+})
 export const useLang = () => useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener) } }, () => current)
 
 // Japanese, keyed by the English text; {name} marks a value filled in by t().
@@ -46,7 +51,6 @@ const JA: Record<string, string> = {
   'Session finished after {n} comparisons.': '{n} 回の比較でセッションを終了しました。',
   '▶ Now playing:': '▶ 再生中：',
   'Preparing…': '準備中…',
-  'Last pair · {items}': '前のペア · {items}',
   'Final round: your four finalists, compared head to head. Pick the one you prefer.': '決勝：4つの候補を直接比較します。好きな方を選んでください。',
   'Sound {x}': 'サウンド {x}',
   'Your sound': 'あなたのサウンド',

@@ -176,24 +176,21 @@ class BlockDiscoveryTest(unittest.TestCase):
             self.assertNotIn(frozenset(d.pair), met)  # pair 4 is not a replay of an opening pair (all four won: Both good)
             d.close()
 
-    def test_pair_17_checks_a_tuned_pick_against_its_untuned_start_and_changes_are_shown(self):
-        checked = shown = 0
+    def test_pair_17_checks_a_tuned_pick_against_its_untuned_start(self):
+        checked = 0
         for seed in range(8):
             d = self.session(seed=seed)
             pick = lambda: 'A' if d.champion is None or d.pair[0] == d.champion else 'B'
             for n in range(1, 17):
                 if n == 5: d.feedback(choice='B' if d.pair[0] == d.champion else 'A')  # first broad pair: the challenger wins, so the champion is tuned
                 else: d.feedback(choice=pick())
-                last = d.snapshot()['lastChange']
-                if n in (5, 6): self.assertTrue(last and last['items'] and all(i['side'] in 'AB' and i['text'] for i in last['items'])); shown += 1
-                if n == 3: self.assertIsNone(d.snapshot()['lastChange'])  # starts changed nothing
             if (d.confirm or {}).get('kind') != 'tuning': d.close(); continue
             first, root = d.pair if d.pair[0] == d.confirm['first'] else d.pair[::-1]
             self.assertEqual(d._root(first), root); self.assertIn(d.candidates[root]['origin']['kind'], ('opening', 'motion')); self.assertNotEqual(first, root)
             d.feedback(choice='A' if d.pair[0] == first else 'B')
             self.assertEqual(d.export()['tuning_check'], {'pick': first, 'start': root, 'chose': 'pick'}); checked += 1
             d.close()
-        self.assertGreater(shown, 8); self.assertGreater(checked, 0)
+        self.assertGreater(checked, 0)
 
     def test_pair_17_tuning_check_when_number_one_is_the_start(self):
         # 2026-11-22 session: #1 was the Bell start and the strongest unmet sound was its own tuned version, so pair 17 was a tuning check
