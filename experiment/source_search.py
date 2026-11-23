@@ -1624,6 +1624,8 @@ class BlockDiscovery(SoundMapDiscovery):
     policy=BLOCK_POLICY
     feature_names=BLOCK_FEATURE_NAMES
     motion_pair_count=1  # one Rising vs Evolving pair (a second one on Synth pad, 2026-11-21, sounded too alike and was removed)
+    adaptive=9  # champion-vs-challenger pairs (5-13); the benchmark stretches it (30 pairs = 22). Replay, the 2 fine-tune pairs and the check follow it.
+    steps=property(lambda s:7+s.adaptive)  # pairs after the motion pair: 16 at 9
     pairs=1+BLOCK_STEPS
     repeats=();_repeat_order=None
     def __init__(self,renderer=None,table_path=sb.TABLE):
@@ -1633,7 +1635,7 @@ class BlockDiscovery(SoundMapDiscovery):
             self.table=sb.load_table(self.table_path)  # ponytail: no table yet (sweep not run): sounds play unchecked, marked in the export
             self.pool=[];self.by_cell={};self.evolving_ok={'all'};self.pool_meta={'source':'sound_blocks','limits':(self.table or {}).get('limits')}
     def start(self,motion=None):
-        with self.lock:self.repeats=[];self._repeat_order=None;self.pool=None;self.pairs=(0 if motion else self.motion_pair_count)+BLOCK_STEPS
+        with self.lock:self.repeats=[];self._repeat_order=None;self.pool=None;self.pairs=(0 if motion else self.motion_pair_count)+self.steps
         super().start(motion)
     def _recipe(self,sound,motion=None):
         """Block sound -> live recipe, or None when the table says it fails the drive check. Brightness becomes the low-pass that the
@@ -1704,7 +1706,7 @@ class BlockDiscovery(SoundMapDiscovery):
                 pair=[self._add_block(starts[name],'motion',f'Motion: {names[m]} ({name})',m) for m in ('rise','evolving')]
                 if None not in pair:self.motion_sets.append(pair)
                 if len(self.motion_sets)==mp:break
-            self.motion_pairs=mp=len(self.motion_sets);self.pairs=mp+BLOCK_STEPS
+            self.motion_pairs=mp=len(self.motion_sets);self.pairs=mp+self.steps
             if not mp:self.motion='rise';return self._proposals()
             self.rematch=self.motion_sets[0];return []
         if mp and self.completed<mp:self.rematch=self.motion_sets[self.completed];return []
@@ -1724,7 +1726,7 @@ class BlockDiscovery(SoundMapDiscovery):
             order=winners+[i for i in self._bt_ranked() if i not in winners];met={frozenset(r['pair']) for r in rows}
             pair=next(([a,b] for n,a in enumerate(order) for b in order[n+1:] if frozenset((a,b)) not in met),None)
             if pair:self.rematch=pair;return []
-        if step==BLOCK_REPLAY and len(rows)>BLOCK_OPENING and len(set(rows[BLOCK_OPENING]['pair']))==2:
+        if step==BLOCK_OPENING+1+self.adaptive and len(rows)>BLOCK_OPENING and len(set(rows[BLOCK_OPENING]['pair']))==2:
             old=rows[BLOCK_OPENING]['pair'];self.repeats.append({'at':self.completed,'of':mp+BLOCK_OPENING,'kind':'playoff','pair':old[::-1]})
             self._repeat_order=old[::-1];self.rematch=list(old);return []
         # Champion (winner stays), first champion and the one after Neither by the answers, as SoundMapDiscovery.
@@ -1752,7 +1754,7 @@ class BlockDiscovery(SoundMapDiscovery):
         def single(gs):
             out=[(r,{'kind':'change','group':g,'parent':best,'summary':f'Change: {w}'}) for g in gs for x,w in block_moves(here,g) if ok(r:=self._recipe(x),g,w)]
             return sorted(out,key=lambda m:-self._sampled(m[0]))
-        if BLOCK_BIG[0]<=step<=BLOCK_BIG[1]:return single(('pitch','brightness'))+single(BLOCK_BROAD_GROUPS)
+        if BLOCK_OPENING+2+self.adaptive<=step<=BLOCK_OPENING+3+self.adaptive:return single(('pitch','brightness'))+single(BLOCK_BROAD_GROUPS)
         # Broad (pairs 6-13): 2 blocks changed at once, so every pair is clearly different. Candidates are drawn at random, then ordered by a
         # Thompson sample of the taste plus how far each is from everything heard (areas not heard yet come first).
         last=rows[-1] if rows else {};lost={}
@@ -1769,12 +1771,14 @@ class BlockDiscovery(SoundMapDiscovery):
             if any(w in ('darker','brighter') for w in words) and (not self.table or abs(r['blocks']['brightness']-here['brightness'])<BLOCK_BRIGHT_STEP-.03):continue
             far=min((sum(r['blocks'][k]!=h[k] for k in h) for h in heard),default=9)-sum(r['blocks'].get(k)==v for k,v in lost.items())  # a change that just lost is not offered again straight away
             out.append((r,{'kind':'broad','groups':groups,'parent':best,'summary':'Broad: '+', '.join(words),'far':far}))
-        out.sort(key=lambda m:-(self._sampled(m[0])+.5*m[1]['far']))
-        return out+single(BLOCK_BROAD_GROUPS)
+        return self._order_broad(out,here)+single(BLOCK_BROAD_GROUPS)
     def _prepare(self):
         super()._prepare()
         if self._repeat_order and set(self.pair)==set(self._repeat_order):self.pair=list(self._repeat_order)
         self._repeat_order=None
+    def _order_broad(self,out,here):
+        """Order of the broad challengers (pairs 5-13); the benchmark's arms replace this (tools/benchmark_blocks.py)."""
+        return sorted(out,key=lambda m:-(self._sampled(m[0])+.5*m[1]['far']))
     def export(self):
         data=super().export();rows=self._choices()
         same=lambda a,b:(a['winner'] is not None and a['winner']==b['winner']) or (a['winner'] is None and a['choice']==b['choice'])
