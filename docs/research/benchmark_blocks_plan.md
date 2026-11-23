@@ -99,7 +99,7 @@ profile-level bootstrap.
 | Arm | Pairs | Purpose |
 |---|---|---|
 | **PBOGP** | Champion vs challenger (as the app) | Preferential Bayesian optimisation: GP preference model (Hamming kernel on blocks, RBF on pitch and brightness; length scales 3, 2 steps, 0.3 acum, fixed, not tuned) with a Laplace fit on the decisive A/B answers; challengers ordered by EUBO. Differs from InfoGain only in the model (kernel instead of linear), so the pair tests the model. |
-| **Duel** | Two model-chosen sounds, no champion | Thompson duel: two posterior draws from the same GP, each one's best sound is one side of the pair (clearly different by the app's rule). Candidates: 400 random table sounds plus all heard. Tests a pair design with no champion. |
+| **Duel** | Two model-chosen sounds, no champion | Thompson duel: two posterior draws from the same GP, each one's best sound is one side of the pair (clearly different by the app's rule). Candidates: 400 sounds drawn at random by block value (uniform over top, body, level, pitch, brightness grid, partner and synth knobs; a sound the table fails is redrawn) plus all heard. The same code runs in the app (`experiment/block_arms.py`). Tests a pair design with no champion. |
 | **Robust** | Champion vs challenger | Current, but the champion is reset to the Bradley-Terry best of everything heard before each broad pair, not the last winner. Tests the noise critique of winner-stays. |
 | **Pairs** | Two random sounds, no champion | No champion and no model. Separates what the tournament structure adds from what the model adds (Random keeps the tournament, Pairs does not). |
 
@@ -108,3 +108,5 @@ Robust minus Current, Duel minus Current, Random minus Pairs, Current minus Pair
 Notes: Duel and Pairs give up the champion that makes the session easy to follow; if they win, the paper reports a trade-off, not a switch.
 Both/Neither answers carry no comparison in the GP; they still drive the app's champion reset in the arms that keep one. Held-out accuracy for
 PBOGP and Duel uses the GP's mean, for the other arms the app's linear model.
+
+Code note (2026-11-23): PBOGP, Duel and Robust, and a Random-challengers session, are also selectable in the app as experimental searches (`blocks-pbo`, `blocks-duel`, `blocks-robust`, `blocks-random`) for listener testing; the benchmark and the app share `experiment/block_arms.py`.

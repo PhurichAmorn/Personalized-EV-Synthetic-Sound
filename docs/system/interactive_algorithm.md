@@ -75,6 +75,8 @@ Added 2026-11-21. No pool: each sound is built on the spot from building blocks 
 - **Final list.** Bradley-Terry on the answers alone, at most 2 sounds per top texture, each clearly different from the others: another top, body, top level or synth knob, or 8+ semitones. One pitch step or the space alone does not count (final-list #2 and #3 differing only in those sounded alike, 2026-11-22).
 - **Export.** `liked` (every winner, and both sounds of a Both good answer), `repeats` (the replay and whether it agreed), `table`, the shortlist and the ranking as in the sound-map search.
 
+- **Experimental variants (2026-11-23, `experiment/block_arms.py`, Search selector "Building blocks: ... (experimental)").** The same session with one change, pairs 5-13 only: `blocks-random` challengers in random order (control); `blocks-robust` the champion is the Bradley-Terry best of everything heard, not the last winner; `blocks-pbo` challengers ordered by EUBO under a GP preference model (Hamming kernel on blocks, RBF on pitch and brightness); `blocks-duel` no champion, two sounds picked by two posterior draws of the same GP from 400 random table-passing sounds plus those heard. Policies `source-blocks-v1-<name>`. Not benchmarked when added; see docs/research/benchmark_blocks_plan.md.
+
 ### Sound-map search (phase 1, `source-map-regions-1`, `RegionMapDiscovery`): selectable per session
 
 Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a

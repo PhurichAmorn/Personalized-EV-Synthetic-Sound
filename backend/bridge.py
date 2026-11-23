@@ -2,6 +2,7 @@
 
 import math
 from audio import SOUND_RECIPES
+from experiment.block_arms import DuelBlocks, PBOBlocks, RandomBlocks, RobustBlocks
 from experiment.source_search import BlockDiscovery, HeardMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
 
@@ -12,7 +13,9 @@ class DesktopBridge:
         # Per session: 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map);
         # 'blocks' = building-block sounds built on the spot (experiment/sound_blocks.py, 2026-11-21).
         # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
-        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery()}
+        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery(),
+                         # experimental pair-selection variants of 'blocks' (experiment/block_arms.py, 2026-11-23): not benchmarked yet
+                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks()}
         self.source_discovery = self.searches['tuning']
         self.history = SourceHistory(self.source_discovery)
 
