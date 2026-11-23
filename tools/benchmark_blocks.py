@@ -108,8 +108,13 @@ def truth():
     return T
 
 
+_ENTRY = {}
+
+
 def bands(table, recipe):
-    e = sb.nearest_entry(table, recipe['blocks']); return np.array(e['bands'][sb.point(recipe['fx']['tone'])], float)
+    k = sb.key(recipe['blocks'])  # nearest_entry scans the whole table for an unmeasured combination: cached (the psycho oracle was 15x slower than the others)
+    if k not in _ENTRY: _ENTRY[k] = sb.nearest_entry(table, recipe['blocks'])
+    return np.array(_ENTRY[k]['bands'][sb.point(recipe['fx']['tone'])], float)
 
 
 def make_oracle(family, seed):
@@ -194,7 +199,81 @@ def summary(rows):
             print(line)
 
 
-if __name__ == '__main__' and sys.argv[1:2] == ['summarize']:  # python -m tools.benchmark_blocks summarize a.csv b.csv ...: combine chunk files
+def load_rows(files):
+    rows = []
+    for f in files:
+        for r in csv.DictReader(open(f)): rows.append({**r, 'profile': int(r['profile']), 'seed': int(r['seed']), 'budget': int(r['budget']), 'top10': int(r['top10']), 'regret': float(r['regret']), 'acc': float(r['acc'])})
+    keys = [(r['oracle'], r['profile'], r['seed'], r['arm'], r['budget'], r['noise']) for r in rows]
+    assert len(keys) == len(set(keys)), 'duplicate sessions in the chunk files'
+    return rows
+
+
+MIN_DIFF = .05  # plan section 5: better = CI above 0 and a difference of at least 5 points
+
+
+def report(rows, noise, boots=2000):
+    """The plan's contrast tables (docs/research/benchmark_blocks_plan.md section 4-5): paired by (profile, seed), profile-level bootstrap 95% CI."""
+    import collections
+    rng = np.random.default_rng(0); cell = collections.defaultdict(dict)
+    for r in rows:
+        if r['noise'] == noise: cell[(r['oracle'], r['budget'], r['profile'], r['seed'])][r['arm']] = r
+    oracles = [o for o in ORACLES if any(k[0] == o for k in cell)]
+    def per_profile(o, b, a, c, metric, ba=None):  # {profile: mean paired difference} for arm a at budget ba (default b) minus arm c at budget b
+        d = collections.defaultdict(list)
+        for (oo, bb, p, s), arms in cell.items():
+            if oo != o or bb != b: continue
+            other = cell.get((o, ba, p, s), {}) if ba else arms
+            if (ba and a in other or not ba and a in arms) and c in arms: d[p].append((other[a] if ba else arms[a])[metric] - arms[c][metric])
+        return {p: np.mean(v) for p, v in d.items()}
+    def ci(sets):  # sets: list of {profile: value}, one per oracle; pooled = mean over oracles of the profile mean
+        arr = [np.array(list(d.values())) for d in sets]
+        if not all(len(x) for x in arr): return None
+        point = np.mean([x.mean() for x in arr]); bs = [np.mean([rng.choice(x, len(x)).mean() for x in arr]) for _ in range(boots)]
+        return point, np.percentile(bs, 2.5), np.percentile(bs, 97.5)
+    def call(lo, hi, pt): return 'BETTER' if lo > 0 and pt >= MIN_DIFF else 'WORSE' if hi < 0 else 'no detectable difference'
+    budgets = sorted({k[1] for k in cell}); n = len({(k[2], k[3]) for k in cell if k[0] == oracles[0] and k[1] == budgets[0]})
+    print(f'noise {noise}; {len(oracles)} oracles; {n} sessions per oracle, budget and arm; rule: BETTER = CI above 0 and difference >= {MIN_DIFF}\n')
+    print('PRIMARY: current minus random, top-10% retrieval'); tally = collections.Counter()
+    for o in oracles:
+        for b in budgets:
+            r = ci([per_profile(o, b, 'current', 'random', 'top10')])
+            if r: tally[call(r[1], r[2], r[0])] += 1; print(f'  {o:12} {b:3}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]  {call(r[1], r[2], r[0])}')
+    print('  tally:', dict(tally))
+    print('\nHEADLINE: current minus random pooled over oracles, top-10%')
+    for b in budgets:
+        r = ci([per_profile(o, b, 'current', 'random', 'top10') for o in oracles]); print(f'  budget {b:3}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]  {call(r[1], r[2], r[0])}')
+    arms = {a for v in cell.values() for a in v}
+    pairs = [(a, c) for a, c in (('infogain', 'current'), ('iec', 'current'), ('pbogp', 'current'), ('pbogp', 'infogain'), ('robust', 'current'), ('duel', 'current'), ('random', 'pairs'), ('current', 'pairs')) if a in arms and c in arms]
+    for metric, name in (('top10', 'top-10% retrieval (higher is better)'), ('regret', 'regret in SD (lower is better)')):
+        print(f'\nSECONDARY: arm A minus arm B, {name}')
+        for a, c in pairs:
+            for o in oracles:
+                line = ''
+                for b in budgets:
+                    r = ci([per_profile(o, b, a, c, metric)]); line += f'  {b}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
+                print(f'  {a:>8} - {c:<8} {o:12}{line}')
+            r = ci([per_profile(o, 17, a, c, metric) for o in oracles])
+            if r: print(f'  {a:>8} - {c:<8} {"pooled @17":12}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' + (f'  {call(r[1], r[2], r[0])}' if metric == 'top10' else ''))
+    print('\nBUDGET EFFECT: current at the longer budget minus current at the shorter, top-10%')
+    for o in oracles:
+        line = ''
+        for hi, lo in ((17, 12), (30, 17)):
+            if hi in budgets and lo in budgets:
+                d = collections.defaultdict(list)
+                for (oo, bb, p, s), arms in cell.items():
+                    if oo == o and bb == hi and 'current' in arms and 'current' in cell.get((o, lo, p, s), {}): d[p].append(arms['current']['top10'] - cell[(o, lo, p, s)]['current']['top10'])
+                r = ci([{p: np.mean(v) for p, v in d.items()}]); line += f'  {hi} vs {lo}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
+        print(f'  {o:12}{line}')
+    print('\nMEANS (top10, regret, held-out acc) per arm, pooled over oracles')
+    for b in budgets:
+        for a in sorted(arms):
+            sel = [v[a] for k, v in cell.items() if k[1] == b and a in v]
+            if sel: print(f'  budget {b:3} {a:9} top10 {np.mean([x["top10"] for x in sel]):.3f}  regret {np.mean([x["regret"] for x in sel]):.2f}  acc {np.nanmean([x["acc"] for x in sel]):.3f}')
+
+
+if __name__ == '__main__' and sys.argv[1:2] == ['report']:  # python -m tools.benchmark_blocks report [noise=logistic:0.5] a.csv b.csv ...
+    args = sys.argv[2:]; noise = args.pop(0)[len('noise='):] if args and args[0].startswith('noise=') else 'logistic:0.5'; report(load_rows(args), noise)
+elif __name__ == '__main__' and sys.argv[1:2] == ['summarize']:  # python -m tools.benchmark_blocks summarize a.csv b.csv ...: combine chunk files
     rows = []
     for f in sys.argv[2:]:
         for r in csv.DictReader(open(f)): rows.append({**r, 'profile': int(r['profile']), 'seed': int(r['seed']), 'budget': int(r['budget']), 'top10': int(r['top10']), 'regret': float(r['regret']), 'acc': float(r['acc'])})
