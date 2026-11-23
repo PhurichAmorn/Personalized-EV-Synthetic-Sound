@@ -1624,6 +1624,7 @@ class BlockDiscovery(SoundMapDiscovery):
     policy=BLOCK_POLICY
     feature_names=BLOCK_FEATURE_NAMES
     motion_pair_count=1  # one Rising vs Evolving pair (a second one on Synth pad, 2026-11-21, sounded too alike and was removed)
+    winner_stays=True  # a challenger that wins takes over at once; the benchmark's robust-champion arm turns this off
     adaptive=9  # champion-vs-challenger pairs (5-13); the benchmark stretches it (30 pairs = 22). Replay, the 2 fine-tune pairs and the check follow it.
     steps=property(lambda s:7+s.adaptive)  # pairs after the motion pair: 16 at 9
     pairs=1+BLOCK_STEPS
@@ -1736,7 +1737,7 @@ class BlockDiscovery(SoundMapDiscovery):
         if self.champion is None or rejected:
             self.champion=next((i for i in self._bt_ranked() if i not in rejected),None) or self._bt_ranked()[0]
             self.champion_starts.append({'pair':self.completed+1,'id':self.champion,'by':'answers','after':'neither' if rejected else 'start'})
-        elif self.champion in last.get('pair',()) and last.get('winner') not in (None,self.champion):self.champion=last['winner']
+        elif self.winner_stays and self.champion in last.get('pair',()) and last.get('winner') not in (None,self.champion):self.champion=last['winner']
         if self.completed==self.pairs-1:  # confirmation: a tuned #1 against the start it came from (does the tuning help?), else against the strongest sound it has not met
             self._rank_finalists()
             if self.finalists:

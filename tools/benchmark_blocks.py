@@ -26,6 +26,7 @@ class Base(BlockDiscovery):
     """The app's session with a seed (so arms and noise are reproducible) and no rendering."""
     def __init__(self, seed, adaptive):
         super().__init__(renderer=lambda r: None); self.adaptive = adaptive; self._seed = seed
+    def held_out_scores(self, X): return X @ self._weights()
     def start(self, motion='rise'):
         with mock.patch.object(ss.random, 'SystemRandom', lambda: random.Random(self._seed)): super().start(motion)
 
@@ -72,7 +73,99 @@ class IEC(Base):
         return kids + rest
 
 
-ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC}
+# ---- Arms added 2026-11-23 (plan amendment): kernel preference model (PBO-GP), Thompson duel, robust champion, random pairs ----
+from scipy.stats import norm
+CATS = ('body', 'top', 'partner', 'level', 'buzz', 'chord', 'bell', 'vowel')
+_VOC = {}
+LC, LP, LB = 3., 2., .3  # kernel length scales (categorical differences, pitch steps, brightness acum); fixed, not tuned on any result
+
+
+def enc(blocks):
+    cat = np.array([[_VOC.setdefault((k, str(b.get(k))), len(_VOC)) for k in CATS] for b in blocks]); cont = np.array([[b['pitch'], b['brightness']] for b in blocks], float)
+    return cat, cont
+
+
+def kern(A, B):
+    d = (A[0][:, None, :] != B[0][None, :, :]).sum(-1); dp = (A[1][:, None, 0] - B[1][None, :, 0]) / LP; db = (A[1][:, None, 1] - B[1][None, :, 1]) / LB
+    return np.exp(-d / LC - .5 * (dp ** 2 + db ** 2))
+
+
+class GP:
+    """Bradley-Terry preference model with a GP prior over sounds (Chu & Ghahramani style), Laplace approximation on the sounds heard.
+    Likelihood P(w beats l) = sigmoid(f_w - f_l); only decisive A/B answers are used (Both good and Neither carry no comparison here)."""
+    def __init__(self, blocks, pairs):
+        self.U = enc(blocks); n = len(blocks); self.n = n
+        if not n: return
+        K = kern(self.U, self.U) + 1e-4 * np.eye(n); self.Kinv = np.linalg.inv(K); f = np.zeros(n)
+        for _ in range(30):
+            d = f[[w for w, _ in pairs]] - f[[l for _, l in pairs]]; p = 1 / (1 + np.exp(-d)); g = -self.Kinv @ f; W = np.zeros((n, n))
+            for (w, l), pp in zip(pairs, p):
+                g[w] += 1 - pp; g[l] -= 1 - pp; q = pp * (1 - pp); W[w, w] += q; W[l, l] += q; W[w, l] -= q; W[l, w] -= q
+            step = np.linalg.solve(self.Kinv + W, g); f += step
+            if np.abs(step).max() < 1e-6: break
+        self.f = f; self.Sigma = np.linalg.inv(self.Kinv + W)
+    def predict(self, C, cov=True):
+        Kcc = kern(C, C) if cov else None
+        if not self.n: return np.zeros(len(C[0])), Kcc
+        Ks = kern(C, self.U); A = Ks @ self.Kinv; mu = A @ self.f
+        return mu, (Kcc - A @ Ks.T + A @ self.Sigma @ A.T) if cov else None
+
+
+class Kernel(Base):
+    """Shared by the arms that learn with the GP."""
+    def _gp(self):
+        rows = [r for r in self._choices() if r['winner'] and len(set(r['pair'])) == 2]; ids = list(dict.fromkeys(i for r in rows for i in r['pair']))
+        ix = {i: k for k, i in enumerate(ids)}
+        return GP([self._sound(i) for i in ids], [(ix[r['winner']], ix[next(i for i in r['pair'] if i != r['winner'])]) for r in rows])
+    def held_out_scores(self, X):
+        T = truth(); return self._gp().predict(_G['enc'], cov=False)[0]
+
+
+class PBOGP(Kernel):
+    """Champion vs challenger as in the app, challengers ordered by EUBO under the GP: E[max(f_challenger, f_champion)]."""
+    def _order_broad(self, out, here):
+        C = enc([m[0]['blocks'] for m in out] + [here]); mu, cov = self._gp().predict(C); h = len(out)
+        m = mu[:h] - mu[h]; s = np.sqrt(np.maximum(np.diag(cov)[:h] + cov[h, h] - 2 * cov[:h, h], 1e-9)); eubo = mu[h] + m * norm.cdf(m / s) + s * norm.pdf(m / s)
+        return [out[i] for i in np.argsort(-eubo)]
+
+
+class FreePairs(Kernel):
+    """No champion in the adaptive pairs: the pair is chosen from 400 random table sounds plus the sounds heard. Subclasses say how."""
+    def _proposals(self):
+        step = self.completed
+        if not (ss.BLOCK_OPENING + 1 <= step <= ss.BLOCK_OPENING + self.adaptive): return super()._proposals()
+        self.check_parent = None; T = truth(); cand = [T[i] for i in self.rng.sample(range(len(T)), 400)] + [self.candidates[i]['recipe'] for i in {i for r in self._choices() for i in r['pair']}]
+        a, b = self._pick(cand); self.rematch = [self._add(a, {'kind': 'duel', 'summary': 'free pair'}), self._add(b, {'kind': 'duel', 'summary': 'free pair'})]
+        return []
+    def _clear(self, a, b): return a['blocks']['top'] != b['blocks']['top'] or self._gap(a, b) >= sb.MIN_GAP  # the app's rule: close pairs are not offered
+
+
+class Duel(FreePairs):
+    """Thompson duel: two posterior draws, each one's best sound is one side of the pair (the second must be clearly different from the first)."""
+    def _pick(self, cand):
+        mu, cov = self._gp().predict(enc([c['blocks'] for c in cand])); L = np.linalg.cholesky(cov + 1e-6 * np.eye(len(cand))); g = np.random.default_rng(self.rng.randrange(2 ** 32))
+        f1 = mu + L @ g.standard_normal(len(cand)); f2 = mu + L @ g.standard_normal(len(cand)); a = int(np.argmax(f1))
+        b = next(int(k) for k in np.argsort(-f2) if k != a and self._clear(cand[a], cand[k]))
+        return cand[a], cand[b]
+
+
+class Pairs(FreePairs):
+    """Two random clearly different sounds, no champion, no model."""
+    def _pick(self, cand):
+        a = cand[self.rng.randrange(len(cand))]; return a, next(c for c in self.rng.sample(cand, len(cand)) if c is not a and self._clear(a, c))
+
+
+class Robust(Base):
+    """Current, but the champion is the Bradley-Terry best of everything heard before each broad pair, not the last winner."""
+    winner_stays = False
+    def _proposals(self):
+        if ss.BLOCK_OPENING + 1 <= self.completed <= ss.BLOCK_OPENING + self.adaptive and self._bt_ranked():
+            rows = self._choices(); self.champion = None if rows and rows[-1]['choice'] == 'neither' else self._bt_ranked()[0]  # after Neither the app picks a champion outside the rejected pair
+        return super()._proposals()
+
+
+CORE = ('current', 'random', 'infogain', 'iec')
+ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust}
 
 
 def truth():
@@ -86,7 +179,7 @@ def truth():
                 r = d._recipe({'body': body, 'top': top, 'level': lv, 'pitch': pi, 'brightness': br, 'partner': partner, **k})
                 if r and sb.key(r['blocks']) + f"|{r['blocks']['brightness']}" not in seen:
                     seen.add(sb.key(r['blocks']) + f"|{r['blocks']['brightness']}"); T.append(r)
-    d.close(); _G['truth'] = T; _G['X'] = np.array([block_features(r['blocks']) for r in T]); _G['table'] = d.table
+    d.close(); _G['truth'] = T; _G['X'] = np.array([block_features(r['blocks']) for r in T]); _G['enc'] = enc([r['blocks'] for r in T]); _G['table'] = d.table
     return T
 
 
@@ -150,8 +243,8 @@ def run(job):
         if len(d.pair) != 2: break
         za, zb = (z(d.candidates[i]['recipe']) for i in d.pair); d.feedback(choice=answer(rng, za, zb, noise)); n += 1
     d._rank_finalists(); short = [z(d.candidates[i]['recipe']) for i in d.finalists] or [-9.]
-    w = d._weights(); X = _G['X']; g = np.random.default_rng(0); i, j = g.integers(len(X), size=(2, 3000)); gap = zt[i] - zt[j]; keep = np.abs(gap) > .5
-    acc = float(np.mean(np.sign((X[i] - X[j]) @ w)[keep] == np.sign(gap)[keep])) if keep.any() else float('nan')
+    X = _G['X']; sc = d.held_out_scores(X); g = np.random.default_rng(0); i, j = g.integers(len(X), size=(2, 3000)); gap = zt[i] - zt[j]; keep = np.abs(gap) > .5
+    acc = float(np.mean(np.sign(sc[i] - sc[j])[keep] == np.sign(gap)[keep])) if keep.any() else float('nan')
     d.close(); u1 = short[0]; share = (int(np.sum(zt > u1)) + 1) / len(zt)
     return dict(oracle=family, profile=profile, seed=seed, arm=arm, budget=budget, noise=f'{noise[0]}:{noise[1]}', pairs=n, z1=round(u1, 3), regret=round(max(float(zt.max()) - u1, 0), 3),
                 share=round(share, 4), top5=int(share <= .05), top10=int(share <= .10), short5=int(any(np.sum(zt > s) + 1 <= .05 * len(zt) for s in short)), acc=round(acc, 3))
@@ -186,7 +279,7 @@ if __name__ == '__main__' and sys.argv[1:2] == ['summarize']:  # python -m tools
 elif __name__ == '__main__':
     e = os.environ.get; noise = e('NOISE', 'logistic:0.5').split(':') + ['0']; noise = (noise[0], float(noise[1]))
     jobs = [(f, p, s, a, b, noise) for f in e('ORACLES', ','.join(ORACLES)).split(',') for p in range(int(e('PROFILES', 5))) for s in range(int(e('SEED_START', 0)), int(e('SEED_START', 0)) + int(e('SEEDS', 2)))
-            for b in map(int, e('BUDGETS', '12,17,30').split(',')) for a in e('ARMS', ','.join(ARMS)).split(',')]
+            for b in map(int, e('BUDGETS', '12,17,30').split(',')) for a in e('ARMS', ','.join(CORE)).split(',')]
     truth(); print(len(_G['truth']), 'sounds in the ground-truth set;', len(jobs), 'sessions', flush=True)
     with Pool(int(e('WORKERS', os.cpu_count()))) as pool: rows = pool.map(run, jobs, chunksize=4)
     out = e('OUT', 'benchmark_blocks.csv')

@@ -88,3 +88,23 @@ result, and the pooled estimate below is the headline.
 - IEC and InfoGain are adaptations to a finite, table-gated sound space; weak adaptations would look like weak methods.
 - Neither, Both and noise levels are assumptions; the sensitivity runs show how much the conclusion depends on them.
 - Simulated oracles do not tire, so the 30-pair budget is optimistic.
+
+## 9. Amendment 2026-11-23: four more arms (added after the smoke run, before any full-run result)
+
+Added after a design discussion about whether Current is a statistical preference learner or a tournament with an auxiliary sampling rule.
+The smoke run (n = 8 per cell) was seen before this amendment; it did not choose the arms or their settings. The four core arms and the 15 primary
+contrasts are unchanged and keep their status. The new arms are **secondary**, run as separate chunks, and reported with the same paired
+profile-level bootstrap.
+
+| Arm | Pairs | Purpose |
+|---|---|---|
+| **PBOGP** | Champion vs challenger (as the app) | Preferential Bayesian optimisation: GP preference model (Hamming kernel on blocks, RBF on pitch and brightness; length scales 3, 2 steps, 0.3 acum, fixed, not tuned) with a Laplace fit on the decisive A/B answers; challengers ordered by EUBO. Differs from InfoGain only in the model (kernel instead of linear), so the pair tests the model. |
+| **Duel** | Two model-chosen sounds, no champion | Thompson duel: two posterior draws from the same GP, each one's best sound is one side of the pair (clearly different by the app's rule). Candidates: 400 random table sounds plus all heard. Tests a pair design with no champion. |
+| **Robust** | Champion vs challenger | Current, but the champion is reset to the Bradley-Terry best of everything heard before each broad pair, not the last winner. Tests the noise critique of winner-stays. |
+| **Pairs** | Two random sounds, no champion | No champion and no model. Separates what the tournament structure adds from what the model adds (Random keeps the tournament, Pairs does not). |
+
+New secondary contrasts (same 5 oracles x 3 budgets, primary noise, top-10% retrieval and regret): PBOGP minus Current, PBOGP minus InfoGain,
+Robust minus Current, Duel minus Current, Random minus Pairs, Current minus Pairs.
+Notes: Duel and Pairs give up the champion that makes the session easy to follow; if they win, the paper reports a trade-off, not a switch.
+Both/Neither answers carry no comparison in the GP; they still drive the app's champion reset in the arms that keep one. Held-out accuracy for
+PBOGP and Duel uses the GP's mean, for the other arms the app's linear model.
