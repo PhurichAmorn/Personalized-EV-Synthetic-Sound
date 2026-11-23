@@ -24,7 +24,7 @@ session is longer?
 | Ground truth | 15,614 sounds the safe-area table allows (body x top x partner x level x pitch x synth knobs x 5 brightness targets). Utilities z-scored over this set per profile. |
 | Primary noise | Logistic, tau = 0.5 SD: P(pick better) = 1/(1+exp(-gap/tau)). |
 | Sensitivity noise | none; logistic tau = 0.25 and 1.0; flip with eps = 0.1 and 0.25. |
-| Both / Neither | Kept as in the app. Both good when both sounds are above +0.5 SD, Neither when both are below -0.5 SD. **Provisional**: to be set before the run so the simulated Neither rate matches the rate in the real exports; the final values and the real rate are recorded here before running. |
+| Both / Neither | Kept as in the app. Both good when both sounds are above +3.0 SD, Neither when both are below 0 SD (the profile's average sound). **Calibrated 2026-11-23** on the real exports (19 block sessions, 311 choices: Both good 1.6%, Neither 2.3%). With these thresholds the simulated Current arm at 17 pairs gives Both good 2.7% and Neither 2.5% (5 oracles x 4 profiles x 3 seeds). The first guess of +-0.5 SD gave 49% Both good and 0.1% Neither, which does not match the real listener. The real data come from the lab's own sessions, not a population. |
 
 Sessions in the primary design: 5 oracles x 40 profiles x 25 seeds x 3 budgets x 4 arms = 60,000 (about 6 h on the lab laptop).
 
@@ -68,9 +68,9 @@ result, and the pooled estimate below is the headline.
 
 ## 6. Checks before the full run (none of these use benchmark results)
 
-1. Calibrate the Both / Neither thresholds on the real session exports (section 2). Record the real Neither and Both rates and the final thresholds here.
-2. Check the psycho oracle's independence: its correlation with the model's brightness features over the ground-truth set. If it is high (say above 0.8), redesign it before running.
-3. Check the label oracle's misspecification: how much of its variance the model's one-hot features can explain (linear fit R^2 over the ground-truth set). Record it. If it is above 0.9 it is effectively matched and is replaced.
+1. Calibrate the Both / Neither thresholds on the real session exports (section 2). **Done 2026-11-23:** real Both good 1.6%, Neither 2.3%; thresholds +3.0 SD and 0 SD.
+2. Check the psycho oracle's independence: its correlation with the model's brightness features over the ground-truth set. If it is high (say above 0.8), redesign it before running. **Done 2026-11-23 (second machine, 12 profiles):** correlation 0.26 to 0.37, multiple R on brightness terms at most 0.38. Passes.
+3. Check the label oracle's misspecification: how much of its variance the model's one-hot features can explain (linear fit R^2 over the ground-truth set). Record it. If it is above 0.9 it is effectively matched and is replaced. **Done 2026-11-23 (second machine, 12 profiles):** R^2 0.26 to 0.57, mean 0.41. Passes.
 4. Confirm `python -m unittest tests.test_block_discovery` still passes, and that Current at budget 17 reproduces the default session (the pair sequence at adaptive 9 equals the app's).
 5. Smoke runs are code checks only; their numbers are not used to change this plan.
 

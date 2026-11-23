@@ -15,7 +15,9 @@ from experiment import sound_blocks as sb, source_search as ss
 from experiment.source_search import BlockDiscovery, block_features, block_moves
 
 ORACLES = ('matched', 'multimodal', 'interaction', 'label', 'psycho')
-GOOD_Z = .5  # assumption, to calibrate from real exports: Both good when both sounds are above +0.5 SD, Neither when both are below -0.5 SD
+GOOD_Z, NEITHER_Z = 3., 0.  # Both good when both sounds are above GOOD_Z SD, Neither when both are below NEITHER_Z SD. Calibrated 2026-11-23 to the real block sessions
+# (19 sessions, 311 choices: Both good 1.6%, Neither 2.3%); simulated Current at 17 pairs, 5 oracles x 4 profiles x 3 seeds: Both good 2.7%, Neither 2.5%.
+# (+-0.5 SD gave 49% Both good and 0.1% Neither: the session soon plays only good sounds, so Both good needs a high bar.)
 SYNTH_OFF = {'buzz': 0, 'chord': 'off', 'bell': False, 'vowel': False}
 _G = {}  # per-process: table, truth sounds
 
@@ -132,7 +134,7 @@ def oracle(family, seed):
 
 def answer(rng, za, zb, noise):
     if min(za, zb) > GOOD_Z: return 'good'
-    if max(za, zb) < -GOOD_Z: return 'neither'
+    if max(za, zb) < NEITHER_Z: return 'neither'
     kind, level = noise
     if kind == 'logistic': a = rng.random() < 1 / (1 + math.exp(-(za - zb) / level))
     else: a = (za > zb) != (rng.random() < level) if kind == 'flip' else za > zb
