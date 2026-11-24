@@ -86,7 +86,7 @@ jobs:
           start=$(date +%s)
           python -m tools.benchmark_blocks
           echo "### ${{ matrix.chunk.oracle }} seeds ${{ matrix.chunk.start }}+${{ matrix.chunk.seeds }}: $(( ($(date +%s) - start) / 60 )) min on $(nproc) cores" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: chunk-${{ matrix.chunk.oracle }}-${{ matrix.chunk.start }}
           path: chunk.csv
@@ -101,7 +101,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install numpy scipy
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: chunk-*
           path: chunks
@@ -122,7 +122,7 @@ jobs:
           with open('all_sessions.csv', 'w', newline='') as out:
               w = csv.DictWriter(out, rows[0].keys()); w.writeheader(); w.writerows(rows)
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: benchmark-report
           path: |
