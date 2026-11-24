@@ -490,7 +490,10 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .lab-stats dt { color: var(--muted); font-size: 10px; } .lab-stats dd { margin: 0; font: 13px var(--font-mono); }
 .lab-note { color: var(--muted); font-size: 12px; }
 .lab-scope { display: grid; gap: 2px; margin: 0 0 6px; } .lab-scope canvas { width: 100%; height: 110px; border-radius: 4px; background: #101010; }
-.lab-scope figcaption { color: var(--muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.lab-scope figcaption { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.lab-scope-freeze { min-height: 18px !important; padding: 0 6px !important; border: 1px solid var(--line) !important; border-radius: 3px !important; background: #202020 !important; color: var(--fg) !important; font-size: 9px !important; font-family: var(--font-mono) !important; cursor: pointer; text-transform: uppercase; }
+.lab-scope-freeze:hover { border-color: var(--accent) !important; }
+.lab-scope-freeze.active { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; }
 .lab-scope-spectrum canvas { height: 80px; } .lab-scope-waveform canvas { height: 64px; }
 /* Right side compact: every graph fits one screen without scrolling. */
 .lab-right .lab-panel { padding: 8px 10px; }
@@ -620,3 +623,23 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .lab-scopes .lab-scope canvas { height: 150px; }  /* bigger visuals */
 .lab-scopes .lab-scope-spectrum canvas, .lab-scopes .lab-scope-waveform canvas { height: 150px; }
 @media (max-width: 800px) { .lab-scopes .lab-scope canvas, .lab-scopes .lab-scope-spectrum canvas, .lab-scopes .lab-scope-waveform canvas { height: 90px; } }
+
+/* Sound Lab: Winner selection popup */
+.lab-modal-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 76%); backdrop-filter: blur(4px); }
+.lab-modal { width: min(680px, 100%); max-height: min(84vh, 720px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 24px 70px #000b; color: var(--fg); }
+.lab-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 22px 14px; border-bottom: 1px solid var(--line); }
+.lab-modal-head h3 { margin: 0; font-size: 18px; font-weight: 600; color: #f6f6f6; }
+.lab-modal-head p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.lab-modal-close { min-width: 58px; height: 32px; border: 1px solid var(--line); border-radius: 5px; background: #262626; color: var(--fg); font-size: 12px; cursor: pointer; }
+.lab-modal-close:hover { border-color: var(--accent); }
+.lab-modal-body { padding: 16px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.lab-winner-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid #383838; border-radius: 8px; background: #222; text-align: left; }
+.lab-winner-card.active { border-color: var(--accent); background: #262626; }
+.lab-winner-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.lab-winner-title { font-weight: 600; font-size: 13px; color: #f2f2f2; }
+.lab-winner-meta { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.lab-winner-desc { font-size: 12px; color: #cfcfcf; }
+.lab-winner-blocks { font-size: 11px; color: #a0a0a0; font-family: var(--font-mono); }
+.lab-winner-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.lab-winner-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; background: var(--accent); color: var(--bg); font-size: 10px; font-weight: 600; margin-left: 6px; }
+

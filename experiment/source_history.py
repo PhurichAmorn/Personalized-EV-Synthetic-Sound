@@ -33,7 +33,7 @@ class SourceHistory:
             if c:finals.append({'session':path.stem,'created':d.get('created',''),'id':d['final'],'label':c.get('label',''),'recipe':c['recipe']})
         try:chosen=(self.root/'my_sound.txt').read_text().strip()
         except OSError:chosen=''
-        self.my_sounds=[{k:f[k] for k in ('session','created','label')} for f in finals]
+        self.my_sounds=[{k:f[k] for k in ('session','created','label','recipe','id')} for f in finals]
         self.my_sound=next((f for f in finals if f['session']==chosen),finals[0] if finals else None)
     def choose(self,ident):
         """GS plays this session's final sound from now on."""

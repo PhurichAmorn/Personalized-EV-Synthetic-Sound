@@ -25,7 +25,7 @@ export type State = {
   sourceDiscovery?: SourceDiscoveryState
   historyPreview?: HistoryPreview
   mySound?: { id: string; session: string; label: string; recipe: unknown } | null  // chosen (else newest) saved final sound; GS plays it
-  mySounds?: { session: string; created: string; label: string }[]  // final pick of every saved session, newest first
+  mySounds?: { session: string; created: string; label: string; recipe?: unknown; id?: string }[]  // final pick of every saved session, newest first
   search: Search
 }
 
