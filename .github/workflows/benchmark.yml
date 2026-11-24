@@ -28,7 +28,7 @@ on:
         default: current,random,infogain,iec,pbogp,duel,pairs,robust
       budgets:
         description: Budgets in pairs played
-        default: 12,17,30
+        default: '12,17,30'  # quoted: unquoted, YAML reads 12,17,30 as the number 121730
       noise:
         description: logistic:0.5, logistic:0.25, logistic:1.0, flip:0.1, flip:0.25 or none
         default: logistic:0.5
@@ -111,6 +111,7 @@ jobs:
           NOISE: ${{ inputs.noise }}
         run: |
           files=$(find chunks -name chunk.csv | sort)
+          if [ -z "$files" ]; then echo "::error::No chunk results were uploaded: a chunk job failed. Open the chunk job and read the first failing step."; ls -R chunks || true; exit 1; fi
           echo "$files" | wc -l
           python -m tools.benchmark_blocks report "noise=$NOISE" $files | tee report.txt
           python -m tools.benchmark_blocks summarize $files > summary.txt
