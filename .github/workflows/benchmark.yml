@@ -1,0 +1,130 @@
+# Block-session benchmark (tools/benchmark_blocks.py, docs/research/benchmark_blocks_plan.md), run by hand: Actions > Benchmark > Run workflow.
+# One matrix job per chunk (one oracle x one block of seeds), so every job stays far below the 6 h job limit and the chunks run in parallel.
+# A last job merges the chunk CSVs and runs the report. Defaults reproduce the full primary design (5 oracles x 40 profiles x 25 seeds x 8 arms x 3 budgets).
+# First run: leave "first chunk only" on to time one chunk before spending the whole run's minutes.
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      first_chunk_only:
+        description: Run only the first chunk (timing run)
+        type: boolean
+        default: true
+      oracles:
+        description: Oracles, comma separated
+        default: matched,multimodal,interaction,label,psycho
+      profiles:
+        description: Profiles per oracle
+        default: '40'
+      total_seeds:
+        description: Session seeds per profile
+        default: '25'
+      chunk_seeds:
+        description: Seeds per chunk (smaller chunks make shorter jobs)
+        default: '5'
+      arms:
+        description: Arms, comma separated
+        default: current,random,infogain,iec,pbogp,duel,pairs,robust
+      budgets:
+        description: Budgets in pairs played
+        default: 12,17,30
+      noise:
+        description: logistic:0.5, logistic:0.25, logistic:1.0, flip:0.1, flip:0.25 or none
+        default: logistic:0.5
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      chunks: ${{ steps.plan.outputs.chunks }}
+    steps:
+      - id: plan
+        env:
+          ORACLES: ${{ inputs.oracles }}
+          TOTAL: ${{ inputs.total_seeds }}
+          CHUNK: ${{ inputs.chunk_seeds }}
+          FIRST: ${{ inputs.first_chunk_only }}
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          total, chunk = int(os.environ['TOTAL']), int(os.environ['CHUNK'])
+          chunks = [{'oracle': o.strip(), 'start': s, 'seeds': min(chunk, total - s)} for o in os.environ['ORACLES'].split(',') for s in range(0, total, chunk)]
+          if os.environ['FIRST'] == 'true': chunks = chunks[:1]
+          print(len(chunks), 'chunks')
+          open(os.environ['GITHUB_OUTPUT'], 'a').write('chunks=' + json.dumps(chunks) + '\n')
+          EOF
+
+  chunk:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 355  # GitHub's limit is 360
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk: ${{ fromJSON(needs.plan.outputs.chunks) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Dependencies (the benchmark needs only numpy and scipy)
+        run: pip install numpy scipy
+      - name: Run the chunk
+        env:
+          PYTHONHASHSEED: '0'
+          ORACLES: ${{ matrix.chunk.oracle }}
+          SEED_START: ${{ matrix.chunk.start }}
+          SEEDS: ${{ matrix.chunk.seeds }}
+          PROFILES: ${{ inputs.profiles }}
+          ARMS: ${{ inputs.arms }}
+          BUDGETS: ${{ inputs.budgets }}
+          NOISE: ${{ inputs.noise }}
+          OUT: chunk.csv
+        run: |
+          echo "cores: $(nproc)"
+          start=$(date +%s)
+          python -m tools.benchmark_blocks
+          echo "### ${{ matrix.chunk.oracle }} seeds ${{ matrix.chunk.start }}+${{ matrix.chunk.seeds }}: $(( ($(date +%s) - start) / 60 )) min on $(nproc) cores" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.chunk.oracle }}-${{ matrix.chunk.start }}
+          path: chunk.csv
+
+  report:
+    needs: chunk
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install numpy scipy
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          path: chunks
+      - name: Merge and report
+        env:
+          PYTHONHASHSEED: '0'
+          NOISE: ${{ inputs.noise }}
+        run: |
+          files=$(find chunks -name chunk.csv | sort)
+          echo "$files" | wc -l
+          python -m tools.benchmark_blocks report "noise=$NOISE" $files | tee report.txt
+          python -m tools.benchmark_blocks summarize $files > summary.txt
+          { echo '```'; head -c 60000 report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          python - $files <<'EOF'
+          import csv, sys
+          rows = [r for f in sys.argv[1:] for r in csv.DictReader(open(f))]
+          with open('all_sessions.csv', 'w', newline='') as out:
+              w = csv.DictWriter(out, rows[0].keys()); w.writeheader(); w.writerows(rows)
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: |
+            report.txt
+            summary.txt
+            all_sessions.csv
