@@ -202,7 +202,7 @@ def summary(rows):
 def load_rows(files):
     rows = []
     for f in files:
-        for r in csv.DictReader(open(f)): rows.append({**r, 'profile': int(r['profile']), 'seed': int(r['seed']), 'budget': int(r['budget']), 'top10': int(r['top10']), 'regret': float(r['regret']), 'acc': float(r['acc'])})
+        for r in csv.DictReader(open(f)): rows.append({**r, 'profile': int(r['profile']), 'seed': int(r['seed']), 'budget': int(r['budget']), 'top10': int(r['top10']), 'top5': int(r['top5']), 'short5': int(r['short5']), 'regret': float(r['regret']), 'acc': float(r['acc'])})
     keys = [(r['oracle'], r['profile'], r['seed'], r['arm'], r['budget'], r['noise']) for r in rows]
     assert len(keys) == len(set(keys)), 'duplicate sessions in the chunk files'
     return rows
@@ -243,6 +243,7 @@ def report(rows, noise, boots=2000):
     for b in budgets:
         r = ci([per_profile(o, b, 'current', 'random', 'top10') for o in oracles]); print(f'  budget {b:3}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]  {call(r[1], r[2], r[0])}')
     arms = {a for v in cell.values() for a in v}
+    all_arms = set(arms)  # the loops below rebind `arms` to one cell's dict
     pairs = [(a, c) for a, c in (('infogain', 'current'), ('iec', 'current'), ('pbogp', 'current'), ('pbogp', 'infogain'), ('robust', 'current'), ('duel', 'current'), ('random', 'pairs'), ('current', 'pairs')) if a in arms and c in arms]
     for metric, name in (('top10', 'top-10% retrieval (higher is better)'), ('regret', 'regret in SD (lower is better)')):
         print(f'\nSECONDARY: arm A minus arm B, {name}')
@@ -264,9 +265,39 @@ def report(rows, noise, boots=2000):
                     if oo == o and bb == hi and 'current' in arms and 'current' in cell.get((o, lo, p, s), {}): d[p].append(arms['current']['top10'] - cell[(o, lo, p, s)]['current']['top10'])
                 r = ci([{p: np.mean(v) for p, v in d.items()}]); line += f'  {hi} vs {lo}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
         print(f'  {o:12}{line}')
+    print('\nOTHER OUTCOMES: current minus random (top-5% = the #1 is in the top 5%; shortlist top-5% = any of the up to 5 shortlisted sounds is)')
+    for metric in ('top5', 'short5'):
+        for o in oracles:
+            line = ''
+            for b in budgets:
+                r = ci([per_profile(o, b, 'current', 'random', metric)]); line += f'  {b}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
+            print(f'  {metric:6} {o:12}{line}')
+        line = ''
+        for b in budgets:
+            r = ci([per_profile(o, b, 'current', 'random', metric) for o in oracles]); line += f'  {b}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
+        print(f'  {metric:6} {"pooled":12}{line}')
+    print('\nEQUIVALENT RANDOM PAIRS: how many pairs Random needs to match an arm (linear interpolation of Random top-10% between the budgets played; a point estimate with no CI)')
+    def mean_top10(o, b, a):
+        sel = [v[a]['top10'] for k, v in cell.items() if k[0] == o and k[1] == b and a in v]
+        return float(np.mean(sel)) if sel else None
+    for o in oracles + ['pooled']:
+        group = oracles if o == 'pooled' else [o]
+        def level(b, a):
+            vals = [mean_top10(x, b, a) for x in group]; return None if any(v is None for v in vals) else float(np.mean(vals))
+        curve = [(b, level(b, 'random')) for b in budgets]
+        if any(v is None for _, v in curve): print(f'  {o:12} Random is missing at a budget: no estimate'); continue
+        curve = [(x, y) for (x, _), y in zip(curve, np.maximum.accumulate([v for _, v in curve]))]  # Random can only gain from more pairs: smooth sampling dips
+        if curve[-1][1] <= curve[0][1]: print(f'  {o:12} Random does not rise with budget: no estimate'); continue
+        for a in sorted(all_arms - {'random'}):
+            for b in budgets:
+                v = level(b, a)
+                if v is None or b == budgets[-1]: continue
+                lo, hi = curve[0][1], curve[-1][1]
+                if v < lo or v > hi: print(f'  {o:12} {a:9} at {b} pairs: top-10% {v:.3f}, outside what Random reached ({lo:.3f} to {hi:.3f})'); continue
+                eq = float(np.interp(v, [y for _, y in curve], [x for x, _ in curve])); print(f'  {o:12} {a:9} at {b} pairs: matches Random at {eq:.1f} pairs (saves {eq - b:+.1f})')
     print('\nMEANS (top10, regret, held-out acc) per arm, pooled over oracles')
     for b in budgets:
-        for a in sorted(arms):
+        for a in sorted(all_arms):
             sel = [v[a] for k, v in cell.items() if k[1] == b and a in v]
             if sel: print(f'  budget {b:3} {a:9} top10 {np.mean([x["top10"] for x in sel]):.3f}  regret {np.mean([x["regret"] for x in sel]):.2f}  acc {np.nanmean([x["acc"] for x in sel]):.3f}')
 
