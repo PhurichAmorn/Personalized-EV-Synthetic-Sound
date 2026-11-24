@@ -1,0 +1,257 @@
+noise logistic:0.5; 5 oracles; 1000 sessions per oracle, budget and arm; rule: BETTER = CI above 0 and difference >= 0.05
+
+PRIMARY: current minus random, top-10% retrieval
+  matched       12  +0.036 [-0.008, +0.079]  no detectable difference
+  matched       17  +0.073 [+0.042, +0.107]  BETTER
+  matched       30  +0.071 [+0.031, +0.112]  BETTER
+  multimodal    12  +0.036 [-0.005, +0.076]  no detectable difference
+  multimodal    17  +0.022 [-0.020, +0.065]  no detectable difference
+  multimodal    30  +0.055 [+0.007, +0.104]  BETTER
+  interaction   12  +0.056 [+0.012, +0.101]  BETTER
+  interaction   17  +0.061 [+0.019, +0.107]  BETTER
+  interaction   30  +0.074 [+0.030, +0.121]  BETTER
+  label         12  +0.041 [+0.004, +0.078]  no detectable difference
+  label         17  +0.038 [+0.004, +0.072]  no detectable difference
+  label         30  +0.011 [-0.022, +0.048]  no detectable difference
+  psycho        12  +0.209 [+0.184, +0.232]  BETTER
+  psycho        17  +0.113 [+0.088, +0.136]  BETTER
+  psycho        30  +0.213 [+0.192, +0.234]  BETTER
+  tally: {'no detectable difference': 6, 'BETTER': 9}
+
+HEADLINE: current minus random pooled over oracles, top-10%
+  budget  12  +0.076 [+0.058, +0.093]  BETTER
+  budget  17  +0.061 [+0.045, +0.077]  BETTER
+  budget  30  +0.085 [+0.067, +0.103]  BETTER
+
+SECONDARY: arm A minus arm B, top-10% retrieval (higher is better)
+  infogain - current  matched       12: +0.037 [+0.003, +0.072]  17: +0.015 [-0.016, +0.047]  30: +0.048 [+0.021, +0.075]
+  infogain - current  multimodal    12: +0.019 [-0.018, +0.057]  17: +0.054 [+0.019, +0.091]  30: +0.032 [-0.004, +0.069]
+  infogain - current  interaction   12: +0.047 [+0.014, +0.083]  17: +0.032 [-0.000, +0.064]  30: +0.035 [-0.004, +0.072]
+  infogain - current  label         12: +0.005 [-0.031, +0.040]  17: +0.012 [-0.018, +0.041]  30: -0.006 [-0.038, +0.026]
+  infogain - current  psycho        12: +0.016 [-0.009, +0.043]  17: -0.017 [-0.050, +0.016]  30: +0.062 [+0.036, +0.086]
+  infogain - current  pooled @17    +0.019 [+0.005, +0.034]  no detectable difference
+       iec - current  matched       12: -0.020 [-0.082, +0.042]  17: -0.069 [-0.119, -0.023]  30: -0.066 [-0.125, -0.007]
+       iec - current  multimodal    12: -0.058 [-0.109, -0.008]  17: -0.071 [-0.116, -0.030]  30: -0.110 [-0.164, -0.057]
+       iec - current  interaction   12: -0.087 [-0.157, -0.018]  17: -0.096 [-0.161, -0.038]  30: -0.108 [-0.173, -0.043]
+       iec - current  label         12: -0.069 [-0.120, -0.018]  17: -0.087 [-0.138, -0.038]  30: -0.078 [-0.126, -0.032]
+       iec - current  psycho        12: -0.182 [-0.197, -0.166]  17: -0.133 [-0.156, -0.107]  30: -0.241 [-0.263, -0.221]
+       iec - current  pooled @17    -0.091 [-0.113, -0.071]  WORSE
+     pbogp - current  matched       12: +0.060 [+0.014, +0.107]  17: +0.022 [-0.019, +0.063]  30: +0.041 [-0.000, +0.084]
+     pbogp - current  multimodal    12: +0.014 [-0.023, +0.050]  17: +0.022 [-0.014, +0.062]  30: -0.005 [-0.050, +0.036]
+     pbogp - current  interaction   12: +0.026 [-0.015, +0.067]  17: +0.021 [-0.014, +0.056]  30: +0.008 [-0.033, +0.048]
+     pbogp - current  label         12: -0.037 [-0.079, +0.005]  17: -0.031 [-0.063, +0.002]  30: -0.057 [-0.092, -0.024]
+     pbogp - current  psycho        12: +0.022 [-0.006, +0.050]  17: -0.048 [-0.070, -0.022]  30: -0.009 [-0.028, +0.011]
+     pbogp - current  pooled @17    -0.003 [-0.018, +0.013]  no detectable difference
+     pbogp - infogain matched       12: +0.023 [-0.024, +0.071]  17: +0.007 [-0.041, +0.052]  30: -0.007 [-0.057, +0.038]
+     pbogp - infogain multimodal    12: -0.005 [-0.057, +0.044]  17: -0.032 [-0.078, +0.017]  30: -0.037 [-0.084, +0.006]
+     pbogp - infogain interaction   12: -0.021 [-0.056, +0.013]  17: -0.011 [-0.052, +0.029]  30: -0.027 [-0.059, +0.006]
+     pbogp - infogain label         12: -0.042 [-0.084, +0.001]  17: -0.043 [-0.079, -0.005]  30: -0.051 [-0.090, -0.016]
+     pbogp - infogain psycho        12: +0.006 [-0.013, +0.023]  17: -0.031 [-0.047, -0.015]  30: -0.071 [-0.090, -0.053]
+     pbogp - infogain pooled @17    -0.022 [-0.039, -0.005]  WORSE
+    robust - current  matched       12: +0.014 [-0.013, +0.039]  17: -0.029 [-0.058, -0.004]  30: -0.004 [-0.035, +0.028]
+    robust - current  multimodal    12: -0.007 [-0.028, +0.014]  17: -0.008 [-0.035, +0.015]  30: -0.025 [-0.060, +0.008]
+    robust - current  interaction   12: -0.018 [-0.045, +0.009]  17: -0.034 [-0.059, -0.009]  30: -0.041 [-0.083, +0.000]
+    robust - current  label         12: -0.010 [-0.031, +0.011]  17: -0.026 [-0.045, -0.006]  30: -0.047 [-0.079, -0.017]
+    robust - current  psycho        12: -0.059 [-0.067, -0.050]  17: -0.095 [-0.109, -0.081]  30: -0.119 [-0.135, -0.103]
+    robust - current  pooled @17    -0.038 [-0.048, -0.028]  WORSE
+      duel - current  matched       12: -0.131 [-0.204, -0.058]  17: -0.059 [-0.091, -0.028]  30: -0.077 [-0.127, -0.031]
+      duel - current  multimodal    12: -0.177 [-0.264, -0.098]  17: -0.069 [-0.123, -0.017]  30: -0.146 [-0.204, -0.087]
+      duel - current  interaction   12: -0.181 [-0.265, -0.099]  17: -0.082 [-0.132, -0.034]  30: -0.135 [-0.191, -0.084]
+      duel - current  label         12: -0.210 [-0.290, -0.129]  17: -0.145 [-0.197, -0.097]  30: -0.178 [-0.228, -0.126]
+      duel - current  psycho        12: -0.259 [-0.280, -0.237]  17: +0.042 [+0.021, +0.064]  30: -0.119 [-0.156, -0.086]
+      duel - current  pooled @17    -0.063 [-0.083, -0.044]  WORSE
+    random - pairs    matched       12: +0.099 [+0.047, +0.152]  17: +0.006 [-0.030, +0.042]  30: +0.068 [+0.030, +0.109]
+    random - pairs    multimodal    12: +0.161 [+0.086, +0.240]  17: +0.055 [+0.001, +0.109]  30: +0.159 [+0.101, +0.219]
+    random - pairs    interaction   12: +0.137 [+0.073, +0.204]  17: +0.042 [+0.006, +0.080]  30: +0.116 [+0.075, +0.157]
+    random - pairs    label         12: +0.163 [+0.093, +0.235]  17: +0.082 [+0.043, +0.125]  30: +0.181 [+0.127, +0.238]
+    random - pairs    psycho        12: +0.052 [+0.042, +0.061]  17: -0.113 [-0.125, -0.100]  30: -0.119 [-0.146, -0.093]
+    random - pairs    pooled @17    +0.014 [-0.002, +0.031]  no detectable difference
+   current - pairs    matched       12: +0.135 [+0.063, +0.212]  17: +0.079 [+0.044, +0.113]  30: +0.139 [+0.093, +0.189]
+   current - pairs    multimodal    12: +0.197 [+0.118, +0.273]  17: +0.077 [+0.036, +0.121]  30: +0.214 [+0.160, +0.272]
+   current - pairs    interaction   12: +0.193 [+0.111, +0.280]  17: +0.103 [+0.050, +0.156]  30: +0.190 [+0.134, +0.248]
+   current - pairs    label         12: +0.204 [+0.123, +0.284]  17: +0.120 [+0.082, +0.160]  30: +0.192 [+0.138, +0.255]
+   current - pairs    psycho        12: +0.261 [+0.239, +0.282]  17: +0.000 [-0.020, +0.017]  30: +0.094 [+0.073, +0.115]
+   current - pairs    pooled @17    +0.076 [+0.059, +0.093]  BETTER
+
+SECONDARY: arm A minus arm B, regret in SD (lower is better)
+  infogain - current  matched       12: -0.069 [-0.124, -0.013]  17: -0.067 [-0.114, -0.018]  30: -0.093 [-0.136, -0.049]
+  infogain - current  multimodal    12: -0.064 [-0.112, -0.013]  17: -0.067 [-0.116, -0.017]  30: -0.080 [-0.128, -0.031]
+  infogain - current  interaction   12: -0.049 [-0.089, -0.007]  17: -0.046 [-0.084, -0.010]  30: -0.017 [-0.075, +0.050]
+  infogain - current  label         12: -0.006 [-0.049, +0.040]  17: -0.011 [-0.057, +0.030]  30: -0.004 [-0.060, +0.052]
+  infogain - current  psycho        12: -0.079 [-0.099, -0.060]  17: +0.014 [-0.011, +0.037]  30: -0.050 [-0.063, -0.036]
+  infogain - current  pooled @17    -0.035 [-0.053, -0.018]
+       iec - current  matched       12: +0.115 [-0.009, +0.256]  17: +0.170 [+0.069, +0.291]  30: +0.142 [+0.052, +0.234]
+       iec - current  multimodal    12: +0.153 [+0.056, +0.256]  17: +0.171 [+0.081, +0.268]  30: +0.229 [+0.135, +0.336]
+       iec - current  interaction   12: +0.206 [+0.103, +0.320]  17: +0.201 [+0.107, +0.299]  30: +0.289 [+0.181, +0.415]
+       iec - current  label         12: +0.112 [+0.050, +0.173]  17: +0.142 [+0.080, +0.209]  30: +0.134 [+0.064, +0.219]
+       iec - current  psycho        12: +0.147 [+0.137, +0.157]  17: +0.142 [+0.130, +0.153]  30: +0.200 [+0.190, +0.210]
+       iec - current  pooled @17    +0.165 [+0.129, +0.205]
+     pbogp - current  matched       12: -0.080 [-0.173, +0.026]  17: +0.016 [-0.095, +0.158]  30: -0.071 [-0.141, -0.002]
+     pbogp - current  multimodal    12: +0.021 [-0.067, +0.134]  17: +0.027 [-0.065, +0.147]  30: +0.007 [-0.065, +0.094]
+     pbogp - current  interaction   12: -0.011 [-0.057, +0.032]  17: +0.003 [-0.044, +0.054]  30: +0.087 [+0.020, +0.163]
+     pbogp - current  label         12: +0.031 [-0.038, +0.087]  17: +0.054 [+0.002, +0.103]  30: +0.099 [+0.041, +0.160]
+     pbogp - current  psycho        12: -0.008 [-0.028, +0.008]  17: +0.068 [+0.055, +0.080]  30: +0.070 [+0.058, +0.082]
+     pbogp - current  pooled @17    +0.033 [+0.000, +0.070]
+     pbogp - infogain matched       12: -0.011 [-0.102, +0.093]  17: +0.083 [-0.035, +0.244]  30: +0.022 [-0.048, +0.094]
+     pbogp - infogain multimodal    12: +0.085 [-0.021, +0.218]  17: +0.094 [-0.012, +0.223]  30: +0.087 [-0.004, +0.189]
+     pbogp - infogain interaction   12: +0.038 [-0.014, +0.091]  17: +0.049 [-0.005, +0.107]  30: +0.103 [+0.033, +0.173]
+     pbogp - infogain label         12: +0.037 [-0.032, +0.097]  17: +0.064 [+0.013, +0.112]  30: +0.103 [+0.044, +0.168]
+     pbogp - infogain psycho        12: +0.071 [+0.058, +0.084]  17: +0.054 [+0.039, +0.068]  30: +0.120 [+0.107, +0.133]
+     pbogp - infogain pooled @17    +0.069 [+0.033, +0.113]
+    robust - current  matched       12: -0.009 [-0.039, +0.023]  17: +0.037 [+0.007, +0.068]  30: +0.020 [-0.026, +0.062]
+    robust - current  multimodal    12: +0.014 [-0.012, +0.037]  17: +0.036 [+0.009, +0.063]  30: +0.045 [+0.003, +0.088]
+    robust - current  interaction   12: +0.040 [+0.010, +0.072]  17: +0.067 [+0.037, +0.102]  30: +0.148 [+0.083, +0.216]
+    robust - current  label         12: +0.024 [-0.001, +0.049]  17: +0.074 [+0.050, +0.102]  30: +0.092 [+0.051, +0.135]
+    robust - current  psycho        12: +0.068 [+0.055, +0.081]  17: +0.059 [+0.053, +0.065]  30: +0.117 [+0.106, +0.128]
+    robust - current  pooled @17    +0.055 [+0.044, +0.067]
+      duel - current  matched       12: +0.250 [+0.144, +0.354]  17: +0.083 [+0.023, +0.139]  30: +0.181 [+0.120, +0.243]
+      duel - current  multimodal    12: +0.317 [+0.179, +0.469]  17: +0.136 [+0.040, +0.232]  30: +0.298 [+0.198, +0.397]
+      duel - current  interaction   12: +0.483 [+0.318, +0.678]  17: +0.160 [+0.077, +0.262]  30: +0.351 [+0.250, +0.460]
+      duel - current  label         12: +0.415 [+0.287, +0.551]  17: +0.249 [+0.176, +0.323]  30: +0.320 [+0.227, +0.418]
+      duel - current  psycho        12: +0.202 [+0.192, +0.211]  17: -0.046 [-0.055, -0.038]  30: +0.083 [+0.065, +0.103]
+      duel - current  pooled @17    +0.116 [+0.085, +0.150]
+    random - pairs    matched       12: -0.159 [-0.247, -0.066]  17: +0.014 [-0.046, +0.084]  30: -0.108 [-0.168, -0.048]
+    random - pairs    multimodal    12: -0.224 [-0.347, -0.107]  17: -0.048 [-0.141, +0.057]  30: -0.206 [-0.291, -0.123]
+    random - pairs    interaction   12: -0.404 [-0.583, -0.251]  17: -0.111 [-0.222, -0.028]  30: -0.244 [-0.353, -0.163]
+    random - pairs    label         12: -0.344 [-0.477, -0.213]  17: -0.173 [-0.252, -0.102]  30: -0.311 [-0.411, -0.222]
+    random - pairs    psycho        12: -0.050 [-0.062, -0.039]  17: +0.065 [+0.056, +0.074]  30: +0.041 [+0.017, +0.063]
+    random - pairs    pooled @17    -0.051 [-0.086, -0.018]
+   current - pairs    matched       12: -0.269 [-0.380, -0.165]  17: -0.126 [-0.187, -0.068]  30: -0.239 [-0.302, -0.179]
+   current - pairs    multimodal    12: -0.337 [-0.475, -0.203]  17: -0.154 [-0.224, -0.084]  30: -0.357 [-0.438, -0.277]
+   current - pairs    interaction   12: -0.503 [-0.700, -0.338]  17: -0.219 [-0.343, -0.114]  30: -0.428 [-0.545, -0.319]
+   current - pairs    label         12: -0.396 [-0.521, -0.272]  17: -0.235 [-0.321, -0.163]  30: -0.333 [-0.428, -0.246]
+   current - pairs    psycho        12: -0.209 [-0.218, -0.199]  17: -0.031 [-0.041, -0.021]  30: -0.099 [-0.119, -0.078]
+   current - pairs    pooled @17    -0.153 [-0.188, -0.122]
+
+BUDGET EFFECT: current at the longer budget minus current at the shorter, top-10%
+  matched       17 vs 12: +0.065 [+0.035, +0.100]  30 vs 17: +0.100 [+0.062, +0.138]
+  multimodal    17 vs 12: +0.030 [-0.002, +0.063]  30 vs 17: +0.158 [+0.113, +0.206]
+  interaction   17 vs 12: +0.052 [+0.026, +0.082]  30 vs 17: +0.104 [+0.059, +0.150]
+  label         17 vs 12: +0.031 [+0.008, +0.054]  30 vs 17: +0.092 [+0.059, +0.126]
+  psycho        17 vs 12: -0.016 [-0.022, -0.009]  30 vs 17: +0.126 [+0.104, +0.149]
+
+OTHER OUTCOMES: current minus random (top-5% = the #1 is in the top 5%; shortlist top-5% = any of the up to 5 shortlisted sounds is)
+  top5   matched       12: +0.038 [+0.001, +0.077]  17: +0.038 [+0.001, +0.078]  30: +0.098 [+0.059, +0.137]
+  top5   multimodal    12: +0.064 [+0.029, +0.102]  17: +0.038 [+0.002, +0.074]  30: +0.072 [+0.028, +0.117]
+  top5   interaction   12: +0.044 [+0.001, +0.086]  17: +0.068 [+0.021, +0.118]  30: +0.090 [+0.046, +0.134]
+  top5   label         12: +0.033 [-0.007, +0.073]  17: +0.026 [-0.012, +0.063]  30: +0.011 [-0.030, +0.053]
+  top5   psycho        12: +0.153 [+0.134, +0.170]  17: +0.140 [+0.120, +0.158]  30: +0.183 [+0.169, +0.198]
+  top5   pooled        12: +0.066 [+0.051, +0.083]  17: +0.062 [+0.046, +0.078]  30: +0.091 [+0.074, +0.108]
+  short5 matched       12: +0.075 [+0.036, +0.119]  17: +0.083 [+0.039, +0.127]  30: +0.150 [+0.100, +0.200]
+  short5 multimodal    12: +0.066 [+0.028, +0.104]  17: +0.064 [+0.024, +0.105]  30: +0.066 [+0.024, +0.108]
+  short5 interaction   12: +0.066 [+0.015, +0.120]  17: +0.083 [+0.036, +0.134]  30: +0.085 [+0.037, +0.132]
+  short5 label         12: +0.014 [-0.023, +0.052]  17: +0.018 [-0.016, +0.051]  30: +0.005 [-0.025, +0.034]
+  short5 psycho        12: +0.250 [+0.227, +0.271]  17: +0.230 [+0.206, +0.254]  30: +0.250 [+0.227, +0.273]
+  short5 pooled        12: +0.094 [+0.077, +0.112]  17: +0.096 [+0.078, +0.113]  30: +0.111 [+0.095, +0.128]
+
+EQUIVALENT RANDOM PAIRS: how many pairs Random needs to match an arm (linear interpolation of Random top-10% between the budgets played; a point estimate with no CI)
+  matched      current   at 12 pairs: matches Random at 18.0 pairs (saves +6.0)
+  matched      current   at 17 pairs: matches Random at 26.3 pairs (saves +9.3)
+  matched      duel      at 12 pairs: top-10% 0.377, outside what Random reached (0.472 to 0.602)
+  matched      duel      at 17 pairs: matches Random at 18.8 pairs (saves +1.8)
+  matched      iec       at 12 pairs: matches Random at 14.9 pairs (saves +2.9)
+  matched      iec       at 17 pairs: matches Random at 17.5 pairs (saves +0.5)
+  matched      infogain  at 12 pairs: matches Random at 22.7 pairs (saves +10.7)
+  matched      infogain  at 17 pairs: matches Random at 28.2 pairs (saves +11.2)
+  matched      pairs     at 12 pairs: top-10% 0.373, outside what Random reached (0.472 to 0.602)
+  matched      pairs     at 17 pairs: matches Random at 15.9 pairs (saves -1.1)
+  matched      pbogp     at 12 pairs: matches Random at 25.7 pairs (saves +13.7)
+  matched      pbogp     at 17 pairs: matches Random at 29.1 pairs (saves +12.1)
+  matched      robust    at 12 pairs: matches Random at 19.8 pairs (saves +7.8)
+  matched      robust    at 17 pairs: matches Random at 22.6 pairs (saves +5.6)
+  multimodal   current   at 12 pairs: matches Random at 16.1 pairs (saves +4.1)
+  multimodal   current   at 17 pairs: matches Random at 19.3 pairs (saves +2.3)
+  multimodal   duel      at 12 pairs: top-10% 0.329, outside what Random reached (0.470 to 0.639)
+  multimodal   duel      at 17 pairs: top-10% 0.467, outside what Random reached (0.470 to 0.639)
+  multimodal   iec       at 12 pairs: top-10% 0.448, outside what Random reached (0.470 to 0.639)
+  multimodal   iec       at 17 pairs: top-10% 0.465, outside what Random reached (0.470 to 0.639)
+  multimodal   infogain  at 12 pairs: matches Random at 18.1 pairs (saves +6.1)
+  multimodal   infogain  at 17 pairs: matches Random at 24.9 pairs (saves +7.9)
+  multimodal   pairs     at 12 pairs: top-10% 0.309, outside what Random reached (0.470 to 0.639)
+  multimodal   pairs     at 17 pairs: top-10% 0.459, outside what Random reached (0.470 to 0.639)
+  multimodal   pbogp     at 12 pairs: matches Random at 17.6 pairs (saves +5.6)
+  multimodal   pbogp     at 17 pairs: matches Random at 21.6 pairs (saves +4.6)
+  multimodal   robust    at 12 pairs: matches Random at 15.3 pairs (saves +3.3)
+  multimodal   robust    at 17 pairs: matches Random at 18.5 pairs (saves +1.5)
+  interaction  current   at 12 pairs: matches Random at 18.3 pairs (saves +6.3)
+  interaction  current   at 17 pairs: matches Random at 25.7 pairs (saves +8.7)
+  interaction  duel      at 12 pairs: top-10% 0.341, outside what Random reached (0.466 to 0.604)
+  interaction  duel      at 17 pairs: matches Random at 14.8 pairs (saves -2.2)
+  interaction  iec       at 12 pairs: top-10% 0.435, outside what Random reached (0.466 to 0.604)
+  interaction  iec       at 17 pairs: matches Random at 13.3 pairs (saves -3.7)
+  interaction  infogain  at 12 pairs: matches Random at 25.0 pairs (saves +13.0)
+  interaction  infogain  at 17 pairs: top-10% 0.606, outside what Random reached (0.466 to 0.604)
+  interaction  pairs     at 12 pairs: top-10% 0.329, outside what Random reached (0.466 to 0.604)
+  interaction  pairs     at 17 pairs: matches Random at 12.5 pairs (saves -4.5)
+  interaction  pbogp     at 12 pairs: matches Random at 22.0 pairs (saves +10.0)
+  interaction  pbogp     at 17 pairs: matches Random at 28.7 pairs (saves +11.7)
+  interaction  robust    at 12 pairs: matches Random at 16.0 pairs (saves +4.0)
+  interaction  robust    at 17 pairs: matches Random at 20.9 pairs (saves +3.9)
+  label        current   at 12 pairs: matches Random at 17.8 pairs (saves +5.8)
+  label        current   at 17 pairs: matches Random at 21.2 pairs (saves +4.2)
+  label        duel      at 12 pairs: top-10% 0.378, outside what Random reached (0.547 to 0.700)
+  label        duel      at 17 pairs: top-10% 0.474, outside what Random reached (0.547 to 0.700)
+  label        iec       at 12 pairs: top-10% 0.519, outside what Random reached (0.547 to 0.700)
+  label        iec       at 17 pairs: top-10% 0.532, outside what Random reached (0.547 to 0.700)
+  label        infogain  at 12 pairs: matches Random at 18.3 pairs (saves +6.3)
+  label        infogain  at 17 pairs: matches Random at 22.5 pairs (saves +5.5)
+  label        pairs     at 12 pairs: top-10% 0.384, outside what Random reached (0.547 to 0.700)
+  label        pairs     at 17 pairs: top-10% 0.499, outside what Random reached (0.547 to 0.700)
+  label        pbogp     at 12 pairs: matches Random at 12.6 pairs (saves +0.6)
+  label        pbogp     at 17 pairs: matches Random at 17.8 pairs (saves +0.8)
+  label        robust    at 12 pairs: matches Random at 16.6 pairs (saves +4.6)
+  label        robust    at 17 pairs: matches Random at 18.3 pairs (saves +1.3)
+  psycho       current   at 12 pairs: top-10% 0.261, outside what Random reached (0.052 to 0.158)
+  psycho       current   at 17 pairs: top-10% 0.245, outside what Random reached (0.052 to 0.158)
+  psycho       duel      at 12 pairs: top-10% 0.002, outside what Random reached (0.052 to 0.158)
+  psycho       duel      at 17 pairs: top-10% 0.287, outside what Random reached (0.052 to 0.158)
+  psycho       iec       at 12 pairs: matches Random at 13.7 pairs (saves +1.7)
+  psycho       iec       at 17 pairs: matches Random at 15.8 pairs (saves -1.2)
+  psycho       infogain  at 12 pairs: top-10% 0.277, outside what Random reached (0.052 to 0.158)
+  psycho       infogain  at 17 pairs: top-10% 0.228, outside what Random reached (0.052 to 0.158)
+  psycho       pairs     at 12 pairs: top-10% 0.000, outside what Random reached (0.052 to 0.158)
+  psycho       pairs     at 17 pairs: top-10% 0.245, outside what Random reached (0.052 to 0.158)
+  psycho       pbogp     at 12 pairs: top-10% 0.283, outside what Random reached (0.052 to 0.158)
+  psycho       pbogp     at 17 pairs: top-10% 0.197, outside what Random reached (0.052 to 0.158)
+  psycho       robust    at 12 pairs: top-10% 0.202, outside what Random reached (0.052 to 0.158)
+  psycho       robust    at 17 pairs: matches Random at 26.0 pairs (saves +9.0)
+  pooled       current   at 12 pairs: matches Random at 21.1 pairs (saves +9.1)
+  pooled       current   at 17 pairs: matches Random at 25.6 pairs (saves +8.6)
+  pooled       duel      at 12 pairs: top-10% 0.285, outside what Random reached (0.401 to 0.541)
+  pooled       duel      at 17 pairs: matches Random at 16.9 pairs (saves -0.1)
+  pooled       iec       at 12 pairs: top-10% 0.394, outside what Random reached (0.401 to 0.541)
+  pooled       iec       at 17 pairs: matches Random at 13.8 pairs (saves -3.2)
+  pooled       infogain  at 12 pairs: matches Random at 24.6 pairs (saves +12.6)
+  pooled       infogain  at 17 pairs: matches Random at 28.3 pairs (saves +11.3)
+  pooled       pairs     at 12 pairs: top-10% 0.279, outside what Random reached (0.401 to 0.541)
+  pooled       pairs     at 17 pairs: matches Random at 15.5 pairs (saves -1.5)
+  pooled       pbogp     at 12 pairs: matches Random at 23.5 pairs (saves +11.5)
+  pooled       pbogp     at 17 pairs: matches Random at 25.2 pairs (saves +8.2)
+  pooled       robust    at 12 pairs: matches Random at 18.8 pairs (saves +6.8)
+  pooled       robust    at 17 pairs: matches Random at 20.2 pairs (saves +3.2)
+
+MEANS (top10, regret, held-out acc) per arm, pooled over oracles
+  budget  12 current   top10 0.477  regret 1.34  acc 0.578
+  budget  12 duel      top10 0.285  regret 1.68  acc 0.611
+  budget  12 iec       top10 0.394  regret 1.49  acc 0.574
+  budget  12 infogain  top10 0.502  regret 1.29  acc 0.581
+  budget  12 pairs     top10 0.279  regret 1.69  acc 0.608
+  budget  12 pbogp     top10 0.494  regret 1.34  acc 0.563
+  budget  12 random    top10 0.401  regret 1.45  acc 0.575
+  budget  12 robust    top10 0.461  regret 1.37  acc 0.573
+  budget  17 current   top10 0.509  regret 1.28  acc 0.586
+  budget  17 duel      top10 0.447  regret 1.39  acc 0.613
+  budget  17 iec       top10 0.418  regret 1.44  acc 0.580
+  budget  17 infogain  top10 0.529  regret 1.24  acc 0.585
+  budget  17 pairs     top10 0.434  regret 1.43  acc 0.612
+  budget  17 pbogp     top10 0.507  regret 1.31  acc 0.569
+  budget  17 random    top10 0.448  regret 1.38  acc 0.587
+  budget  17 robust    top10 0.471  regret 1.33  acc 0.581
+  budget  30 current   top10 0.625  regret 1.08  acc 0.610
+  budget  30 duel      top10 0.494  regret 1.33  acc 0.662
+  budget  30 iec       top10 0.505  regret 1.28  acc 0.599
+  budget  30 infogain  top10 0.660  regret 1.03  acc 0.611
+  budget  30 pairs     top10 0.460  regret 1.37  acc 0.653
+  budget  30 pbogp     top10 0.621  regret 1.12  acc 0.593
+  budget  30 random    top10 0.541  regret 1.21  acc 0.610
+  budget  30 robust    top10 0.578  regret 1.17  acc 0.607

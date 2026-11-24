@@ -124,3 +124,7 @@ All on top-10% retrieval, primary noise (logistic 0.5), paired, profile-level bo
 | 5 | Robust minus Current | Same +-0.03 equivalence band | Inside the band: the noise critique of winner-stays has no support here. Below: winner-stays is better. Above: reset the champion by Bradley-Terry in production. |
 
 Notes: a hybrid or a switch from criteria 1 or 3 still needs listening tests with people before production. Equivalence-band verdicts are about these synthetic profiles only. Regret is reported for each contrast but does not decide.
+
+## 11. Sensitivity run design (written 2026-11-24, before any sensitivity result)
+
+Arms Current and Random only, budgets 12, 17, 30, 5 oracles x 40 profiles x 10 seeds (seeds 0-9; the primary run's seeds 0-24 include them, so profiles and sessions are the same family). Conditions, one workflow run each: logistic 0.25, logistic 1.0, flip 0.1, flip 0.25, no noise, and Both good / Neither removed (primary noise; implemented as GOOD_Z=1e9, NEITHER_Z=-1e9, an env override added to the harness for this run only; defaults unchanged). Rule: Current - Random is called robust if its pooled sign is positive in all six conditions and its CI excludes 0 in at least 4 of the 6 at 17 pairs. Deviation from section 8: 10 seeds instead of 25, to keep the six runs cheap; CIs will be wider.

@@ -16,7 +16,7 @@ from experiment.block_arms import enc
 from experiment.source_search import BlockDiscovery, block_features, block_moves
 
 ORACLES = ('matched', 'multimodal', 'interaction', 'label', 'psycho')
-GOOD_Z, NEITHER_Z = 3., 0.  # Both good when both sounds are above GOOD_Z SD, Neither when both are below NEITHER_Z SD. Calibrated 2026-11-23 to the real block sessions
+GOOD_Z, NEITHER_Z = float(os.environ.get('GOOD_Z', 3)), float(os.environ.get('NEITHER_Z', 0))  # env override only for the Both/Neither-removed sensitivity run (GOOD_Z=1e9 NEITHER_Z=-1e9). Both good when both sounds are above GOOD_Z SD, Neither when both are below NEITHER_Z SD. Calibrated 2026-11-23 to the real block sessions
 # (19 sessions, 311 choices: Both good 1.6%, Neither 2.3%); simulated Current at 17 pairs, 5 oracles x 4 profiles x 3 seeds: Both good 2.7%, Neither 2.5%.
 # (+-0.5 SD gave 49% Both good and 0.1% Neither: the session soon plays only good sounds, so Both good needs a high bar.)
 SYNTH_OFF = {'buzz': 0, 'chord': 'off', 'bell': False, 'vowel': False}

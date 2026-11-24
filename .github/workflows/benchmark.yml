@@ -32,6 +32,12 @@ on:
       noise:
         description: logistic:0.5, logistic:0.25, logistic:1.0, flip:0.1, flip:0.25 or none
         default: logistic:0.5
+      good_z:
+        description: Both good threshold in SD (1e9 removes Both good)
+        default: '3'
+      neither_z:
+        description: Neither threshold in SD (-1e9 removes Neither)
+        default: '0'
 
 jobs:
   plan:
@@ -80,6 +86,8 @@ jobs:
           ARMS: ${{ inputs.arms }}
           BUDGETS: ${{ inputs.budgets }}
           NOISE: ${{ inputs.noise }}
+          GOOD_Z: ${{ inputs.good_z }}
+          NEITHER_Z: ${{ inputs.neither_z }}
           OUT: chunk.csv
         run: |
           echo "cores: $(nproc)"
