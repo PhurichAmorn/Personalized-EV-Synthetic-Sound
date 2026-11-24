@@ -55,7 +55,9 @@ class BlockDiscoveryTest(unittest.TestCase):
                 a, b = d.pair; o = lambda i: d.candidates[i]['origin']
                 new = a if o(a).get('parent') == b else b; self.assertEqual(o(new).get('parent'), next(i for i in d.pair if i != new))  # champion vs a challenger
                 differ = sum(blocks(a)[k] != blocks(b)[k] for k in blocks(a))
-                if n <= (13 if replay else 14): self.assertEqual(o(new)['kind'], 'broad'); self.assertGreaterEqual(differ, 2)  # pairs 5-14 (5-13 with the replay): 2 blocks at once
+                if n <= (13 if replay else 14):  # pairs 5-14 (5-13 with the replay): 2 blocks at once
+                    self.assertEqual(o(new)['kind'], 'broad'); self.assertGreaterEqual(differ, 2)
+                    if 'pitch' not in o(new)['groups']: self.assertGreaterEqual(d._gap(d.candidates[o(new)['parent']]['recipe'], d.candidates[new]['recipe']), sb.MIN_GAP)  # too close to hear is not offered
                 else: self.assertEqual(o(new)['kind'], 'change')  # pairs 15-16: one big change (pitch or brightness first; a top swap also clears synth knobs)
             d.feedback(choice='A')
         self.assertFalse(d.active); self.assertEqual(d.completed, 17)

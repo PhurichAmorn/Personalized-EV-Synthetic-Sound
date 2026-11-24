@@ -1582,7 +1582,7 @@ BLOCK_BRIGHT_STEP=.15  # acum, measured: medium (.10 is the smallest gap heard; 
 BLOCK_BROAD=(3,11)     # pairs 5-13 (counted after the motion pair): broad challengers, 2 blocks changed at once
 BLOCK_BIG=(13,14)      # pairs 15-16: one medium change (pitch 4 semitones or brightness 0.15 acum)
 BLOCK_REPLAY=12        # the playoff pair (pair 4) again, A and B swapped: off by default since 2026-11-25 (class attribute replay), the pair is one more champion challenge
-BLOCK_GAP_GROUPS=('body','level','synth')  # changes where other settings can cover them, checked against the measured spectrum gap. Not the top
+BLOCK_GAP_GROUPS=('body','level','synth')  # one-block changes (pairs 15-16) checked against the measured spectrum gap; broad challengers are checked as a whole (any change but pitch). Not the top
 # texture: swaps were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass .33). Pitch, brightness and
 # space have their own rules: 4 semitones is always heard, brightness is a measured 0.15 acum, reverb changes over time.
 BLOCK_BROAD_GROUPS=('top','partner','body','level','pitch','brightness','synth')  # space fixed at large (2026-11-22: a small change, the listener's choice)
@@ -1771,6 +1771,7 @@ class BlockDiscovery(SoundMapDiscovery):
             r=self._recipe(x)
             if r is None or len(words)<2 or sum(r['blocks'][k]!=here[k] for k in here)<2:continue
             if any(w in ('darker','brighter') for w in words) and (not self.table or abs(r['blocks']['brightness']-here['brightness'])<BLOCK_BRIGHT_STEP-.03):continue
+            if self.table and 'pitch' not in groups and self._gap(self.candidates[best]['recipe'],r)<sb.MIN_GAP:continue  # measured as too close to hear (2026-11-25: a Plain+Glass vs Blocks+Bell synth pair, gap .20, sounded the same); pitch moves are always heard
             far=min((sum(r['blocks'][k]!=h[k] for k in h) for h in heard),default=9)-sum(r['blocks'].get(k)==v for k,v in lost.items())  # a change that just lost is not offered again straight away
             out.append((r,{'kind':'broad','groups':groups,'parent':best,'summary':'Broad: '+', '.join(words),'far':far}))
         return self._order_broad(out,here)+single(BLOCK_BROAD_GROUPS)

@@ -1,0 +1,98 @@
+noise logistic:0.5; 5 oracles; 1000 sessions per oracle, budget and arm; rule: BETTER = CI above 0 and difference >= 0.05
+
+PRIMARY: current minus random, top-10% retrieval
+  matched       12  +0.035 [-0.008, +0.078]  no detectable difference
+  matched       17  +0.057 [+0.009, +0.105]  BETTER
+  matched       30  +0.057 [+0.009, +0.111]  BETTER
+  multimodal    12  +0.036 [-0.005, +0.076]  no detectable difference
+  multimodal    17  +0.060 [+0.019, +0.102]  BETTER
+  multimodal    30  +0.053 [+0.007, +0.096]  BETTER
+  interaction   12  +0.054 [+0.010, +0.099]  BETTER
+  interaction   17  +0.070 [+0.020, +0.124]  BETTER
+  interaction   30  +0.065 [+0.020, +0.114]  BETTER
+  label         12  +0.041 [+0.004, +0.078]  no detectable difference
+  label         17  +0.044 [+0.008, +0.082]  no detectable difference
+  label         30  +0.008 [-0.022, +0.043]  no detectable difference
+  psycho        12  +0.209 [+0.184, +0.232]  BETTER
+  psycho        17  +0.220 [+0.179, +0.256]  BETTER
+  psycho        30  +0.295 [+0.270, +0.318]  BETTER
+  tally: {'no detectable difference': 5, 'BETTER': 10}
+
+HEADLINE: current minus random pooled over oracles, top-10%
+  budget  12  +0.075 [+0.058, +0.092]  BETTER
+  budget  17  +0.090 [+0.070, +0.110]  BETTER
+  budget  30  +0.096 [+0.078, +0.115]  BETTER
+
+SECONDARY: arm A minus arm B, top-10% retrieval (higher is better)
+  infogain - current  matched       12: +0.038 [+0.005, +0.073]  17: +0.049 [+0.014, +0.085]  30: +0.057 [+0.029, +0.082]
+  infogain - current  multimodal    12: +0.019 [-0.018, +0.057]  17: +0.014 [-0.023, +0.051]  30: +0.025 [-0.012, +0.061]
+  infogain - current  interaction   12: +0.048 [+0.015, +0.084]  17: +0.034 [-0.003, +0.070]  30: +0.045 [+0.007, +0.083]
+  infogain - current  label         12: +0.003 [-0.033, +0.038]  17: +0.011 [-0.022, +0.042]  30: +0.002 [-0.025, +0.027]
+  infogain - current  psycho        12: +0.016 [-0.009, +0.043]  17: -0.023 [-0.061, +0.016]  30: -0.006 [-0.049, +0.033]
+  infogain - current  pooled @17    +0.017 [+0.001, +0.033]  no detectable difference
+
+SECONDARY: arm A minus arm B, regret in SD (lower is better)
+  infogain - current  matched       12: -0.069 [-0.125, -0.011]  17: -0.095 [-0.144, -0.048]  30: -0.092 [-0.136, -0.046]
+  infogain - current  multimodal    12: -0.064 [-0.113, -0.013]  17: -0.065 [-0.116, -0.015]  30: -0.085 [-0.136, -0.036]
+  infogain - current  interaction   12: -0.049 [-0.089, -0.008]  17: -0.047 [-0.092, -0.000]  30: -0.069 [-0.134, -0.002]
+  infogain - current  label         12: -0.005 [-0.050, +0.040]  17: -0.015 [-0.054, +0.024]  30: +0.002 [-0.049, +0.051]
+  infogain - current  psycho        12: -0.079 [-0.099, -0.060]  17: -0.036 [-0.074, -0.002]  30: -0.018 [-0.046, +0.009]
+  infogain - current  pooled @17    -0.052 [-0.072, -0.032]
+
+BUDGET EFFECT: current at the longer budget minus current at the shorter, top-10%
+  matched       17 vs 12: +0.061 [+0.037, +0.086]  30 vs 17: +0.116 [+0.077, +0.157]
+  multimodal    17 vs 12: +0.076 [+0.048, +0.105]  30 vs 17: +0.113 [+0.076, +0.152]
+  interaction   17 vs 12: +0.066 [+0.042, +0.090]  30 vs 17: +0.091 [+0.053, +0.128]
+  label         17 vs 12: +0.043 [+0.020, +0.065]  30 vs 17: +0.084 [+0.053, +0.115]
+  psycho        17 vs 12: +0.060 [+0.039, +0.082]  30 vs 17: +0.129 [+0.109, +0.148]
+
+OTHER OUTCOMES: current minus random (top-5% = the #1 is in the top 5%; shortlist top-5% = any of the up to 5 shortlisted sounds is)
+  top5   matched       12: +0.038 [+0.001, +0.077]  17: +0.036 [-0.004, +0.076]  30: +0.088 [+0.045, +0.136]
+  top5   multimodal    12: +0.064 [+0.028, +0.102]  17: +0.081 [+0.044, +0.120]  30: +0.079 [+0.034, +0.125]
+  top5   interaction   12: +0.042 [+0.001, +0.081]  17: +0.070 [+0.017, +0.124]  30: +0.064 [+0.016, +0.113]
+  top5   label         12: +0.034 [-0.008, +0.075]  17: +0.023 [-0.011, +0.056]  30: +0.029 [-0.007, +0.064]
+  top5   psycho        12: +0.153 [+0.135, +0.170]  17: +0.168 [+0.137, +0.196]  30: +0.185 [+0.170, +0.201]
+  top5   pooled        12: +0.066 [+0.049, +0.083]  17: +0.076 [+0.058, +0.093]  30: +0.089 [+0.072, +0.108]
+  short5 matched       12: +0.075 [+0.036, +0.115]  17: +0.078 [+0.033, +0.128]  30: +0.154 [+0.105, +0.207]
+  short5 multimodal    12: +0.066 [+0.028, +0.107]  17: +0.094 [+0.055, +0.132]  30: +0.076 [+0.026, +0.127]
+  short5 interaction   12: +0.064 [+0.010, +0.115]  17: +0.082 [+0.032, +0.134]  30: +0.078 [+0.035, +0.124]
+  short5 label         12: +0.015 [-0.022, +0.051]  17: +0.018 [-0.018, +0.050]  30: +0.026 [-0.003, +0.056]
+  short5 psycho        12: +0.250 [+0.226, +0.271]  17: +0.269 [+0.230, +0.305]  30: +0.315 [+0.291, +0.340]
+  short5 pooled        12: +0.094 [+0.077, +0.111]  17: +0.108 [+0.089, +0.128]  30: +0.130 [+0.111, +0.148]
+
+EQUIVALENT RANDOM PAIRS: how many pairs Random needs to match an arm (linear interpolation of Random top-10% between the budgets played; a point estimate with no CI)
+  matched      current   at 12 pairs: matches Random at 16.5 pairs (saves +4.5)
+  matched      current   at 17 pairs: matches Random at 23.4 pairs (saves +6.4)
+  matched      infogain  at 12 pairs: matches Random at 20.8 pairs (saves +8.8)
+  matched      infogain  at 17 pairs: matches Random at 28.9 pairs (saves +11.9)
+  multimodal   current   at 12 pairs: matches Random at 15.5 pairs (saves +3.5)
+  multimodal   current   at 17 pairs: matches Random at 23.5 pairs (saves +6.5)
+  multimodal   infogain  at 12 pairs: matches Random at 17.3 pairs (saves +5.3)
+  multimodal   infogain  at 17 pairs: matches Random at 25.0 pairs (saves +8.0)
+  interaction  current   at 12 pairs: matches Random at 17.5 pairs (saves +5.5)
+  interaction  current   at 17 pairs: matches Random at 26.5 pairs (saves +9.5)
+  interaction  infogain  at 12 pairs: matches Random at 24.0 pairs (saves +12.0)
+  interaction  infogain  at 17 pairs: top-10% 0.620, outside what Random reached (0.466 to 0.612)
+  label        current   at 12 pairs: matches Random at 17.1 pairs (saves +5.1)
+  label        current   at 17 pairs: matches Random at 21.8 pairs (saves +4.8)
+  label        infogain  at 12 pairs: matches Random at 17.4 pairs (saves +5.4)
+  label        infogain  at 17 pairs: matches Random at 23.0 pairs (saves +6.0)
+  psycho       current   at 12 pairs: top-10% 0.261, outside what Random reached (0.052 to 0.155)
+  psycho       current   at 17 pairs: top-10% 0.321, outside what Random reached (0.052 to 0.155)
+  psycho       infogain  at 12 pairs: top-10% 0.277, outside what Random reached (0.052 to 0.155)
+  psycho       infogain  at 17 pairs: top-10% 0.298, outside what Random reached (0.052 to 0.155)
+  pooled       current   at 12 pairs: matches Random at 20.7 pairs (saves +8.7)
+  pooled       current   at 17 pairs: matches Random at 28.6 pairs (saves +11.6)
+  pooled       infogain  at 12 pairs: matches Random at 23.9 pairs (saves +11.9)
+  pooled       infogain  at 17 pairs: top-10% 0.555, outside what Random reached (0.402 to 0.549)
+
+MEANS (top10, regret, held-out acc) per arm, pooled over oracles
+  budget  12 current   top10 0.477  regret 1.34  acc 0.578
+  budget  12 infogain  top10 0.501  regret 1.29  acc 0.580
+  budget  12 random    top10 0.402  regret 1.45  acc 0.575
+  budget  17 current   top10 0.538  regret 1.25  acc 0.587
+  budget  17 infogain  top10 0.555  regret 1.20  acc 0.588
+  budget  17 random    top10 0.448  regret 1.36  acc 0.586
+  budget  30 current   top10 0.644  regret 1.07  acc 0.611
+  budget  30 infogain  top10 0.669  regret 1.02  acc 0.612
+  budget  30 random    top10 0.549  regret 1.19  acc 0.615

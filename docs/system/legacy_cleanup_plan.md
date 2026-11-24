@@ -1,5 +1,7 @@
 # Legacy search cleanup plan (not done yet)
 
+Note (2026-11-25): the app also offers experimental variants of Building blocks (`blocks-random`, `blocks-robust`, `blocks-pbo`, `blocks-duel`, `blocks-infogain`, `experiment/block_arms.py`) for listener tests. Steps 2 and 3 below keep them until the listener tests decide which, if any, stay; they are not legacy.
+
 Goal: Building blocks (`BlockDiscovery`) is the only search in the app. The two older searches are hidden from the listener and moved out of the main code path, so people and agents reading `experiment/source_search.py` see the current system first. Everything stays in git, so the move is reversible.
 
 ## What can move, and what cannot

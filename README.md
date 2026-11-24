@@ -1,6 +1,6 @@
 # EV Sound Lab: Personalized EV Driving Sound through Interactive Preference Learning
 
-EV Sound Lab is a desktop research prototype for personalizing procedural electric-vehicle sounds through interactive preference learning. Users compare sound pairs and provide preferences to guide the search. Gaussian-process and evolutionary search are explored as methods within the broader interactive preference-learning approach. A simplified vehicle simulator is included as an optional interaction context.
+EV Sound Lab is a desktop research prototype for personalizing procedural electric-vehicle sounds through interactive preference learning. Users compare sound pairs and provide preferences to guide the search. The current search (Building blocks) fits a Bayesian Bradley-Terry model to the answers and picks challengers by Thompson sampling; Gaussian-process and evolutionary search were compared against it on simulated listeners (see docs/research/benchmark_blocks_results.md). A simplified vehicle simulator is included as an optional interaction context.
 
 **Research group:** Makoto Fukumoto Lab, FIT
 

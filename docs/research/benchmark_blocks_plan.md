@@ -109,7 +109,7 @@ Notes: Duel and Pairs give up the champion that makes the session easy to follow
 Both/Neither answers carry no comparison in the GP; they still drive the app's champion reset in the arms that keep one. Held-out accuracy for
 PBOGP and Duel uses the GP's mean, for the other arms the app's linear model.
 
-Code note (2026-11-23): PBOGP, Duel and Robust, and a Random-challengers session, are also selectable in the app as experimental searches (`blocks-pbo`, `blocks-duel`, `blocks-robust`, `blocks-random`) for listener testing; the benchmark and the app share `experiment/block_arms.py`.
+Code note (2026-11-23): PBOGP, Duel and Robust, and a Random-challengers session, are also selectable in the app as experimental searches (`blocks-pbo`, `blocks-duel`, `blocks-robust`, `blocks-random`, and from 2026-11-25 `blocks-infogain`) for listener testing; the benchmark and the app share `experiment/block_arms.py`.
 
 ## 10. Decision criteria for the secondary arms (2026-11-24, written before any new-arm result)
 

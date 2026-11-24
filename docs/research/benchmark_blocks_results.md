@@ -1,7 +1,7 @@
 # Block-session benchmark: results
 
 Run 2026-11-23 to 2026-11-24 on Laptop B. Plan: [benchmark_blocks_plan.md](benchmark_blocks_plan.md) (written before the run; section 9 added the four secondary arms and section 10 their decision criteria, both before any result of those arms). Raw report: [benchmark_blocks_report_logistic0.5.txt](benchmark_blocks_report_logistic0.5.txt). Reproduced 2026-11-24 on GitHub Actions (25 chunks, ~100 min wall clock; raw report [benchmark_blocks_report_logistic0.5_github.txt](benchmark_blocks_report_logistic0.5_github.txt)): every Current - Random cell and every secondary verdict matches Laptop B (differences at most 0.002), so the result does not depend on the machine. Harness: `tools/benchmark_blocks.py`; arms shared with the app in `experiment/block_arms.py`.
-All numbers here are for the session as it was until 2026-11-24 (pair 14 replays pair 4; 9 challenger pairs). The app now plays 10 challenger pairs and no replay; `REPLAY=1` reproduces these results, and the new default has not been benchmarked yet.
+All numbers here are for the session as it was until 2026-11-24 (pair 14 replays pair 4; 9 challenger pairs). The app now plays 10 challenger pairs and no replay; `REPLAY=1` reproduces these results. A post-hoc run of the no-replay session (Current, Random, InfoGain; [report](benchmark_blocks_report_noreplay_github.txt), GitHub Actions 2026-11-24, not pre-registered) gave, at 17 pairs: Current .538 (was .509), InfoGain .555 (.528), Random .448 (.448); Current - Random +0.090 [+0.070, +0.110]; InfoGain - Current +0.017 [+0.001, +0.033], still under the 0.05 bar. The 12-pair rows match the table below exactly. Removing the replay and adding a challenger pair happened together, so their effects are not separated.
 All results are from **synthetic preference profiles**. They show how the selection methods behave under the stated assumptions, not that real listeners prefer the sounds.
 
 ## Setup in one paragraph
@@ -68,7 +68,7 @@ The shortlist metric (any of the up to 5 shortlisted sounds is in the top 5%) fa
 
 ## 5. What the results mean
 
-1. The current design (linear Bayesian Bradley-Terry model, Thompson sampling with a distance bonus, winner stays) is the best of the eight methods tested under these assumptions. No alternative cleared a pre-registered bar.
+1. The current design (linear Bayesian Bradley-Terry model, Thompson sampling with a distance bonus, winner stays) was not beaten by any of the seven alternatives under these assumptions: none cleared a pre-registered bar. InfoGain has a slightly higher mean (+0.019) but is under the bar, and the lead over Random is modest and not robust to very noisy answers (section 6b).
 2. **Model expressiveness is not the bottleneck at 17 pairs:** the kernel model (PBOGP) did no better than the linear one, and a better acquisition on the same linear model (InfoGain) helped only slightly.
 3. **The duel trades retrieval for breadth.** It finds the best sound less often (0.447 against 0.509 at 17 pairs; at 17 pairs its regret is worse on every oracle except psycho) but its held-out accuracy is higher (0.61 against 0.59 at 17, 0.66 against 0.61 at 30), because it samples the whole space and learns the global taste. This matches a listener's report that duel sessions sound more diverse.
 4. **The champion structure helps at 12 and 30 pairs** (Random over Pairs +0.07 to +0.18 on four oracles) but not clearly at 17, and the psycho oracle reverses it (random pairs beat random challengers by 0.11 at 17 and 30 pairs). When the model fits poorly, exploring beats staying.
@@ -109,4 +109,4 @@ Reading:
 
 ## 7. Decision
 
-Keep Building blocks (Current) as the search to evaluate with listeners. InfoGain is a small, consistent possible improvement (lower regret) but under the bar. Duel is kept as an exploration tool for listening tests, not as the production search. Next: optional tuning of PBOGP and Duel on development profiles; human pilot.
+Keep Building blocks (Current) as the search to evaluate with listeners; it was not beaten, which is not the same as best. InfoGain is a small, consistent possible improvement (lower regret) but under the bar. Duel is kept as an exploration tool for listening tests, not as the production search. Next: optional tuning of PBOGP and Duel on development profiles; human pilot.
