@@ -107,7 +107,9 @@ class SimulatorController(QObject):
         return fallback
 
     def controller_pedals(self):
-        """What the player is pressing right now (controller triggers, W/S): never BeamNG's own pedal values."""
+        """What the player is pressing right now. In BeamNG mode that is the game's own pedal values (its input map, as the graph shows); otherwise controller triggers and W/S."""
+        if self.source_mode == 'BeamNG':
+            return (self.telemetryThrottle, self.telemetryBrake)
         return (max(self.gamepad_throttle, self.external_throttle, float(Qt.Key.Key_W in self.keys_down)),
                 max(self.gamepad_brake, self.external_brake, float(Qt.Key.Key_S in self.keys_down)))
 
