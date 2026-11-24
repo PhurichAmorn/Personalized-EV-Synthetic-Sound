@@ -5,6 +5,7 @@ import { isLiveRecipe, liveSound, type LiveRecipe } from './levels'
 import { LabPlayer } from './labEngine'
 import { simulatedDrive } from './simulatedDrive'
 import { useT, type T } from './i18n'
+import AlgorithmView from './AlgorithmView'
 
 // Level sounds are built live in the app (no offline render): the trace plays them on the 22 s simulated drive.
 const traceLab = new LabPlayer()
@@ -15,6 +16,7 @@ type Row = { id: string; created: string; completed: number; final: string | nul
 type Saved = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; ratings?: number[]; audio_descriptor?: number[]; origin?: { kind?: string; move?: string; motion?: string; summary?: string } }
 type Session = {
   id: string; created: string; final: string | null
+  policy?: string; preference_model?: { feature_weights?: Record<string, number>; feature_sd?: Record<string, number> }
   // rating_source: 'rating-1-7' (legacy and normal pairs) or 'choice' (parent check). Sessions before 2026-11-10 have no rating_source and are 1-7.
   history: { pair: string[]; ratings?: { A: number; B: number }; rating_source?: 'rating-1-7' | 'choice'; choice?: 'A' | 'B' | 'equal' | 'good' | 'neither'; winner?: string | null; origin_by_candidate?: Record<string, string> }[]
   playoff_history: { pair: string[]; choice: 'A' | 'B' | 'equal'; winner: string | null }[]
@@ -80,13 +82,14 @@ export default function TraceHistory({ command, preview }: { command: Command; p
     setSession(await command<Session>('historyGet', { id }))
   }
   const [livePlaying, setLivePlaying] = useState(false)
-  const stopLive = () => { traceLab.stop(); setLivePlaying(false) }
+  const [playingId, setPlayingId] = useState<string | null>(null)  // the sound playing from the replay
+  const stopLive = () => { traceLab.stop(); setLivePlaying(false); setPlayingId(null) }
   useEffect(() => stopLive, [])
   const expand = (id: string) => { stopLive(); setSound(id); if (!isLive(session!.candidates[id]?.recipe)) void command('historyPreview', { id: session!.id, candidate: id }) }
   const collapse = () => { stopLive(); setSound(null); void command('historyPreviewClear') }
   const playLive = (id: string, recipe: LiveRecipe) => {
     const { plain, fx, mode, travel } = liveSound(recipe)
-    void traceLab.play(id, liveStems(recipe), fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel).then(started => { if (started) setLivePlaying(true) })
+    void traceLab.play(id, liveStems(recipe), fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel).then(started => { if (started) { setLivePlaying(true); setPlayingId(id) } })
   }
   const star = async (id: string, value: boolean) => { await command('historyStar', { id, value }); void refresh() }
   const starred = !!rows.find(row => row.id === session?.id)?.starred
@@ -123,6 +126,7 @@ export default function TraceHistory({ command, preview }: { command: Command; p
               : <button className="icon-button danger" title={t('Delete session')} aria-label={t('Delete session')} onClick={() => setConfirmDelete(true)}><img src="/icons/trash.svg" alt="" /></button>}
           </div>
         </div>
+        <AlgorithmView key={session.id} session={session} playingId={playingId} onPlay={id => { const c = session.candidates[id]; if (playingId === id) stopLive(); else if (c && isLive(c.recipe)) { stopLive(); playLive(id, c.recipe as LiveRecipe) } }} />
         <div className="history-steps history-tree">
           {(() => {
             // Tree: the chosen sound continues down the trunk; the other sound branches off to the side and ends there.

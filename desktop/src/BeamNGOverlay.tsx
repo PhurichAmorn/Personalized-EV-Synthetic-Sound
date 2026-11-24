@@ -24,7 +24,6 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   const brake = state.sourceMode === 'BeamNG' ? state.beamngBrake : state.brakeInput
   const regen = state.sourceMode === 'BeamNG' ? state.beamngRegen : state.charge
   const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
-  const cars = state.vehicleNames.filter(name => name.startsWith('BeamNG'))  // the game cars this overlay can drive the sound for
   const [dragError, setDragError] = useState('')
   // Sound graphs (wave and spectrogram, both shown). Never shown during an experiment session: seeing the sound could bias what the participant rates.
   const session = state.search.active || !!state.sourceDiscovery?.active
@@ -62,8 +61,6 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
       <button type="button" aria-pressed={granular} disabled={locked} onClick={onGranular}>GS</button>
       <button type="button" className="overlay-modes-next" disabled={locked} title="Next motion" aria-label={`Next motion, currently ${granularMode}`}
         onClick={onGranularCycle}>&#9197; <small>{granularMode}</small></button>
-      {cars.length > 1 && <button type="button" className="overlay-modes-next" disabled={locked || state.running} title="Switch BeamNG car (stop the sound first)" aria-label={`Car, currently ${state.vehicle}`}
-        onClick={() => void onCommand('vehicle', { name: cars[(cars.indexOf(state.vehicle) + 1) % cars.length] })}>&#128663; <small>{state.vehicle.replace('BeamNG ', '')}</small></button>}
     </div>}
     <div className="overlay-grid">
       <div>

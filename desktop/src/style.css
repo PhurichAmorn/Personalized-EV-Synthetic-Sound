@@ -158,7 +158,8 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .display-classic .speed-reading small, .display-sport .speed-reading small { margin-top: 3px; font-size: 11px; letter-spacing: 2px; }
 .display-sport .speed-reading { top: 5%; }
 .display-digital .speed-reading { z-index: 2; top: 12%; }
-.display-digital .speed-reading span { font-size: min(150px, 12vw); }
+.display-digital .speed-reading span { font-size: min(100px, 8vw); }
+.dashboard-cluster.display-digital { height: 330px; }  /* smaller number and shorter cluster: the page no longer scrolls */
 .display-digital .cluster-center { flex: 1 1 100%; }
 .gear-badge { position: absolute; top: 32%; left: calc(50% - 190px); display: grid; place-items: center; width: 34px; height: 40px; border: 1.5px solid #f6f6f6; border-radius: 9px; color: #f6f6f6; font-size: 24px; font-weight: 300; }
 .cluster-status { position: absolute; bottom: 13%; left: 0; width: 100%; color: #646464; text-align: center; font-size: 10px; letter-spacing: 3px; }
@@ -316,8 +317,10 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .source-rating.unset output { color: var(--muted); }
 
 .source-search-content { grid-template-columns: minmax(0, 1fr); }
-.source-comparison-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.source-comparison-header .source-session-summary { gap: 10px; }
+.source-comparison-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 10px; }  /* one line: the Now playing text must never push the row taller */
+.source-comparison-header .source-session-summary { gap: 10px; min-width: 0; }
+.source-comparison-header .source-session-summary h3 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-comparison-header .source-session-summary span { flex-shrink: 0; white-space: nowrap; }
 .source-session-summary { display: flex; align-items: center; gap: 14px; font-size: 13px; }
 .source-session-summary h3 { margin: 0; }
 .source-session-summary span { color: var(--muted); font-size: 12px; }
@@ -328,7 +331,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 
 .label, .rail-button span, .circle-gauge-label, .circle-gauge-caption { font-family: var(--font-mono); }
 /* Sport cluster: more space between the power and speed gauges. */
-.dashboard-cluster.display-sport { gap: 90px; }
+.dashboard-cluster.display-sport { gap: 90px; height: 350px; }  /* gauges squashed from 430 to 340 tall: the page no longer scrolls */
 @media (max-width: 1100px) { .dashboard-cluster.display-sport { gap: 48px; } }
 
 /* Speed glow: a soft light under the speed reading. --ambient is a registered colour so changing it cross-fades. */
@@ -340,7 +343,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
   opacity: .8; } /* static: the gradient is already soft; a blurred, animated layer repaints every frame on integrated GPUs */
 
 /* Digital display: single power + charge bar under the speed reading. */
-.digital-power { position: absolute; z-index: 2; top: 62%; left: 50%; width: min(520px, 86%); transform: translateX(-50%); }
+.digital-power { position: absolute; z-index: 2; top: 66%; left: 50%; width: min(520px, 86%); transform: translateX(-50%); }
 .dp-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; color: var(--muted); }
 .dp-head span.on { color: var(--fg); }
 .dp-head strong { color: var(--fg); font-size: 14px; font-weight: 500; letter-spacing: 0; }
@@ -429,7 +432,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .place-3 .podium-step { height: 56px; }
 .place-4 .podium-step { height: 32px; }
 .source-search-thanks { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.thanks-check { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 8px; border: 2px solid #2ee86b; border-radius: 50%; color: #2ee86b; font-size: 26px; animation: pop .4s ease-out; }
+.thanks-check { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 4px; border: 2px solid #2ee86b; border-radius: 50%; color: #2ee86b; font-size: 19px; animation: pop .4s ease-out; }
 @keyframes pop { from { transform: scale(.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (max-width: 620px) { .podium { gap: 6px; } .podium-card { padding: 8px; } }
 
@@ -555,3 +558,46 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .x-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
 .overlay-personalize .search-close .x-icon { width: 28px; height: 28px; }
 .beamng-overlay-close .x-icon { width: 24px; height: 24px; }
+
+/* Native dropdown lists ignore the page colours (the BeamNG overlay is transparent, so the list came out white on white): give them a solid dark list. */
+select.control { color-scheme: dark; }
+select.control option { background: #1b1b1b; color: #f6f6f6; }
+/* Search list: our own dropdown, open in the page flow (not floating): the BeamNG overlay is a small window sized to its content, so a floating list would be clipped. */
+.search-dropdown-list { display: grid; gap: 2px; margin: 8px 0 0; padding: 4px; list-style: none; border: 1px solid #545454; border-radius: 8px; background: #1b1b1b; }
+.search-dropdown-list button { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: transparent; color: #f6f6f6; font-size: 12px; text-align: left; cursor: pointer; }
+.search-dropdown-list button:hover, .search-dropdown-list button:focus-visible { background: #343434; }
+.search-dropdown-list button.selected { background: #3d3d3d; }
+
+/* Sound trace: how the search worked */
+.algo-view { display: grid; gap: 14px; margin: 14px 0 18px; padding: 14px; border: 1px solid #3a3a3a; border-radius: 10px; background: #1b1b1b; }
+.algo-view h3 { margin: 0; font-size: 14px; }
+.algo-view h4 { margin: 0 0 6px; font-size: 12px; color: #cfcfcf; font-weight: 600; }
+.algo-approach { margin: 0; font-size: 13px; color: #d6d6d6; }
+.algo-approach span { color: #a8a8a8; }
+.algo-timeline { display: flex; flex-wrap: wrap; gap: 6px; }
+.algo-chip { display: grid; justify-items: center; gap: 1px; min-width: 30px; padding: 4px 3px 3px; border: 1px solid #3a3a3a; border-radius: 6px; font-size: 11px; }
+.algo-chip i, .algo-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.algo-chip small { color: #a8a8a8; font-size: 10px; }
+.algo-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 6px 0 0; font-size: 11px; color: #bdbdbd; }
+.algo-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.algo-legend .algo-note { color: #8c8c8c; }
+.algo-map, .algo-weights { width: 100%; max-width: 460px; height: auto; }
+.algo-grid { stroke: #2e2e2e; stroke-width: 1; }
+.algo-zero { stroke: #5a5a5a; stroke-width: 1; }
+.algo-axis { fill: #9a9a9a; font-size: 9px; }
+.algo-path { fill: none; stroke: #8a8a8a; stroke-width: 1; stroke-dasharray: 3 3; }
+.algo-dot { fill: #111; font-size: 8px; font-weight: 700; pointer-events: none; }
+.algo-final { stroke: #fff; stroke-width: 2; }
+.algo-sd { stroke: #7d7d7d; stroke-width: 1.5; }
+.algo-pos { fill: #6cc4f0; }
+.algo-neg { fill: #f5a742; }
+
+.algo-chip { background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.algo-chip.current { border-color: #f0e06c; background: #2a2a24; }
+.algo-now { stroke: #f0e06c; stroke-width: 3; }
+.algo-stepper { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+.algo-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.algo-side { padding: 8px; border: 1px solid #3a3a3a; border-radius: 8px; }
+.algo-side.picked { border-color: #6cc4f0; }
+.algo-side > span { margin-left: 8px; font-size: 11px; color: #6cc4f0; }
+.algo-side p { margin: 6px 0 0; font-size: 11px; color: #a8a8a8; overflow-wrap: anywhere; }
