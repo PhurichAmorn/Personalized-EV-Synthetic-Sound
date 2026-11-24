@@ -1581,7 +1581,7 @@ BLOCK_OPENING=2    # pairs 2-3 (after the motion pair): the four starts, two per
 BLOCK_BRIGHT_STEP=.15  # acum, measured: medium (.10 is the smallest gap heard; .20 with 8-semitone pitch jumps was heard as too large, 2026-11-21)
 BLOCK_BROAD=(3,11)     # pairs 5-13 (counted after the motion pair): broad challengers, 2 blocks changed at once
 BLOCK_BIG=(13,14)      # pairs 15-16: one medium change (pitch 4 semitones or brightness 0.15 acum)
-BLOCK_REPLAY=12        # pair 14: the playoff pair (pair 4) again, A and B swapped
+BLOCK_REPLAY=12        # the playoff pair (pair 4) again, A and B swapped: off by default since 2026-11-25 (class attribute replay), the pair is one more champion challenge
 BLOCK_GAP_GROUPS=('body','level','synth')  # changes where other settings can cover them, checked against the measured spectrum gap. Not the top
 # texture: swaps were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass .33). Pitch, brightness and
 # space have their own rules: 4 semitones is always heard, brightness is a measured 0.15 acum, reverb changes over time.
@@ -1618,15 +1618,16 @@ class BlockDiscovery(SoundMapDiscovery):
     """17 choices over building-block sounds (experiment/sound_blocks.py, 2026-11-21): body texture, top texture, top level, synth knobs,
     pitch, brightness, space. No pool: every sound is built on the spot, and only offered if the safe-area table
     (tools/sound_map/block_sweep.py) says it passes the drive check; brightness changes are measured (0.15 acum), not fixed filter amounts.
-    Pair 1 Rising vs Evolving (Glass start); 2-3 the four starts; 4 playoff of their two best winners; 5-13 the champion against broad challengers
-    (2 blocks changed at once); 14 replay of pair 4; 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); 17 confirmation.
+    Pair 1 Rising vs Evolving (Glass start); 2-3 the four starts; 4 playoff of their two best winners; 5-14 the champion against broad challengers
+    (2 blocks changed at once); 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); 17 confirmation. (replay=True: 5-13 broad, 14 replay of pair 4.)
     Answers, Bradley-Terry ranking (answers alone), shortlist and export as SoundMapDiscovery."""
     policy=BLOCK_POLICY
     feature_names=BLOCK_FEATURE_NAMES
     motion_pair_count=1  # one Rising vs Evolving pair (a second one on Synth pad, 2026-11-21, sounded too alike and was removed)
     winner_stays=True  # a challenger that wins takes over at once; the benchmark's robust-champion arm turns this off
-    adaptive=9  # champion-vs-challenger pairs (5-13); the benchmark stretches it (30 pairs = 22). Replay, the 2 fine-tune pairs and the check follow it.
-    steps=property(lambda s:7+s.adaptive)  # pairs after the motion pair: 16 at 9
+    adaptive=10  # champion-vs-challenger pairs (5-14); the benchmark stretches it (30 pairs = 23). The 2 fine-tune pairs and the check follow it.
+    replay=False  # True: the playoff pair is played again after the challenger pairs (the app until 2026-11-24, adaptive 9); a listener found it pointless with a new champion
+    steps=property(lambda s:6+s.replay+s.adaptive)  # pairs after the motion pair: 16 at adaptive 10
     pairs=1+BLOCK_STEPS
     repeats=();_repeat_order=None
     def __init__(self,renderer=None,table_path=sb.TABLE):
@@ -1727,12 +1728,12 @@ class BlockDiscovery(SoundMapDiscovery):
             order=winners+[i for i in self._bt_ranked() if i not in winners];met={frozenset(r['pair']) for r in rows}
             pair=next(([a,b] for n,a in enumerate(order) for b in order[n+1:] if frozenset((a,b)) not in met),None)
             if pair:self.rematch=pair;return []
-        if step==BLOCK_OPENING+1+self.adaptive and len(rows)>BLOCK_OPENING and len(set(rows[BLOCK_OPENING]['pair']))==2:
+        if self.replay and step==BLOCK_OPENING+1+self.adaptive and len(rows)>BLOCK_OPENING and len(set(rows[BLOCK_OPENING]['pair']))==2:
             old=rows[BLOCK_OPENING]['pair'];self.repeats.append({'at':self.completed,'of':mp+BLOCK_OPENING,'kind':'playoff','pair':old[::-1]})
             self._repeat_order=old[::-1];self.rematch=list(old);return []
         # Champion (winner stays), first champion and the one after Neither by the answers, as SoundMapDiscovery.
         rejected=set(rows[-1]['pair']) if rows and rows[-1]['choice']=='neither' else set()
-        last=next((r for r in reversed(rows) if self.champion in r['pair']),{})  # the champion's latest pair: the replay (pair 14) must not hide a loss in pair 13
+        last=next((r for r in reversed(rows) if self.champion in r['pair']),{})  # the champion's latest pair: a replay must not hide a loss just before it
         if not self._bt_ranked():return []  # no start passes the safe-area table: _prepare reports that no pair could be formed
         if self.champion is None or rejected:
             self.champion=next((i for i in self._bt_ranked() if i not in rejected),None) or self._bt_ranked()[0]
@@ -1755,7 +1756,7 @@ class BlockDiscovery(SoundMapDiscovery):
         def single(gs):
             out=[(r,{'kind':'change','group':g,'parent':best,'summary':f'Change: {w}'}) for g in gs for x,w in block_moves(here,g) if ok(r:=self._recipe(x),g,w)]
             return sorted(out,key=lambda m:-self._sampled(m[0]))
-        if BLOCK_OPENING+2+self.adaptive<=step<=BLOCK_OPENING+3+self.adaptive:return single(('pitch','brightness'))+single(BLOCK_BROAD_GROUPS)
+        if BLOCK_OPENING+1+self.replay+self.adaptive<=step<=BLOCK_OPENING+2+self.replay+self.adaptive:return single(('pitch','brightness'))+single(BLOCK_BROAD_GROUPS)
         # Broad (pairs 6-13): 2 blocks changed at once, so every pair is clearly different. Candidates are drawn at random, then ordered by a
         # Thompson sample of the taste plus how far each is from everything heard (areas not heard yet come first).
         last=rows[-1] if rows else {};lost={}
@@ -1778,7 +1779,7 @@ class BlockDiscovery(SoundMapDiscovery):
         if self._repeat_order and set(self.pair)==set(self._repeat_order):self.pair=list(self._repeat_order)
         self._repeat_order=None
     def _order_broad(self,out,here):
-        """Order of the broad challengers (pairs 5-13); the benchmark's arms replace this (tools/benchmark_blocks.py)."""
+        """Order of the broad challengers (pairs 5-14); the benchmark's arms replace this (tools/benchmark_blocks.py)."""
         return sorted(out,key=lambda m:-(self._sampled(m[0])+.5*m[1]['far']))
     def export(self):
         data=super().export();rows=self._choices()
@@ -1797,10 +1798,10 @@ class BlockDiscovery(SoundMapDiscovery):
             'Built on the spot; offered only if the safe-area table (tools/sound_map/block_sweep.py, full-drive check at 4 low-pass points) passes it '
             '(table.checked false: no table yet, sounds unchecked and no brightness changes). Pair 1 Rising vs Evolving on the Glass start '
             '(Both good or Neither keep Rising); 2-3 the four starts, two per pair (Glass, Pure, Bell synth, Moody); '
-            '4 playoff of the two best opening winners that have not met; 5-13 the champion against broad challengers: 2 blocks changed at once, '
+            '4 playoff of the two best opening winners that have not met; 5-14 the champion against broad challengers: 2 blocks changed at once, '
             'drawn at random and ordered by a Thompson sample of a '
-            f'Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features plus distance from everything heard; 14 replay of pair 4 '
-            '(A and B swapped); 15-16 one medium change (pitch 4 semitones or brightness 0.15 acum); winner stays. Changes are medium (one-step '
+            f'Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features plus distance from everything heard; 15-16 '
+            ' one medium change (pitch 4 semitones or brightness 0.15 acum); winner stays. Changes are medium (one-step '
             'guesses were not heard, 8-semitone jumps with 3 blocks were too large); a change of body, top level or synth knob needs a measured octave-band gap of at least 0.35 '
             '(.15-.31 were not heard). Pair 17: shortlist #1 against the start it was tuned from (tuning_check: did the tuning help), or against the strongest sound it has not met when #1 is a start. Liked: every winner and both sounds of a Both '
             'good answer. Shortlist: Bradley-Terry on the answers alone, at most 2 per top texture, each clearly different from the others (another '

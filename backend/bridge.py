@@ -2,7 +2,7 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.block_arms import DuelBlocks, PBOBlocks, RandomBlocks, RobustBlocks
+from experiment.block_arms import DuelBlocks, InfoGainBlocks, PBOBlocks, RandomBlocks, RobustBlocks
 from experiment.source_search import BlockDiscovery, HeardMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
 
@@ -15,7 +15,7 @@ class DesktopBridge:
         # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
         self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery(),
                          # experimental pair-selection variants of 'blocks' (experiment/block_arms.py, 2026-11-23): not benchmarked yet
-                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks()}
+                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks(), 'blocks-infogain': InfoGainBlocks()}
         self.source_discovery = self.searches['tuning']
         self.history = SourceHistory(self.source_discovery)
 

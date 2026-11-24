@@ -17,6 +17,7 @@ from experiment.source_search import BlockDiscovery, block_features, block_moves
 
 ORACLES = ('matched', 'multimodal', 'interaction', 'label', 'psycho')
 GOOD_Z, NEITHER_Z = float(os.environ.get('GOOD_Z', 3)), float(os.environ.get('NEITHER_Z', 0))  # env override only for the Both/Neither-removed sensitivity run (GOOD_Z=1e9 NEITHER_Z=-1e9). Both good when both sounds are above GOOD_Z SD, Neither when both are below NEITHER_Z SD. Calibrated 2026-11-23 to the real block sessions
+REPLAY = os.environ.get('REPLAY') == '1'  # 1 = the app until 2026-11-24 (pair 14 replays pair 4, adaptive 9/22); default: no replay, one more challenger pair (adaptive 10/23), as the app
 # (19 sessions, 311 choices: Both good 1.6%, Neither 2.3%); simulated Current at 17 pairs, 5 oracles x 4 profiles x 3 seeds: Both good 2.7%, Neither 2.5%.
 # (+-0.5 SD gave 49% Both good and 0.1% Neither: the session soon plays only good sounds, so Both good needs a high bar.)
 SYNTH_OFF = {'buzz': 0, 'chord': 'off', 'bell': False, 'vowel': False}
@@ -26,7 +27,7 @@ _G = {}  # per-process: table, truth sounds
 class Base(BlockDiscovery):
     """The app's session with a seed (so arms and noise are reproducible) and no rendering."""
     def __init__(self, seed, adaptive):
-        super().__init__(renderer=lambda r: None); self.adaptive = adaptive; self._seed = seed
+        super().__init__(renderer=lambda r: None); self.adaptive = adaptive; self.replay = REPLAY; self._seed = seed
     def held_out_scores(self, X): return X @ self._weights()
     def start(self, motion='rise'):
         with mock.patch.object(ss.random, 'SystemRandom', lambda: random.Random(self._seed)): super().start(motion)
@@ -38,12 +39,7 @@ class Current(Base): pass
 class Random(ba.RandomMixin, Base): pass
 
 
-class InfoGain(Base):
-    """EUBO-style: expected best of the pair, E[max(u(candidate), u(champion))], over 200 posterior draws of the taste."""
-    def _order_broad(self, out, here):
-        mean, cov = self._posterior(); W = np.random.default_rng(self.rng.randrange(2 ** 32)).multivariate_normal(mean, cov, 200, method='cholesky')
-        uh = W @ block_features(here)
-        return sorted(out, key=lambda m: -np.maximum(W @ self._features(m[0]), uh).mean())
+class InfoGain(ba.InfoGainMixin, Base): pass
 
 
 class IEC(Base):
@@ -167,7 +163,7 @@ def answer(rng, za, zb, noise):
 def run(job):
     family, profile, seed, arm, budget, noise = job
     z, zt = oracle(family, 7919 * profile + ORACLES.index(family))
-    adaptive = 22 if budget == 30 else 9; pairs = {12: 12, 17: 16, 30: 29}[budget]
+    adaptive = (22 if budget == 30 else 9) + (0 if REPLAY else 1); pairs = {12: 12, 17: 16, 30: 29}[budget]
     d = ARMS[arm](seed, adaptive); d.start('rise'); rng = random.Random(seed * 31 + 5); n = 0
     for _ in range(pairs):
         if len(d.pair) != 2: break

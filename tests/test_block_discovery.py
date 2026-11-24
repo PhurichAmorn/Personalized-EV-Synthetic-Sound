@@ -22,14 +22,20 @@ def fake_table(path, fail_from=None):
 
 
 class BlockDiscoveryTest(unittest.TestCase):
-    def session(self, table=None, seed=3):
-        d = BlockDiscovery(table_path=table or '/nonexistent/table.json'); d.start(); d.rng = random.Random(seed)
+    def session(self, table=None, seed=3, replay=False):
+        d = BlockDiscovery(table_path=table or '/nonexistent/table.json')
+        if replay: d.replay = True; d.adaptive = 9  # the app until 2026-11-24: pair 14 replays pair 4
+        d.start(); d.rng = random.Random(seed)
         return d
 
     def test_flow_motion_starts_playoff_replay_and_changes(self):
+        for replay in (False, True):
+            with self.subTest(replay=replay): self.flow(replay)
+
+    def flow(self, replay):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
         path = Path(tmp.name) / 'table.json'; fake_table(path)
-        d = self.session(path); rows = []
+        d = self.session(path, replay=replay); rows = []
         # pair 1: Rising vs Evolving, the same sound in both motions
         self.assertEqual({d.candidates[i]['recipe']['motion'] for i in d.pair}, {'rise', 'evolving'})
         self.assertEqual(len({json.dumps(d._sound(i), sort_keys=True) for i in d.pair}), 1)
@@ -44,17 +50,17 @@ class BlockDiscoveryTest(unittest.TestCase):
         blocks = lambda i: d._sound(i)
         for n in range(5, 18):
             if not d.active: break
-            if n == 14: self.assertEqual(d.pair, playoff[::-1])  # pair 14: pair 4 again, A and B swapped
+            if replay and n == 14: self.assertEqual(d.pair, playoff[::-1])  # pair 14: pair 4 again, A and B swapped
             elif n < 17:
                 a, b = d.pair; o = lambda i: d.candidates[i]['origin']
                 new = a if o(a).get('parent') == b else b; self.assertEqual(o(new).get('parent'), next(i for i in d.pair if i != new))  # champion vs a challenger
                 differ = sum(blocks(a)[k] != blocks(b)[k] for k in blocks(a))
-                if n <= 13: self.assertEqual(o(new)['kind'], 'broad'); self.assertGreaterEqual(differ, 2)  # pairs 5-13: 2 blocks at once
+                if n <= (13 if replay else 14): self.assertEqual(o(new)['kind'], 'broad'); self.assertGreaterEqual(differ, 2)  # pairs 5-14 (5-13 with the replay): 2 blocks at once
                 else: self.assertEqual(o(new)['kind'], 'change')  # pairs 15-16: one big change (pitch or brightness first; a top swap also clears synth knobs)
             d.feedback(choice='A')
         self.assertFalse(d.active); self.assertEqual(d.completed, 17)
         data = d.export()
-        self.assertTrue(data['liked']); self.assertEqual(len(data['repeats']), 1); self.assertTrue(data['table']['checked'])
+        self.assertTrue(data['liked']); self.assertEqual(len(data['repeats']), int(replay)); self.assertTrue(data['table']['checked'])
         self.assertTrue(d._bt_order())
         d.close()
 
@@ -114,7 +120,7 @@ class BlockDiscoveryTest(unittest.TestCase):
         d.close()
 
     def test_champion_beaten_just_before_the_replay_is_replaced(self):
-        d = self.session()
+        d = self.session(replay=True)
         for _ in range(12): d.feedback(choice='A')  # through pair 12
         a, b = d.pair; champ = d.champion; challenger = b if a == champ else a
         d.feedback(choice='A' if d.pair[0] == challenger else 'B')  # pair 13: the challenger wins

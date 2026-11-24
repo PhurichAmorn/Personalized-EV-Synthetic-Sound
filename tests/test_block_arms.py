@@ -3,10 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from experiment.block_arms import DuelBlocks, PBOBlocks, RandomBlocks, RobustBlocks
+from experiment.block_arms import DuelBlocks, InfoGainBlocks, PBOBlocks, RandomBlocks, RobustBlocks
 from tests.test_block_discovery import fake_table
 
-ARMS = (RandomBlocks, RobustBlocks, PBOBlocks, DuelBlocks)
+ARMS = (InfoGainBlocks, RandomBlocks, RobustBlocks, PBOBlocks, DuelBlocks)
 
 
 class BlockArmsTest(unittest.TestCase):

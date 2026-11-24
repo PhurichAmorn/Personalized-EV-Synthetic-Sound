@@ -1,6 +1,7 @@
 # Block-session benchmark: results
 
 Run 2026-11-23 to 2026-11-24 on Laptop B. Plan: [benchmark_blocks_plan.md](benchmark_blocks_plan.md) (written before the run; section 9 added the four secondary arms and section 10 their decision criteria, both before any result of those arms). Raw report: [benchmark_blocks_report_logistic0.5.txt](benchmark_blocks_report_logistic0.5.txt). Reproduced 2026-11-24 on GitHub Actions (25 chunks, ~100 min wall clock; raw report [benchmark_blocks_report_logistic0.5_github.txt](benchmark_blocks_report_logistic0.5_github.txt)): every Current - Random cell and every secondary verdict matches Laptop B (differences at most 0.002), so the result does not depend on the machine. Harness: `tools/benchmark_blocks.py`; arms shared with the app in `experiment/block_arms.py`.
+All numbers here are for the session as it was until 2026-11-24 (pair 14 replays pair 4; 9 challenger pairs). The app now plays 10 challenger pairs and no replay; `REPLAY=1` reproduces these results, and the new default has not been benchmarked yet.
 All results are from **synthetic preference profiles**. They show how the selection methods behave under the stated assumptions, not that real listeners prefer the sounds.
 
 ## Setup in one paragraph

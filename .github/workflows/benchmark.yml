@@ -38,6 +38,10 @@ on:
       neither_z:
         description: Neither threshold in SD (-1e9 removes Neither)
         default: '0'
+      replay:
+        description: Old session (pair 14 replays pair 4, 9 challenger pairs); off = the app now (no replay, 10 challenger pairs)
+        type: boolean
+        default: false
 
 jobs:
   plan:
@@ -88,6 +92,7 @@ jobs:
           NOISE: ${{ inputs.noise }}
           GOOD_Z: ${{ inputs.good_z }}
           NEITHER_Z: ${{ inputs.neither_z }}
+          REPLAY: ${{ inputs.replay && '1' || '0' }}
           OUT: chunk.csv
         run: |
           echo "cores: $(nproc)"

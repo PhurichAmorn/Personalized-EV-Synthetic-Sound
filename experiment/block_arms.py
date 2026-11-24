@@ -4,12 +4,13 @@ playoff, replay, fine-tune pairs, the Bradley-Terry shortlist and the export are
   random : champion vs challenger, challengers in random order (the control: the tournament with no model)
   robust : champion vs challenger, champion = Bradley-Terry best of everything heard (not the last winner)
   pbo    : champion vs challenger, challengers ordered by EUBO under a GP preference model (kernel over the blocks)
+  infogain: champion vs challenger, challengers ordered by EUBO under the app's own linear model (200 posterior draws)
   duel   : no champion; both sounds picked by two posterior draws of the same GP (Thompson duel)
 Not benchmarked yet when added: treat as experimental."""
 import numpy as np
 from scipy.stats import norm
 from experiment import sound_blocks as sb
-from experiment.source_search import BLOCK_OPENING, BlockDiscovery
+from experiment.source_search import BLOCK_OPENING, BlockDiscovery, block_features
 
 CATS = ('body', 'top', 'partner', 'level', 'buzz', 'chord', 'bell', 'vowel')
 _VOC = {}
@@ -50,6 +51,15 @@ class GP:
 
 class RandomMixin:
     def _order_broad(self, out, here): out = list(out); self.rng.shuffle(out); return out
+
+
+class InfoGainMixin:
+    """EUBO-style: expected best of the pair, E[max(u(candidate), u(champion))], over DRAWS posterior draws of the taste."""
+    DRAWS = 200
+    def _order_broad(self, out, here):
+        mean, cov = self._posterior(); W = np.random.default_rng(self.rng.randrange(2 ** 32)).multivariate_normal(mean, cov, self.DRAWS, method='cholesky')
+        uh = W @ block_features(here)
+        return sorted(out, key=lambda m: -np.maximum(W @ self._features(m[0]), uh).mean())
 
 
 class RobustMixin:
@@ -105,6 +115,7 @@ class DuelMixin:
 
 # The sessions the app offers (backend/bridge.py, Search selector).
 class RandomBlocks(RandomMixin, BlockDiscovery): policy = 'source-blocks-v1-random'
+class InfoGainBlocks(InfoGainMixin, BlockDiscovery): policy = 'source-blocks-v1-infogain'
 class RobustBlocks(RobustMixin, BlockDiscovery): policy = 'source-blocks-v1-robust'
 class PBOBlocks(PBOMixin, BlockDiscovery): policy = 'source-blocks-v1-pbo'
 class DuelBlocks(DuelMixin, FreeMixin, BlockDiscovery): policy = 'source-blocks-v1-duel'
