@@ -1,8 +1,59 @@
+import json
 import logging
 import os
 import time
+from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal, Slot, QTimer
+
+
+BEAMNG_AXES = ('xaxis', 'yaxis', 'zaxis', 'rxaxis', 'ryaxis', 'rzaxis')  # DirectInput order; a G29 reports x, y, z, rz as its four axes
+G29_AXES = ('xaxis', 'yaxis', 'zaxis', 'rzaxis')
+_game_maps = {}
+
+
+def game_pedal_map(vidpid):
+    """Throttle and brake axis of a wheel as BeamNG has it bound: the player's own changes (current/settings/inputmaps/<vidpid>.diff) over the game's defaults.
+    Returns {'accelerate': (control, inverted), 'brake': (control, inverted)}; an unknown wheel falls back to the Logitech default."""
+    if vidpid in _game_maps:
+        return _game_maps[vidpid]
+    result = {'accelerate': ('yaxis', True), 'brake': ('rzaxis', True)}
+    roots = [Path(os.environ.get('LOCALAPPDATA', '')) / 'BeamNG' / 'BeamNG.drive' / 'current' / 'settings' / 'inputmaps']
+    install = [Path(base) / 'steamapps' / 'common' / 'BeamNG.drive' / 'settings' / 'inputmaps'
+               for base in (r'C:\Program Files (x86)\Steam', r'C:\Program Files\Steam')]
+    for folder, suffix in [(f, '.json') for f in install] + [(f, '.diff') for f in roots]:  # defaults first, the player's changes on top
+        try:
+            for binding in json.loads((folder / (vidpid + suffix)).read_text(encoding='utf8')).get('bindings', []):
+                if binding.get('action') in result and binding.get('control') in BEAMNG_AXES:
+                    result[binding['action']] = (binding['control'], bool(binding.get('isInverted')))
+        except (OSError, ValueError, AttributeError):
+            continue
+    _game_maps[vidpid] = result
+    return result
+
+
+def wheel_pedals(device):
+    """(throttle, brake) of an unmapped racing wheel using BeamNG's own bindings, else None."""
+    name = device.get_name().lower()
+    if not any(key in name for key in ('g29', 'g27', 'g923', 'driving force', 'racing wheel')) or device.get_numaxes() < 4:
+        return None
+    try:
+        guid = device.get_guid()
+        vidpid = (guid[18:20] + guid[16:18] + guid[10:12] + guid[8:10]).upper()  # SDL guid: bus, crc, vid, 0, pid (16-bit little endian); BeamNG names the map PIDVID
+    except Exception:
+        vidpid = ''
+    bound = game_pedal_map(vidpid)
+    axes = G29_AXES if device.get_numaxes() == 4 else BEAMNG_AXES
+
+    def level(action):
+        control, inverted = bound[action]
+        if control not in axes or axes.index(control) >= device.get_numaxes():
+            return 0.0
+        value = device.get_axis(axes.index(control))
+        value = (1.0 - value) / 2.0 if inverted else (1.0 + value) / 2.0  # an inverted pedal rests at +1 and reads -1 when pressed
+        value = min(1.0, max(0.0, value))
+        return 0.0 if value < .02 else value
+    return level('accelerate'), level('brake')
 
 
 class GamepadInput(QObject):
@@ -97,10 +148,11 @@ class GamepadInput(QObject):
                 self.reset_navigation()
                 self.stateChanged.emit('', 0, 0, '')
             else:
+                wheel = wheel_pedals(self.device) if self.unmapped else None
                 self.stateChanged.emit(self.device.get_name() if self.unmapped else self.device.name,
-                    0 if self.unmapped else self.trigger(self.device.get_axis(self.pygame.CONTROLLER_AXIS_TRIGGERRIGHT)),
-                    0 if self.unmapped else self.trigger(self.device.get_axis(self.pygame.CONTROLLER_AXIS_TRIGGERLEFT)),
-                    'SDL mapping unavailable: D-pad/A/B only; triggers disabled.' if self.unmapped else '')
+                    wheel[0] if wheel else 0 if self.unmapped else self.trigger(self.device.get_axis(self.pygame.CONTROLLER_AXIS_TRIGGERRIGHT)),
+                    wheel[1] if wheel else 0 if self.unmapped else self.trigger(self.device.get_axis(self.pygame.CONTROLLER_AXIS_TRIGGERLEFT)),
+                    'SDL mapping unavailable: D-pad/A/B only; triggers disabled.' if self.unmapped and not wheel else '')
                 self.poll_navigation()
                 self.poll_battery()
         except (RuntimeError, self.pygame.error) as exc:
@@ -178,13 +230,17 @@ class GamepadInput(QObject):
 
     def scan(self):
         devices = []
+        # An unmapped wheel/pad in use is the same pygame Joystick object the scan opens again: quitting it here would close the live device ("Joystick not initialized").
+        active = self.device.get_instance_id() if self.unmapped and self.device is not None and self.device.get_init() else None
         for index in range(self.api.get_count()):
             joystick = self.pygame.joystick.Joystick(index)
             mapped = self.api.is_controller(index)
-            devices.append(dict(id=joystick.get_instance_id(), index=index,
+            instance_id = joystick.get_instance_id()
+            devices.append(dict(id=instance_id, index=index,
                                 name=self.api.name_forindex(index) if mapped else joystick.get_name(),
                                 **({} if mapped else {'unmapped': True})))
-            joystick.quit()
+            if instance_id != active:
+                joystick.quit()
         if self.unmapped and self.device is not None and not any(
                 entry['id'] == self.device.get_instance_id() for entry in devices):
             self.release_device()

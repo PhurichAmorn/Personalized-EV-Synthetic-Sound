@@ -54,14 +54,16 @@ class SourceHistoryTest(unittest.TestCase):
             self.history.star('../etc/passwd', True)
 
 
-    def test_my_sound_is_newest_final(self):
+    def test_my_sound_starts_standard_then_chosen_final(self):
         root = self.history.root
         def session(ident, final, at):
             (root / f'{ident}.json').write_text(json.dumps({'final': final, 'candidates': {'f': {'label': 'L', 'recipe': {'kind': 'map'}}}}))
             os.utime(root / f'{ident}.json', (at, at))
         session('a' * 32, 'f', 1)
         session('b' * 32, None, 2)  # newer, but no final pick
-        self.assertEqual(SourceHistory(self.discovery, root).my_sound['session'], 'a' * 32)
+        self.assertIsNone(SourceHistory(self.discovery, root).my_sound)  # the app starts on the standard sound
+        self.history.choose('a' * 32)
+        self.assertEqual(self.history.my_sound['session'], 'a' * 32)
         self.history.delete('a' * 32)
         self.assertIsNone(self.history.my_sound)  # deleting the session forgets its sound
 
@@ -72,9 +74,12 @@ class SourceHistoryTest(unittest.TestCase):
             os.utime(root / f'{ident}.json', (at, at))
         history = SourceHistory(self.discovery, root)
         self.assertEqual([s['session'] for s in history.my_sounds], ['b' * 32, 'a' * 32])
-        self.assertEqual(history.my_sound['label'], 'b')  # newest by default
+        self.assertIsNone(history.my_sound)  # standard sound until one is picked
         history.choose('a' * 32)
-        self.assertEqual(SourceHistory(self.discovery, root).my_sound['label'], 'a')  # kept after a restart
+        self.assertEqual(history.my_sound['label'], 'a')
+        history.choose('')
+        self.assertIsNone(history.my_sound)  # back to the standard sound
+        self.assertIsNone(SourceHistory(self.discovery, root).my_sound)  # a restart starts standard again
 
 
 if __name__ == '__main__':
