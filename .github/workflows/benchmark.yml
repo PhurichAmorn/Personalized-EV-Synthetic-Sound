@@ -111,6 +111,7 @@ jobs:
           NOISE: ${{ inputs.noise }}
         run: |
           files=$(find chunks -name chunk.csv | sort)
+          if [ -z "$files" ]; then echo "::error::No chunk results were uploaded: a chunk job failed. Open the chunk job and read the first failing step."; ls -R chunks || true; exit 1; fi
           echo "$files" | wc -l
           python -m tools.benchmark_blocks report "noise=$NOISE" $files | tee report.txt
           python -m tools.benchmark_blocks summarize $files > summary.txt
