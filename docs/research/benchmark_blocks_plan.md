@@ -110,3 +110,17 @@ Both/Neither answers carry no comparison in the GP; they still drive the app's c
 PBOGP and Duel uses the GP's mean, for the other arms the app's linear model.
 
 Code note (2026-11-23): PBOGP, Duel and Robust, and a Random-challengers session, are also selectable in the app as experimental searches (`blocks-pbo`, `blocks-duel`, `blocks-robust`, `blocks-random`) for listener testing; the benchmark and the app share `experiment/block_arms.py`.
+
+## 10. Decision criteria for the secondary arms (2026-11-24, written before any new-arm result)
+
+All on top-10% retrieval, primary noise (logistic 0.5), paired, profile-level bootstrap 95% CI. "Pooled" = all five oracles, profiles weighted equally, budget 17 unless stated. The results at 12 and 30 are reported but do not drive these decisions.
+
+| # | Contrast | Rule | Consequence |
+|---|---|---|---|
+| 1 | PBOGP minus Current | CI above 0 **and** diff >= 0.05 pooled, and no oracle where the CI is below 0 | Adopt PBOGP as the production algorithm. Otherwise Current stays. |
+| 2 | PBOGP minus InfoGain | CI above 0 **and** diff >= 0.03 pooled | The kernel model helps. Otherwise keep the simpler linear model. |
+| 3 | Duel minus Current | Diff >= -0.02 pooled, **or** Duel better (CI above 0, diff >= 0.05) on >= 2 oracles | Build and benchmark the hybrid (Duel early, champion late). Otherwise drop Duel as a production candidate. |
+| 4 | Current minus Pairs; Random minus Pairs | Equivalence band +-0.03: the whole CI inside the band = "no detectable structure effect"; CI above the band = the tournament helps; below = it hurts | If Pairs is equivalent to Random, the champion structure adds nothing in simulation and the session UX is free to change. |
+| 5 | Robust minus Current | Same +-0.03 equivalence band | Inside the band: the noise critique of winner-stays has no support here. Below: winner-stays is better. Above: reset the champion by Bradley-Terry in production. |
+
+Notes: a hybrid or a switch from criteria 1 or 3 still needs listening tests with people before production. Equivalence-band verdicts are about these synthetic profiles only. Regret is reported for each contrast but does not decide.
