@@ -77,11 +77,35 @@ The shortlist metric (any of the up to 5 shortlisted sounds is in the top 5%) fa
 
 - Synthetic profiles chosen by the authors, not calibrated to a population. Psycho (measured octave bands) carries much of the pooled gain; label shows none.
 - **PBOGP and Duel are untuned** (kernel length scales 3, 2 steps and 0.3 acum; candidate count 400; all fixed guesses). Their results are for those settings only. The plan to tune on separate development profiles and confirm on fresh ones has not been run.
-- **Sensitivity runs not done:** other noise levels (none, logistic 0.25 and 1.0, flip 0.1 and 0.25) and Both good / Neither removed. "Robust across noise" is not earned yet, and these results hold only for logistic tau = 0.5.
+- **Sensitivity (section 6b) done for Current - Random only.** The advantage is not robust by the pre-registered rule: it disappears at 17 pairs under very noisy answers (logistic 1.0). The other arms' verdicts were not re-run under other noise.
 - Held-out accuracy tracks how well each arm's model fits the oracle (0.50 to 0.73) and the breadth of its samples, not retrieval; it is exploratory only.
 - The 30-pair budget has no fatigue. Real listeners have not been tested; human sessions come next.
 - Random - Pairs misses the equivalence band by 0.001; the verdict is stated as borderline, not as equivalence.
 
+## 6b. Sensitivity runs (Current - Random, 2026-11-24, GitHub Actions)
+
+Design and rule written before the runs: plan section 11. Current and Random only, 5 oracles x 40 profiles x 10 seeds (400 sessions per oracle, budget and arm), one run per condition. Raw reports: [benchmark_blocks_sensitivity/](benchmark_blocks_sensitivity/).
+
+Pooled Current - Random, top-10% (95% CI); bold = BETTER (CI above 0 and at least 0.05):
+
+| Condition | 12 pairs | 17 pairs | 30 pairs |
+|---|---|---|---|
+| primary: logistic 0.5 (25 seeds) | **+0.076** [+0.058, +0.093] | **+0.061** [+0.045, +0.077] | **+0.085** [+0.067, +0.103] |
+| logistic 0.25 | **+0.134** [+0.109, +0.158] | **+0.137** [+0.115, +0.160] | **+0.065** [+0.041, +0.088] |
+| logistic 1.0 | **+0.052** [+0.029, +0.076] | -0.003 [-0.027, +0.021] | **+0.054** [+0.028, +0.081] |
+| flip 0.1 | **+0.057** [+0.033, +0.081] | **+0.065** [+0.042, +0.086] | **+0.099** [+0.076, +0.123] |
+| flip 0.25 | **+0.054** [+0.028, +0.080] | +0.024 [+0.002, +0.048] | **+0.099** [+0.073, +0.126] |
+| no noise | **+0.063** [+0.040, +0.086] | **+0.052** [+0.030, +0.075] | +0.017 [-0.002, +0.037] |
+| Both good / Neither removed | **+0.106** [+0.085, +0.130] | **+0.064** [+0.042, +0.086] | **+0.092** [+0.068, +0.116] |
+
+Verdict against the rule (pooled sign positive in all six conditions, and CI above 0 at 17 pairs in at least 4 of 6): the second part holds (5 of 6), the first fails because **logistic 1.0 at 17 pairs is -0.003**. **Not robust by the rule written in advance.** Current beats Random in five of six alternative conditions at 17 pairs, and at 12 and 30 pairs it is positive in all, except that at 30 pairs with no noise the gain is +0.017.
+
+Reading:
+- The gain is clearest for a low-noise listener (logistic 0.25: +0.14) and for the lab-calibrated Both good / Neither. It vanishes at 17 pairs when the listener is very noisy (logistic 1.0), where answers carry little signal for any method.
+- Psycho changes sign under some conditions at 17 pairs (logistic 1.0: -0.098; no noise: -0.090) and is the largest positive elsewhere (logistic 0.25: +0.400; Both/Neither removed: +0.153). The pooled result depends on that oracle.
+- Removing Both good / Neither does not hurt Current; the lab-calibrated Both good / Neither is not what produces the gain.
+- 10 seeds give wider CIs than the primary 25.
+
 ## 7. Decision
 
-Keep Building blocks (Current) as the search to evaluate with listeners. InfoGain is a small, consistent possible improvement (lower regret) but under the bar. Duel is kept as an exploration tool for listening tests, not as the production search. Next: sensitivity runs for Current against Random; optional tuning of PBOGP and Duel on development profiles; human pilot.
+Keep Building blocks (Current) as the search to evaluate with listeners. InfoGain is a small, consistent possible improvement (lower regret) but under the bar. Duel is kept as an exploration tool for listening tests, not as the production search. Next: optional tuning of PBOGP and Duel on development profiles; human pilot.

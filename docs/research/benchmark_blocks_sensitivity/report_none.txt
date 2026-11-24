@@ -1,0 +1,71 @@
+noise none:0.0; 5 oracles; 400 sessions per oracle, budget and arm; rule: BETTER = CI above 0 and difference >= 0.05
+
+PRIMARY: current minus random, top-10% retrieval
+  matched       12  +0.107 [+0.050, +0.170]  BETTER
+  matched       17  +0.095 [+0.042, +0.150]  BETTER
+  matched       30  +0.100 [+0.062, +0.143]  BETTER
+  multimodal    12  +0.108 [+0.047, +0.168]  BETTER
+  multimodal    17  +0.113 [+0.065, +0.165]  BETTER
+  multimodal    30  +0.070 [+0.028, +0.118]  BETTER
+  interaction   12  +0.105 [+0.053, +0.163]  BETTER
+  interaction   17  +0.090 [+0.042, +0.142]  BETTER
+  interaction   30  +0.087 [+0.035, +0.143]  BETTER
+  label         12  +0.065 [+0.015, +0.120]  BETTER
+  label         17  +0.053 [+0.003, +0.102]  BETTER
+  label         30  +0.018 [-0.010, +0.050]  no detectable difference
+  psycho        12  -0.073 [-0.100, -0.045]  WORSE
+  psycho        17  -0.090 [-0.135, -0.043]  WORSE
+  psycho        30  -0.190 [-0.235, -0.143]  WORSE
+  tally: {'BETTER': 11, 'no detectable difference': 1, 'WORSE': 3}
+
+HEADLINE: current minus random pooled over oracles, top-10%
+  budget  12  +0.063 [+0.040, +0.086]  BETTER
+  budget  17  +0.052 [+0.030, +0.075]  BETTER
+  budget  30  +0.017 [-0.002, +0.037]  no detectable difference
+
+SECONDARY: arm A minus arm B, top-10% retrieval (higher is better)
+
+SECONDARY: arm A minus arm B, regret in SD (lower is better)
+
+BUDGET EFFECT: current at the longer budget minus current at the shorter, top-10%
+  matched       17 vs 12: +0.053 [+0.025, +0.080]  30 vs 17: +0.092 [+0.055, +0.138]
+  multimodal    17 vs 12: +0.055 [+0.025, +0.092]  30 vs 17: +0.082 [+0.045, +0.125]
+  interaction   17 vs 12: +0.030 [+0.005, +0.055]  30 vs 17: +0.108 [+0.060, +0.158]
+  label         17 vs 12: +0.025 [+0.008, +0.045]  30 vs 17: +0.107 [+0.068, +0.152]
+  psycho        17 vs 12: +0.233 [+0.205, +0.263]  30 vs 17: +0.138 [+0.102, +0.173]
+
+OTHER OUTCOMES: current minus random (top-5% = the #1 is in the top 5%; shortlist top-5% = any of the up to 5 shortlisted sounds is)
+  top5   matched       12: +0.110 [+0.058, +0.172]  17: +0.100 [+0.045, +0.153]  30: +0.145 [+0.092, +0.203]
+  top5   multimodal    12: +0.160 [+0.085, +0.240]  17: +0.155 [+0.078, +0.230]  30: +0.140 [+0.090, +0.195]
+  top5   interaction   12: +0.100 [+0.042, +0.158]  17: +0.107 [+0.043, +0.180]  30: +0.133 [+0.068, +0.195]
+  top5   label         12: +0.028 [-0.025, +0.083]  17: +0.030 [-0.020, +0.082]  30: +0.028 [-0.020, +0.080]
+  top5   psycho        12: +0.065 [+0.045, +0.085]  17: +0.138 [+0.102, +0.173]  30: -0.005 [-0.053, +0.043]
+  top5   pooled        12: +0.092 [+0.068, +0.118]  17: +0.106 [+0.079, +0.131]  30: +0.088 [+0.064, +0.113]
+  short5 matched       12: +0.107 [+0.050, +0.165]  17: +0.105 [+0.045, +0.168]  30: +0.130 [+0.083, +0.180]
+  short5 multimodal    12: +0.175 [+0.098, +0.255]  17: +0.185 [+0.108, +0.258]  30: +0.118 [+0.072, +0.168]
+  short5 interaction   12: +0.113 [+0.058, +0.167]  17: +0.113 [+0.053, +0.173]  30: +0.103 [+0.050, +0.155]
+  short5 label         12: +0.025 [-0.030, +0.080]  17: +0.028 [-0.020, +0.080]  30: +0.040 [+0.000, +0.083]
+  short5 psycho        12: +0.188 [+0.158, +0.220]  17: +0.138 [+0.102, +0.173]  30: +0.038 [-0.005, +0.080]
+  short5 pooled        12: +0.121 [+0.096, +0.147]  17: +0.114 [+0.090, +0.140]  30: +0.085 [+0.064, +0.107]
+
+EQUIVALENT RANDOM PAIRS: how many pairs Random needs to match an arm (linear interpolation of Random top-10% between the budgets played; a point estimate with no CI)
+  matched      current   at 12 pairs: matches Random at 23.3 pairs (saves +11.3)
+  matched      current   at 17 pairs: top-10% 0.870, outside what Random reached (0.710 to 0.863)
+  multimodal   current   at 12 pairs: matches Random at 23.0 pairs (saves +11.0)
+  multimodal   current   at 17 pairs: matches Random at 28.7 pairs (saves +11.7)
+  interaction  current   at 12 pairs: matches Random at 24.1 pairs (saves +12.1)
+  interaction  current   at 17 pairs: matches Random at 27.6 pairs (saves +10.6)
+  label        current   at 12 pairs: matches Random at 19.5 pairs (saves +7.5)
+  label        current   at 17 pairs: matches Random at 21.8 pairs (saves +4.8)
+  psycho       current   at 12 pairs: top-10% 0.245, outside what Random reached (0.318 to 0.805)
+  psycho       current   at 17 pairs: matches Random at 15.2 pairs (saves -1.8)
+  pooled       current   at 12 pairs: matches Random at 15.5 pairs (saves +3.5)
+  pooled       current   at 17 pairs: matches Random at 21.8 pairs (saves +4.8)
+
+MEANS (top10, regret, held-out acc) per arm, pooled over oracles
+  budget  12 current   top10 0.674  regret 1.00  acc 0.611
+  budget  12 random    top10 0.612  regret 1.13  acc 0.609
+  budget  17 current   top10 0.753  regret 0.90  acc 0.622
+  budget  17 random    top10 0.701  regret 1.05  acc 0.627
+  budget  30 current   top10 0.859  regret 0.65  acc 0.642
+  budget  30 random    top10 0.842  regret 0.83  acc 0.641
