@@ -6,7 +6,8 @@ export default function ChooserWindow() {
   const choose = (mode: 'simulator' | 'beamng') => void window.__TAURI__?.core.invoke('start_mode', { mode })
   return <main className="chooser">
     <LanguageGate />
-    <small className="chooser-kicker">{t('EV SOUND LAB')}</small> <LanguageSelect className="control" />
+    <small className="chooser-kicker">{t('EV SOUND LAB')}</small>
+    <span className="chooser-lang"><LanguageSelect className="control" /></span>
     <h1>{t('What are you driving with?')}</h1>
     <div className="chooser-options">
       <button type="button" className="chooser-option" onClick={() => choose('simulator')} autoFocus>

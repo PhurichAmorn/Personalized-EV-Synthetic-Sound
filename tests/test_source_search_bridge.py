@@ -39,3 +39,22 @@ class SourceSearchBridgeTest(unittest.TestCase):
         self.bridge.command('vehicleStart',{})
         self.bridge.command('vehicleStart',{})
         self.controller.toggle.assert_called_once()
+
+
+class BlockBuilderTest(unittest.TestCase):
+    """Sound Lab's block builder: the same _recipe a session plays, reached through two bridge commands."""
+    def setUp(self):
+        self.bridge=DesktopBridge(Mock(soundSweepActive=False))
+
+    def tearDown(self):
+        for search in self.bridge.searches.values():search.close()
+
+    def test_options_and_build(self):
+        options=self.bridge.handle('blockOptions',{}) if hasattr(self.bridge,'handle') else self.bridge._block_options()
+        self.assertIn('glass',options['tops']);self.assertEqual(len(options['pitches']),5)
+        built=self.bridge._block_build({'blocks':{'top':'bell','buzz':2,'chord':'on'},'motion':'evolving'})
+        self.assertEqual(built['recipe']['motion'],'evolving');self.assertEqual(built['recipe']['blocks']['top'],'bell');self.assertEqual(built['recipe']['kind'],'map')
+
+    def test_partner_not_allowed_for_the_top_is_dropped(self):
+        built=self.bridge._block_build({'blocks':{'top':'electric','partner':'glass'}})
+        self.assertIsNone(built['recipe']['blocks']['partner'])

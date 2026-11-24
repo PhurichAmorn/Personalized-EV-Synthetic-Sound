@@ -54,7 +54,8 @@ body.dpad-cursor-active button:focus::after {
 .tool-window { min-height: 100vh; box-sizing: border-box; padding: 18px; background: var(--bg); color: var(--fg); }
 .tool-window > .space-y-5 { max-width: 1100px; margin: 0 auto; }
 .dashboard-screen { display: flex; min-height: 100vh; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
-.dashboard-rail { position: sticky; top: 0; align-self: flex-start; flex: 0 0 auto; width: 56px; height: 100vh; padding: 16px 5px; background: #1e1e1e; border-right: 1px solid #313131; overflow: hidden; }
+.dashboard-rail { flex: 0 0 auto; width: 56px; background: #1e1e1e; border-right: 1px solid #313131; }  /* the full height of the page, so a long page has no gap under it */
+.rail-sticky { position: sticky; top: 0; box-sizing: border-box; height: 100vh; padding: 16px 5px; overflow: hidden; }  /* the buttons stay in view while the page scrolls */
 .dashboard-rail.expanded { width: 220px; }
 .dashboard-rail button:focus {
   outline-offset: -3px;
@@ -361,7 +362,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-modes .overlay-modes-next { margin-left: auto; }
 .overlay-modes small { font-size: 9px; letter-spacing: 0; }
 .overlay-graph { display: block; width: 100%; height: 60px; border-radius: 8px; background: rgb(0 0 0 / 28%); }
-.chooser { box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; min-height: 100vh; padding: 28px; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+.chooser { position: relative; overflow: hidden; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; min-height: 100vh; padding: 28px; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
 .chooser-kicker { color: var(--muted); font-size: 10px; letter-spacing: .18em; }
 .chooser h1 { margin: 0; font-size: 20px; font-weight: 500; }
 .chooser-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
@@ -383,19 +384,19 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-caption { margin-bottom: 4px; color: var(--muted); font-size: 9px; letter-spacing: .08em; }
 
 /* Sound trace history: sessions | trace | optional sound details. */
-.history-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; align-items: start; }
+.history-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 20px; align-items: stretch; min-height: calc(100vh - 150px); }  /* columns fill the screen and grow with the content */
 .history-layout.with-detail { grid-template-columns: 260px minmax(0, 1fr) 340px; }
 .history-list, .history-trace, .history-detail { padding: 20px; }
-.history-list { display: flex; flex-direction: column; gap: 10px; height: 78vh; overflow-y: auto; }  /* scrolls on its own */
+.history-list { display: flex; flex-direction: column; gap: 10px; align-self: start; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }  /* stays in view; scrolls on its own if the list is long */
 .history-list > *, .history-trace > * { flex-shrink: 0; }  /* fixed-height columns must not squash the session buttons */
-.history-trace { display: flex; flex-direction: column; height: 78vh; }  /* same height as the session list; its pairs scroll inside */
+.history-trace { display: flex; flex-direction: column; min-width: 0; }  /* as tall as its content, at least the screen */
 .history-item { display: block; width: 100%; text-align: left; }
 .history-item span { display: block; margin-top: 2px; color: #9a9a9a; font-size: 12px; }
 .history-item.selected { border-color: #d2d2d2; }
 .star-button { font-size: 17px; line-height: 1; color: #9a9a9a; }
 .star-button.on, .history-star { color: #e8bd68; }
 .history-trace > .history-steps { flex-shrink: 1; }
-.history-steps { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; margin-top: 16px; overflow-y: auto; padding-right: 6px; }
+.history-steps { display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 16px; }
 .history-step { padding: 12px; border: 1px solid #3d3d3d; border-radius: 10px; background: #232323; }
 .history-step h3, .history-detail h3 { margin: 12px 0 6px; color: #cfcfcf; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .history-step h3 { margin-top: 0; }
@@ -410,7 +411,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .history-bands > div { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 3px; }
 .history-bands b { width: 100%; min-height: 1px; background: #cfcfcf; border-radius: 2px 2px 0 0; }
 .history-bands small { color: #9a9a9a; font-size: 9px; }
-@media (max-width: 1100px) { .history-layout, .history-layout.with-detail { grid-template-columns: 1fr; } .history-list, .history-trace { height: auto; max-height: 78vh; } }
+@media (max-width: 1100px) { .history-layout, .history-layout.with-detail { grid-template-columns: 1fr; } .history-list { position: static; max-height: 40vh; } }
 /* Small inline spinner for background work. */
 .loading-note { display: flex; align-items: center; gap: 8px; }
 .spinner { flex: none; width: 12px; height: 12px; border: 2px solid #5a5a5a; border-top-color: #f2f2f2; border-radius: 50%; animation: spin .8s linear infinite; }
@@ -601,3 +602,21 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .algo-side.picked { border-color: #6cc4f0; }
 .algo-side > span { margin-left: 8px; font-size: 11px; color: #6cc4f0; }
 .algo-side p { margin: 6px 0 0; font-size: 11px; color: #a8a8a8; overflow-wrap: anywhere; }
+.history-detail { align-self: start; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }  /* the sound details stay in view beside a long trace */
+@media (max-width: 1100px) { .history-detail { position: static; max-height: none; } }
+
+/* Sound Lab: the header and the three scopes stay fixed at the top; the block builder scrolls under them. */
+.lab-fixed { position: sticky; top: 0; z-index: 20; margin: -20px -24px 0; padding: 0 24px 10px; background: var(--panel); box-shadow: 0 1px 0 var(--line); }
+.lab-fixed .lab-head { position: static; margin: 0; padding: 14px 0 12px; box-shadow: none; }
+.lab-scopes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding-top: 10px; }
+.lab-scopes .lab-scope { margin: 0; }
+.lab-scopes .lab-scope canvas { height: 84px; }
+@media (max-width: 800px) { .lab-scopes { grid-template-columns: 1fr; } .lab-scopes .lab-scope canvas { height: 56px; } .lab-fixed { margin: -16px -16px 0; padding: 0 16px 8px; } }
+.lab-builder { padding-top: 18px; }
+.lab-build-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 24px; margin-top: 8px; }
+
+.chooser-lang { position: absolute; top: 14px; right: 16px; }  /* top right corner: it no longer takes a row, so the landing page does not scroll */
+.chooser-lang button[role='switch'] { width: 88px !important; height: 24px !important; font-size: 11px !important; }
+.lab-scopes .lab-scope canvas { height: 150px; }  /* bigger visuals */
+.lab-scopes .lab-scope-spectrum canvas, .lab-scopes .lab-scope-waveform canvas { height: 150px; }
+@media (max-width: 800px) { .lab-scopes .lab-scope canvas, .lab-scopes .lab-scope-spectrum canvas, .lab-scopes .lab-scope-waveform canvas { height: 90px; } }

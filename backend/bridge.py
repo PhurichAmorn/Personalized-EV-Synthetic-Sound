@@ -75,6 +75,22 @@ class DesktopBridge:
             raise ValueError(f'Invalid {key} pedal value')
         return float(value)
 
+    def _block_options(self):
+        """Choices of the Sound Lab block builder: the session's own block vocabulary (experiment/sound_blocks.py)."""
+        from experiment import sound_blocks as sb
+        return {'bodies': list(sb.BODIES), 'tops': list(sb.TOPS), 'partners': {k: list(v) for k, v in sb.PARTNERS.items()}, 'levels': list(sb.TOP_LEVELS),
+                'pitches': sb.PITCHES, 'buzz': list(range(len(sb.BUZZ))), 'names': sb.NAMES, 'default': sb.DEFAULT, 'synthTops': ['synth', 'bell']}
+
+    def _block_build(self, payload):
+        """One block sound -> the live recipe the session would play (same _recipe: safe-area table, brightness to low-pass, loudness gain), or an error."""
+        from experiment import sound_blocks as sb
+        sound = sb.full({k: v for k, v in (payload.get('blocks') or {}).items() if k in sb.DEFAULT})
+        motion = payload.get('motion') if payload.get('motion') in ('rise', 'evolving') else 'rise'
+        if sound['body'] not in sb.BODIES or sound['top'] not in sb.TOPS or sound['level'] not in sb.TOP_LEVELS or not 0 <= int(sound['pitch']) < len(sb.PITCHES):raise ValueError('Unknown block')
+        if sound['partner'] and sound['partner'] not in sb.PARTNERS.get(sound['top'], ()):sound['partner'] = None
+        recipe = self.searches['blocks']._recipe(sound, motion)
+        return {'recipe': recipe} if recipe else {'error': 'This combination fails the safe-area drive check at this brightness, so a session would never play it. Lower the brightness or change a block.'}
+
     @staticmethod
     def _text(payload, key):
         value = payload.get(key)
@@ -117,6 +133,8 @@ class DesktopBridge:
             else:raise ValueError('Unknown source discovery command')
             if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryEnd','sourceDiscoveryAccept'):self.history.save()  # autosave to local history
             return self.snapshot()
+        if name == 'blockOptions':return self._block_options()
+        if name == 'blockBuild':return self._block_build(payload)
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
         if name == 'historyStar':return self.history.star(self._text(payload,'id'),self._bool(payload,'value'))

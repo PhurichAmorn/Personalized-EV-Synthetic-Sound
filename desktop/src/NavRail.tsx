@@ -9,6 +9,8 @@ const items: { target: NavTarget; title: string; label: string; icon: string }[]
 export default function NavRail({ active, expanded, onSelect }: { active: NavTarget; expanded: boolean; onSelect: (target: NavTarget) => void }) {
   const t = useT()
   return <aside className={'dashboard-rail' + (expanded ? ' expanded' : '')} aria-label="Main navigation">
+    <div className="rail-sticky">
     {items.map(item => <button key={item.target} className={'rail-button' + (active === item.target ? ' active' : '')} title={t(item.title)} aria-label={t(item.title)} onClick={() => onSelect(item.target)}><img src={`/icons/${item.icon}.svg`} alt="" /><span>{t(item.label)}</span></button>)}
+    </div>
   </aside>
 }
