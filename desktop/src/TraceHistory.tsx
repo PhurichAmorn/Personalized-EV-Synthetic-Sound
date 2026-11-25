@@ -6,6 +6,7 @@ import { LabPlayer } from './labEngine'
 import { simulatedDrive } from './simulatedDrive'
 import { useT, type T } from './i18n'
 import AlgorithmView from './AlgorithmView'
+import SoundProfile from './SoundProfile'
 
 // Level sounds are built live in the app (no offline render): the trace plays them on the 22 s simulated drive.
 const traceLab = new LabPlayer()
@@ -172,6 +173,7 @@ export default function TraceHistory({ command, preview }: { command: Command; p
         : <audio controls autoPlay src={preview.url} />}
       <p className="text-xs text-neutral-500">{t('Generated on demand and discarded when you close this or leave the page.')}</p>
       </>}
+      <SoundProfile recipe={detail.recipe} />
       {detail.ratings && <><h3>{t('Ratings')}</h3><p className="text-sm">{detail.ratings.join(', ')} <span className="text-neutral-400">(1–7)</span></p></>}
       {!isLive(detail.recipe) && <h3>{t('Parameters')}</h3>}
       {!isLive(detail.recipe) && detail.recipe.layers.map((layer, index) => <details key={index} open={index === 0}><summary>{layer.role} · {layer.method} · gain {layer.gain.toFixed(2)}</summary>

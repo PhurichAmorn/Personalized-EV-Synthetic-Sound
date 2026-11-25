@@ -231,6 +231,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 
 .sound-editor button:disabled { opacity: .45; cursor: default; }
 .overlay-window, .overlay-window body, .overlay-window #root { background: transparent; }
+.overlay-window, .overlay-window body { overflow: hidden; }  /* the popup never scrolls: it is sized to its content (BeamNGOverlay) */
 .beamng-overlay-root { box-sizing: border-box; min-height: 100vh; padding: 12px; background: transparent; color: var(--fg); font-family: var(--font-body); }
 .beamng-overlay-card { display: flex; flex-direction: column; gap: 14px; min-height: calc(100vh - 24px); padding: 16px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 12px; background: rgb(14 14 14 / 58%); }
 .beamng-overlay-card button, .beamng-overlay-card select { cursor: pointer; }
@@ -308,7 +309,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .source-search-listen strong { font-size: 20px; font-weight: 400; }
 .source-search-listen small { font-size: 11px; font-weight: 400; overflow-wrap: anywhere; }
 .source-search-favourites { grid-column: 1 / -1; }
-.source-search-preferences > button:last-child { grid-column: 1 / -1; justify-self: end; padding: 0 18px; }  /* Save / Next: a normal button at the bottom right */
+.source-search-preferences > button:only-child { grid-column: 1 / -1; justify-self: end; padding: 0 18px; }  /* Save / Next: a normal button at the bottom right */
 .source-search-preferences .control { min-height: 36px; white-space: normal; }
 .source-rating { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
 .source-rating > span { color: var(--muted); font-size: 11px; }
@@ -643,3 +644,33 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .lab-winner-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .lab-winner-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; background: var(--accent); color: var(--bg); font-size: 10px; font-weight: 600; margin-left: 6px; }
 
+
+/* Sound profile (SoundProfile.tsx): a dot between two everyday words, one row per trait. */
+.sound-profile { display: grid; gap: 7px; box-sizing: border-box; width: 100%; max-width: 420px; margin: 10px auto 0; text-align: left; }  /* explicit width: inside the centred flex "thanks" panel it would shrink to its text and the lines would vanish */
+.sound-profile-row { display: grid; grid-template-columns: 5.5em minmax(60px, 1fr) 5.5em; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.sound-profile-row span:first-child { text-align: right; } .sound-profile-row span:last-child { text-align: left; }
+.sound-profile-row i { position: relative; height: 4px; border-radius: 2px; background: rgb(255 255 255 / 18%); }
+.sound-profile-row b { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #f1f1f1; box-shadow: 0 0 0 3px rgb(0 0 0 / 35%); }
+.overlay-personalize .sound-profile-row { font-size: 10px; grid-template-columns: 4.6em minmax(50px, 1fr) 4.6em; }
+.final-graphs { display: grid; gap: 6px; width: 100%; max-width: 420px; margin: 10px auto 0; }  /* wave and spectrogram of the final sound, after the session */
+.source-comparison-header .search-close { flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px; padding: 0; display: grid; place-items: center; }
+.overlay-personalize .search-dialog-header { display: none; }  /* the X now sits in the comparison section; the header would be an empty row */
+.source-comparison-header .search-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
+/* Header row: the count never gets squeezed; the buttons and the Now playing / Preparing text share what is left and the text is cut with … instead of overlapping the count. */
+.source-comparison-header > div:first-child { flex-shrink: 0; }
+.source-comparison-header > div:nth-child(2) { flex: 1 1 0; flex-wrap: nowrap; justify-content: flex-end; min-width: 0; }
+.source-comparison-header > div:nth-child(2) > button { flex-shrink: 0; }
+.thanks-close { position: absolute; top: 0; right: 0; }  /* the X sits in the saved section's top right */
+/* One small X everywhere: the Personalize X (comparison header or saved section) and the overlay's close X in the card's top right corner. */
+.thanks-close .search-close { width: 28px; height: 28px; padding: 0; border-radius: 6px; display: grid; place-items: center; }
+.thanks-close .search-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
+.beamng-overlay-close { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 6px; }
+.beamng-overlay-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
+.beamng-overlay-card:not(.personalizing) .beamng-overlay-header { padding-right: 30px; }  /* room for the corner X */
+/* Motion switch (Rise / Evolving) shares the title row: a small pill like the status pill beside it. */
+.overlay-title-row { display: flex; align-items: center; gap: 10px; }
+.overlay-title-row h1 { white-space: nowrap; }
+.overlay-title-row .overlay-modes-next { display: inline-flex; align-items: center; gap: 4px; min-height: 0; margin: 4px 0 0; padding: 4px 9px; border: 1px solid #4e4e4e; border-radius: 999px; background: transparent; color: #d6d6d6; font-size: 10px; letter-spacing: .06em; cursor: pointer; }
+.overlay-title-row .overlay-modes-next:hover:not(:disabled) { background: rgb(255 255 255 / 10%); }
+.overlay-title-row .overlay-modes-next:disabled { opacity: .45; cursor: default; }
+.overlay-title-row .overlay-modes-next small { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }

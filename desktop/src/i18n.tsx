@@ -170,6 +170,9 @@ const JA: Record<string, string> = {
   Ratings: '評価',
   Parameters: 'パラメーター',
   'Spectrum (energy share by Hz band)': 'スペクトル（周波数帯ごとのエネルギー割合）',
+  'Sound profile': 'サウンドの特徴',
+  'Close EV Sound Lab?': 'EV Sound Lab を閉じますか？', 'The overlay closes and the sound stops.': 'オーバーレイが閉じ、サウンドが止まります。', Stay: '戻る',
+  Deep: '低い', High: '高い', Dark: '暗い', Bright: '明るい', Soft: '弱い', Strong: '強い', 'Up close': '近い', Spacious: '広い', Smooth: 'なめらか', Buzzy: 'ブザー感',
 }
 
 export type T = (en: string, values?: Record<string, string | number>) => string
@@ -186,6 +189,17 @@ const PITCHES = [47.2, 59.5, 75, 94.5, 119.1]  // = experiment/sound_blocks.py P
 const NAMES: Record<string, [string, string]> = { soft: ['Soft', 'ソフト'], blocks: ['Blocks', 'ブロック'], electric: ['Electric', 'エレクトリック'], glass: ['Glass', 'グラス'],
   plain: ['Plain', 'プレーン'], synth: ['Synth', 'シンセ'], bell: ['Bell synth', 'ベルシンセ'], moody: ['Moody', 'ムーディー'] }
 const LEVELS: Record<string, string> = { soft: '弱', medium: '中', strong: '強' }
+/** Only what the profile chart cannot show: the body and top names, the partner, and the synth extras (pitch, brightness, level and space are in the chart). */
+export function describeBlocksShort(b: Blocks, motion: string | undefined, lang: Lang | null) {
+  const ja = lang === 'ja', name = (key: string) => NAMES[key]?.[ja ? 1 : 0] ?? key, synth = b.top === 'synth' || b.top === 'bell'
+  const words = [ja ? `ボディ: ${name(b.body)}` : `${name(b.body)} body`, ja ? `トップ: ${name(b.top)}` : `${name(b.top)} top`]
+  if (b.partner) words.push((ja ? '最上層: ' : '+ ') + name(b.partner))
+  if (synth && b.chord && b.chord !== 'off') words.push(ja ? '和音' : 'chord')
+  if (synth && b.bell) words.push(ja ? 'ベル' : 'bell')
+  if (synth && b.vowel) words.push(ja ? '声' : 'vowel')
+  if (motion === 'evolving') words.push(ja ? 'エボルビング' : 'evolving')
+  return words.join(' · ')
+}
 export function describeBlocks(b: Blocks, motion: string | undefined, lang: Lang | null) {
   if (lang !== 'ja') return null
   const synth = b.top === 'synth' || b.top === 'bell'
@@ -200,17 +214,17 @@ export function describeBlocks(b: Blocks, motion: string | undefined, lang: Lang
 }
 
 /** Header slider: thumb slides between English (left) and 日本語 (right). className kept for callers, unused. */
-export function LanguageSelect(_: { className?: string }) {
+export function LanguageSelect({ compact = false }: { className?: string; compact?: boolean }) {
   const ja = useLang() === 'ja'
-  return <LangSlider ja={ja} onToggle={() => setLang(ja ? 'en' : 'ja')} />
+  return <LangSlider ja={ja} compact={compact} onToggle={() => setLang(ja ? 'en' : 'ja')} />
 }
 
-function LangSlider({ ja, onToggle }: { ja: boolean; onToggle: () => void }) {
+function LangSlider({ ja, onToggle, compact = false }: { ja: boolean; onToggle: () => void; compact?: boolean }) {
   return <button type="button" role="switch" aria-checked={ja} aria-label="Language / 言語" title="Language / 言語" onClick={onToggle}
-    className="relative inline-grid h-9 w-32 shrink-0 grid-cols-2 items-center rounded-full border border-neutral-600 bg-neutral-900 text-sm">
+    className={'relative inline-grid shrink-0 grid-cols-2 items-center rounded-full border border-neutral-600 bg-neutral-900 ' + (compact ? 'h-7 w-24 p-0 text-xs leading-none' : 'h-9 w-32 text-sm')}>
     <span aria-hidden className="absolute left-0.5 top-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] rounded-full bg-neutral-100 transition-transform duration-200" style={{ transform: ja ? 'translateX(100%)' : 'none' }} />
     <span className={'relative z-10 text-center ' + (ja ? 'text-neutral-300' : 'text-neutral-900')}>EN</span>
-    <span className={'relative z-10 text-center ' + (ja ? 'text-neutral-900' : 'text-neutral-300')}>日本語</span>
+    <span className={'relative z-10 text-center ' + (ja ? 'text-neutral-900' : 'text-neutral-300')}>{compact ? '日本' : '日本語'}</span>
   </button>
 }
 
