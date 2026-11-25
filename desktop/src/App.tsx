@@ -8,7 +8,7 @@ const TraceHistory = lazy(() => import('./TraceHistory'))
 import type { NavTarget } from './NavRail'
 import OverlayHost from './OverlayHost'
 import Confirm from './Confirm'
-import { LanguageGate, LanguageSelect, useT } from './i18n'
+import { LanguageGate, useT } from './i18n'
 import { PersonalizeCloseContext } from './PersonalizeClose'
 import LegacySearch, { closeLegacySearch, type Search } from './legacy/LegacySearch'
 
@@ -252,7 +252,7 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
   // The finished session's shortlist and final sound stay in the dashboard slot too, so the listener can drive with them.
   const personalizationActive = !!(state?.search.active || state?.sourceDiscovery?.active || state?.sourceDiscovery?.finalists?.length)
   const searchPanel = state && page === 'search' ? (
-<div className={'search-dialog ' + (personalizationActive ? 'search-active' : '')} role="dialog" aria-modal={personalizationActive ? undefined : true} aria-label="Personalize sound"><header className="search-dialog-header"><div><h2 className="text-xl">{t('Personalize sound')}</h2></div><div className="flex items-center gap-2">{!overlay && <LanguageSelect />}{!state.search.active && !state.sourceDiscovery && <button className="control search-close" aria-label={t('Close')} title={t('Close')} onClick={() => state.sourceDiscovery?.active ? setLeaving(true) : leaveLab()}><svg className="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4L20 20M20 4L4 20" /></svg></button>}</div></header>{error && <p role="alert" className="mx-6 mt-5 text-red-300">{error}</p>}{state.search.active ? <LegacySearch state={state} command={command} onError={setError} onDone={() => setPage('dashboard')} /> : <div id="source-discovery-slot" />}</div>
+<div className={'search-dialog ' + (personalizationActive ? 'search-active' : '')} role="dialog" aria-modal={personalizationActive ? undefined : true} aria-label="Personalize sound"><header className="search-dialog-header"><div><h2 className="text-xl">{t('Personalize sound')}</h2></div><div className="flex items-center gap-2">{!state.search.active && !state.sourceDiscovery && <button className="control search-close" aria-label={t('Close')} title={t('Close')} onClick={() => state.sourceDiscovery?.active ? setLeaving(true) : leaveLab()}><svg className="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4L20 20M20 4L4 20" /></svg></button>}</div></header>{error && <p role="alert" className="mx-6 mt-5 text-red-300">{error}</p>}{state.search.active ? <LegacySearch state={state} command={command} onError={setError} onDone={() => setPage('dashboard')} /> : <div id="source-discovery-slot" />}</div>
   ) : undefined
 
   return <PersonalizeCloseContext.Provider value={() => state?.sourceDiscovery?.active ? setLeaving(true) : leaveLab()}><div className={overlay ? 'beamng-overlay-root' : 'dashboard-wrapper'}>
