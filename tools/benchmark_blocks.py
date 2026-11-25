@@ -163,17 +163,17 @@ def answer(rng, za, zb, noise):
 def run(job):
     family, profile, seed, arm, budget, noise = job
     z, zt = oracle(family, 7919 * profile + ORACLES.index(family))
-    adaptive = (22 if budget == 30 else 9) + (0 if REPLAY else 1); pairs = {12: 12, 17: 16, 30: 29}[budget]
-    d = ARMS[arm](seed, adaptive); d.start('rise'); rng = random.Random(seed * 31 + 5); n = 0
+    adaptive = (9 if budget < 30 else budget - 8) + (0 if REPLAY else 1); pairs = 12 if budget == 12 else budget - 1  # 12 = early cut; 17 = the app (adaptive 9/10); longer: adaptive stretched (30: 22/23, 40: 32/33, ...)
+    d = ARMS[arm](seed, adaptive); d.start('rise'); rng = random.Random(seed * 31 + 5); n = 0; best = -9.
     for _ in range(pairs):
         if len(d.pair) != 2: break
-        za, zb = (z(d.candidates[i]['recipe']) for i in d.pair); d.feedback(choice=answer(rng, za, zb, noise)); n += 1
+        za, zb = (z(d.candidates[i]['recipe']) for i in d.pair); best = max(best, za, zb); d.feedback(choice=answer(rng, za, zb, noise)); n += 1
     d._rank_finalists(); short = [z(d.candidates[i]['recipe']) for i in d.finalists] or [-9.]
     X = _G['X']; sc = d.held_out_scores(X); g = np.random.default_rng(0); i, j = g.integers(len(X), size=(2, 3000)); gap = zt[i] - zt[j]; keep = np.abs(gap) > .5
     acc = float(np.mean(np.sign(sc[i] - sc[j])[keep] == np.sign(gap)[keep])) if keep.any() else float('nan')
     d.close(); u1 = short[0]; share = (int(np.sum(zt > u1)) + 1) / len(zt)
     return dict(oracle=family, profile=profile, seed=seed, arm=arm, budget=budget, noise=f'{noise[0]}:{noise[1]}', pairs=n, z1=round(u1, 3), regret=round(max(float(zt.max()) - u1, 0), 3),
-                share=round(share, 4), top5=int(share <= .05), top10=int(share <= .10), short5=int(any(np.sum(zt > s) + 1 <= .05 * len(zt) for s in short)), acc=round(acc, 3))
+                share=round(share, 4), top5=int(share <= .05), top10=int(share <= .10), heard10=int((np.sum(zt > best) + 1) / len(zt) <= .10), short5=int(any(np.sum(zt > s) + 1 <= .05 * len(zt) for s in short)), acc=round(acc, 3))
 
 
 def summary(rows):
@@ -198,7 +198,7 @@ def summary(rows):
 def load_rows(files):
     rows = []
     for f in files:
-        for r in csv.DictReader(open(f)): rows.append({**r, 'profile': int(r['profile']), 'seed': int(r['seed']), 'budget': int(r['budget']), 'top10': int(r['top10']), 'top5': int(r['top5']), 'short5': int(r['short5']), 'regret': float(r['regret']), 'acc': float(r['acc'])})
+        for r in csv.DictReader(open(f)): rows.append({**r, 'profile': int(r['profile']), 'seed': int(r['seed']), 'budget': int(r['budget']), 'top10': int(r['top10']), 'top5': int(r['top5']), 'short5': int(r['short5']), 'heard10': int(r.get('heard10') or -1), 'regret': float(r['regret']), 'acc': float(r['acc'])})
     keys = [(r['oracle'], r['profile'], r['seed'], r['arm'], r['budget'], r['noise']) for r in rows]
     assert len(keys) == len(set(keys)), 'duplicate sessions in the chunk files'
     return rows
@@ -295,7 +295,7 @@ def report(rows, noise, boots=2000):
     for b in budgets:
         for a in sorted(all_arms):
             sel = [v[a] for k, v in cell.items() if k[1] == b and a in v]
-            if sel: print(f'  budget {b:3} {a:9} top10 {np.mean([x["top10"] for x in sel]):.3f}  regret {np.mean([x["regret"] for x in sel]):.2f}  acc {np.nanmean([x["acc"] for x in sel]):.3f}')
+            if sel: print(f'  budget {b:3} {a:9} top10 {np.mean([x["top10"] for x in sel]):.3f}  regret {np.mean([x["regret"] for x in sel]):.2f}  acc {np.nanmean([x["acc"] for x in sel]):.3f}' + (f'  best-heard top10 {np.mean([x["heard10"] for x in sel]):.3f}' if all(x.get("heard10", -1) >= 0 for x in sel) else ''))
 
 
 if __name__ == '__main__' and sys.argv[1:2] == ['report']:  # python -m tools.benchmark_blocks report [noise=logistic:0.5] a.csv b.csv ...
