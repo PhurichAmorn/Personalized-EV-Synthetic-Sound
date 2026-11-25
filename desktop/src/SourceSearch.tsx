@@ -21,6 +21,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [audition, setAudition] = useState<string | null>(null)
   const [readyAudition, setReadyAudition] = useState<string | null>(null)
   const auditionSequence = useRef(0)
+  const [sessionStarting, setSessionStarting] = useState(false)
   const [error, setError] = useState('')
   const [pendingFinal, setPendingFinal] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -70,6 +71,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     return () => window.clearTimeout(timer)
   }, [audition, readyAudition, playing, hidden, running, activity, mode, discovery?.active])
   const listen = async (candidate: DiscoveryCandidate) => {
+    if (discovery?.active && !sessionReady) return
     void onCommand('sourceDiscoveryPlayed', { id: candidate.id })  // every press, for the record (heard() needs driving)
     const token = ++auditionSequence.current; heard.current.delete(candidate.id); setAudition(candidate.id); setReadyAudition(null); setError('')
     try { const ready = await onAudition(candidate, 'driving'); if (token === auditionSequence.current) { if (ready === true) { setReadyAudition(candidate.id); setNowPlaying({ id: candidate.id, label: t('Sound {x}', { x: discovery?.pair[0]?.id === candidate.id ? 'A' : discovery?.pair[1]?.id === candidate.id ? 'B' : '' }).trim() }) } else setError(typeof ready === 'string' ? `Candidate audio failed: ${ready}` : 'Candidate audio could not start. Try replaying it.') } }
@@ -81,11 +83,17 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [menuOpen, setMenuOpen] = useState(false)
   const [newSession, setNewSession] = useState(false)  // after a finished session only New session shows; clicking it brings back the search list
   const begin = async () => {
-    setNewSession(false); setMenuOpen(false)
+    setNewSession(false); setMenuOpen(false); setSessionStarting(true); setError('')
     onStop(); if (!running) playWelcome()  // the session starts the car too: same welcome as the START button
-    const vehicle = await onCommand('vehicleStart') as { running?: boolean; starting?: boolean } | null
-    if (!vehicle?.running && !vehicle?.starting) return
-    onModeChange('rise'); await onCommand('sourceDiscoveryStart', { search })
+    try {
+      const vehicle = await onCommand('vehicleStart') as { running?: boolean; starting?: boolean } | null
+      if (vehicle ? (!vehicle.running && !vehicle.starting) : !running) return
+      onModeChange('rise'); await onCommand('sourceDiscoveryStart', { search })
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : 'Could not start session.')
+    } finally {
+      setSessionStarting(false)
+    }
   }
   const feedback = async () => {
     if (!discovery || discovery.pair.length !== 2) return
@@ -111,16 +119,28 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   // Session finished and answered: the comparison panel turns into the saved screen (no count, one panel, the X moves into it).
   const saved = !!discovery && !discovery.active && !newSession && !!discovery.finalists?.length && !!discovery.final && discovery.acceptable != null
   const choosing = final || discovery?.pairMode === 'choice'
-  const ready = discovery && !choosing && !discovery.busy && discovery.pair.length === 2 && discovery.pair.every(c => ratings[c.id] !== undefined) && !pending
+  const sessionReady = Boolean(
+    discovery?.active &&
+    !sessionStarting &&
+    !discovery.busy &&
+    running &&
+    discovery.pair?.length === 2 &&
+    revision &&
+    pairReady === revision
+  )
+  const ready = discovery && !choosing && !discovery.busy && sessionReady && discovery.pair.length === 2 && discovery.pair.every(c => ratings[c.id] !== undefined) && !pending
   // Leaving the lab pauses the session: stop a candidate preview so it does not keep playing on the dashboard.
   useEffect(() => { if (hidden && (audition || nowPlaying)) { onStop(); setAudition(null); setNowPlaying(null) } }, [hidden])
   useEffect(() => { if (!playing) setNowPlaying(null) }, [playing])
   // After the session the final sound's wave and spectrogram are safe to show (they could bias a rating, so never during one).
   const finalGraphs = <div className="final-graphs">{(['wave', 'spectrogram'] as const).map(view => <SoundGraph key={view} granular active={playing} view={view} analyser={analyser} onCommand={onCommand} />)}</div>
-  const preparing = discovery?.active && (discovery.busy || pairReady !== (revision ?? null))
+  const preparing = Boolean(
+    sessionStarting ||
+    (discovery?.active && !sessionReady)
+  )
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
     <section className="panel p-3 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary">{discovery && !saved && <span>{final ? t('Final round {n} / {total} · ', { n: (discovery.playoffDone ?? 0) + 1, total: discovery.playoffTotal ?? 6 }) : ''}{t('{n} / {total} comparisons', { n: Math.min((discovery.step ?? discovery.completed) + (discovery.active ? 1 : 0), discovery.totalSteps ?? 20), total: discovery.totalSteps ?? 20 })}</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery && !discovery.active && (!discovery.completed || newSession) && <button type="button" className="control" aria-label="Search" aria-haspopup="listbox" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)} onKeyDown={event => { if (event.key === 'Escape') setMenuOpen(false) }}>{t(SEARCHES.find(([value]) => value === search)?.[1] ?? '')} <span aria-hidden="true">{menuOpen ? '▴' : '▾'}</span></button>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy} onClick={() => discovery.completed && !newSession ? setNewSession(true) : void begin()}>{discovery.completed && !newSession ? t('New session') : t('Start session')}</button>}{discovery && ((nowPlaying && playing) || preparing) && <div className="ml-auto flex min-w-0 items-center gap-x-3 whitespace-nowrap">{nowPlaying && playing && <p className="min-w-0 truncate text-sm text-neutral-200" role="status">{t('▶ Now playing:')} <strong>{nowPlaying.label}</strong></p>}{preparing && <span className="spinner shrink-0" role="status" aria-label={t('Preparing…')} />}</div>}</div>{!saved && <PersonalizeCloseButton />}</div>
+      <div className="source-comparison-header"><div className="source-session-summary">{discovery && !saved && <span>{final ? t('Final round {n} / {total} · ', { n: (discovery.playoffDone ?? 0) + 1, total: discovery.playoffTotal ?? 6 }) : ''}{t('{n} / {total} comparisons', { n: Math.min((discovery.step ?? discovery.completed) + (discovery.active ? 1 : 0), discovery.totalSteps ?? 20), total: discovery.totalSteps ?? 20 })}</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery && !discovery.active && (!discovery.completed || newSession) && <button type="button" className="control" aria-label="Search" aria-haspopup="listbox" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)} onKeyDown={event => { if (event.key === 'Escape') setMenuOpen(false) }}>{t(SEARCHES.find(([value]) => value === search)?.[1] ?? '')} <span aria-hidden="true">{menuOpen ? '▴' : '▾'}</span></button>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy || sessionStarting} onClick={() => discovery.completed && !newSession ? setNewSession(true) : void begin()}>{sessionStarting ? t('Starting…') : discovery.completed && !newSession ? t('New session') : t('Start session')}</button>}{discovery && ((nowPlaying && playing) || preparing) && <div className="ml-auto flex min-w-0 items-center gap-x-3 whitespace-nowrap">{nowPlaying && playing && <p className="min-w-0 truncate text-sm text-neutral-200" role="status">{t('▶ Now playing:')} <strong>{nowPlaying.label}</strong></p>}{preparing && <span className="spinner shrink-0" role="status" aria-label={t('Preparing…')} />}</div>}</div>{!saved && <PersonalizeCloseButton />}</div>
       {discovery && !discovery.active && (!discovery.completed || newSession) && menuOpen && <ul className="search-dropdown-list" role="listbox" aria-label="Search">{SEARCHES.map(([value, label]) => <li key={value} role="option" aria-selected={search === value}><button type="button" className={search === value ? 'selected' : ''} onClick={() => { setSearch(value); setMenuOpen(false) }}>{t(label)}</button></li>)}</ul>}
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
@@ -138,7 +158,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
         {!discovery.busy && <>
         <div className="source-search-candidates" role="group" aria-label="Source A and B">
           {discovery.pair.map((candidate, index) => <div key={candidate.id} className="source-search-candidate">
-            <button type="button" className={'control source-search-listen' + (audition === candidate.id ? ' selected' : '')} disabled={discovery.busy || preparing} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}><strong>{t('Sound {x}', { x: index === 0 ? 'A' : 'B' })}</strong></button>
+            <button type="button" className={'control source-search-listen' + (audition === candidate.id ? ' selected' : '')} disabled={!sessionReady} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}><strong>{t('Sound {x}', { x: index === 0 ? 'A' : 'B' })}</strong></button>
             {!choosing && (() => {
               // One-line like/dislike slider, stored as 1-7. Unrated until touched: clicking or a key press on the neutral start position also counts.
               const value = ratings[candidate.id], set = (next: number) => setRatings(current => ({ ...current, [candidate.id]: next }))
@@ -152,7 +172,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
             })()}
           </div>)}
         </div>
-        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending || preparing} onClick={() => void submitChoice(value)}>{t(label)}</button>)}</div>
+        {choosing ? <div className="source-search-preferences" role="group" aria-label={final ? 'Final round preference' : 'Preference'}>{ANSWERS.map(([value, label]) => <button key={value} type="button" className={'control' + (choice === value ? ' selected' : '')} aria-pressed={choice === value} disabled={pending || !sessionReady} onClick={() => void submitChoice(value)}>{t(label)}</button>)}</div>
         : <div className="source-search-preferences"><button type="button" className="control" disabled={!ready} onClick={() => void feedback()}>{t('Next')}</button></div>}
         </>}
         {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>{t('Retry preparation')}</button></p>}

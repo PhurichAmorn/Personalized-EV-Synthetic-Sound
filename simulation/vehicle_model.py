@@ -3,78 +3,6 @@ import math
 
 
 VEHICLE_CONFIGS = {
-    "Honda e": {
-        "max_power_kw": 100.0, "max_torque_nm": 315.0, "mass_kg": 1513.0,
-        # 10,000 RPM is the published peak-power range endpoint, not a rev limit.
-        "max_speed": 145.0, "max_rpm": 12000.0,  # estimated simulation ceiling
-        "battery_kwh": 35.5, "battery_type": "Lithium-ion",
-        "range_km": 222, "range_standard": "WLTP",
-        # Honda Japan specifies 9.545:1; loaded radius estimated from rear 205/55R16.
-        "gear_ratio": 9.545, "wheel_radius_m": 0.310,
-        "wheelbase_m": 2.530, "cg_height_m": 0.500,
-        # ADAC Advance/17-inch 32.9 m at 100 km/h: proxy for this base trim.
-        "max_brake_deceleration_g": 1.27609388, "brake_tire_grip": 1.40,
-        "brake_calibration": "32.9 m from 100 km/h (ADAC Advance/17-inch proxy)",
-    },
-    "Mazda EZ-6 600 (China)": {
-        "max_power_kw": 190.0, "max_torque_nm": 320.0, "mass_kg": 1962.0,
-        "max_speed": 170.0, "max_rpm": 18000.0,  # estimated simulation ceiling
-        "battery_kwh": 68.8, "battery_type": "LFP",
-        "range_km": 600, "range_standard": "CLTC",
-        # Estimated reduction, not a verified EZ-6 ratio. Radius from rear 245/45R19.
-        "gear_ratio": 13.561, "wheel_radius_m": 0.345,
-        "wheelbase_m": 2.895, "cg_height_m": 0.520,
-        # Provisional dry-road 38 m target; no verified 600 BEV stopping test.
-        "max_brake_deceleration_g": 1.09517433, "brake_tire_grip": 1.30,
-        "brake_calibration": "38 m from 100 km/h (provisional estimate, unverified)",
-        "drag_area_m2": 0.62, "rolling_resistance": 0.010,
-        "usable_battery_kwh": 64.0,
-        "max_regen_torque_nm": 180.0, "max_regen_power_kw": 100.0,
-        "max_charge_power_kw": 80.0, "max_discharge_power_kw": 225.0,
-    },
-    "Tesla Model 3 Performance (2024 US)": {
-        "max_power_kw": 380.3, "max_torque_nm": 741.0, "mass_kg": 1851.0,
-        # ponytail: exploratory taper, not digitized MPP/OEM measurements.
-        # Replace these assumed knots when trim-specific numeric data is available.
-        "power_taper": ((0.0, 1.0), (9000.0, 1.0), (12000.0, 0.95),
-                        (16000.0, 0.82), (20000.0, 0.65)),
-        "motor_map_description": "Estimated high-RPM taper; numerical points unverified",
-        "drive_layout": "AWD", "max_speed": 262.0, "max_rpm": 20000.0,
-        "battery_kwh": 82.0, "battery_type": "Lithium-ion (estimated capacity)",
-        "range_km": 488, "range_standard": "EPA, 2024",
-        "gear_ratio": 9.03, "wheel_radius_m": 0.330,
-        "wheelbase_m": 2.875, "cg_height_m": 0.480,
-        # ponytail: aggregate dual-motor envelope and ideal AWD torque allocation;
-        # replace with separate axle motor maps when measured data is available.
-        "tire_grip": 1.05, "drag_area_m2": 0.50, "rolling_resistance": 0.010,
-        "usable_battery_kwh": 75.0,
-        "max_regen_torque_nm": 250.0, "max_regen_power_kw": 90.0,
-        "max_charge_power_kw": 75.0, "max_discharge_power_kw": 430.0,
-        "lift_off_deceleration_g": 0.18,
-        # Edmunds 2024 US Performance: 109 ft from 60 mph, not 100 km/h.
-        "max_brake_deceleration_g": 1.17509739, "brake_tire_grip": 1.35,
-        "brake_calibration": "109 ft from 60 mph (Edmunds 2024 Performance)",
-    },
-    "Porsche Taycan RWD (2023)": {
-        # MY23 US standard battery, normal output; Launch Control is not simulated.
-        "max_power_kw": 240.0, "max_torque_nm": 338.95, "mass_kg": 2071.13,
-        "max_speed": 230.13, "max_rpm": 16000.0,
-        "battery_kwh": 79.2, "usable_battery_kwh": 71.0,
-        "battery_type": "Lithium-ion", "range_km": 335, "range_standard": "EPA, MY23",
-        "gear_ratio": 15.0, "gear_ratios": (15.0, 8.0), "wheel_radius_m": .355,
-        "wheelbase_m": 2.9007, "rear_weight_fraction": .51, "cg_height_m": .48,
-        # ponytail: Sport-like shift strategy and timing are estimates, not OEM maps.
-        "upshift_speed_kmh": 85.0, "downshift_speed_kmh": 55.0, "shift_duration_s": .20,
-        "tire_grip": 1.0, "brake_tire_grip": 1.20,
-        "max_brake_deceleration_g": 1.0,
-        "brake_calibration": "Estimated 1.0 g dry braking; unverified",
-        "drag_area_m2": .55, "rolling_resistance": .010,
-        "max_regen_torque_nm": 200.0, "max_regen_power_kw": 140.0,
-        "max_charge_power_kw": 120.0, "max_discharge_power_kw": 285.0,
-        # Porsche defaults to coasting on lift-off; service brake blends regeneration.
-        "lift_off_deceleration_g": 0.0,
-        "motor_map_description": "Estimated motor envelope; real 2-speed layout, estimated shifting",
-    },
     "Hirochi SBR4 eSBR300 (BeamNG)": {
         # The BeamNG car used in the study (fictional vehicle). Values from the game files (sbr.zip, config
         # electric_300, read 2026-11-19): one rear motor, open diff, final drive 7.6, 0.32 m rear tyre, 40 kWh.
@@ -121,12 +49,10 @@ VEHICLE_CONFIGS = {
 }
 
 
-# Public simulator presets; the manufacturer configurations remain internal references.
+# Public simulator presets: the two calibrated BeamNG cars.
 SIMULATOR_PRESETS = {
-    "Compact EV": "Honda e",
-    "Performance EV": "Tesla Model 3 Performance (2024 US)",
-    "BeamNG eSBR300": "Hirochi SBR4 eSBR300 (BeamNG)",
     "BeamNG Vivace E": "Cherrier Vivace E (BeamNG)",
+    "BeamNG eSBR300": "Hirochi SBR4 eSBR300 (BeamNG)",
 }
 
 
@@ -137,26 +63,26 @@ class VehicleModel:
     Published peak specs do not supply an OEM torque/BMS map. Unverified road
     load, tire, response, and battery limits below are calibration estimates.
     """
-    name: str = "Honda e"
+    name: str = "Cherrier Vivace E (BeamNG)"
     drive_layout: str = "RWD"
     brake_calibration: str = "Generic brake calibration, unverified"
-    max_power_kw: float = 100.0
-    max_torque_nm: float = 315.0
+    max_power_kw: float = 144.5
+    max_torque_nm: float = 291.0
     power_taper: tuple[tuple[float, float], ...] = ()
-    motor_map_description: str = "Estimated constant-torque / constant-power envelope"
-    mass_kg: float = 1513.0
-    max_speed: float = 145.0  # km/h; electronic speed limit, independent of gearing
-    max_rpm: float = 12000.0  # simulation ceiling; mechanical maximum unverified
-    battery_kwh: float = 35.5
-    battery_type: str = "Lithium-ion"
-    range_km: int = 222
-    range_standard: str = "WLTP"
+    motor_map_description: str = "BeamNG Vivace E front motor torque curve (game files)"
+    mass_kg: float = 1866.0
+    max_speed: float = 159.0  # km/h; electronic speed limit, independent of gearing
+    max_rpm: float = 14000.0  # simulation ceiling; mechanical maximum unverified
+    battery_kwh: float = 50.0
+    battery_type: str = "Lithium-ion (BeamNG)"
+    range_km: int = 0
+    range_standard: str = "not published"
     speed: float = 0.0
     rpm: float = 0.0
     regen: float = 0.0  # recovered battery power / peak propulsion shaft power
     drive_power: float = 0.0  # positive motor shaft power / peak shaft power
 
-    gear_ratio: float = 9.545
+    gear_ratio: float = 9.0
     gear_ratios: tuple[float, ...] = ()
     current_gear: int = 1
     upshift_speed_kmh: float = 85.0

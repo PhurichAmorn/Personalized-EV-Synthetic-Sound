@@ -6,7 +6,7 @@ This is the single project guide for the simplified vehicle model, powertrain li
 
 Keep this document stable. Update it when vehicle behavior or a research assumption changes, not for unrelated UI or sound edits.
 
-The dashboard exposes **Compact EV** and **Performance EV** only. Their propulsion specifications derive from the internal Honda e and Model 3 Performance reference configurations. All four manufacturer configurations remain available to Python callers through `VehicleModel.from_name`; `SIMULATOR_PRESETS` is the dashboard allowlist. Neutral names do not imply legal clearance or OEM calibration.
+The dashboard exposes **BeamNG Vivace E** and **BeamNG eSBR300** only. Their propulsion specifications derive from BeamNG game files. Internal reference configurations remain available to Python callers through `VehicleModel.from_name`; `SIMULATOR_PRESETS` is the dashboard allowlist. Neutral names do not imply legal clearance or OEM calibration.
 
 ## Normal two-pedal driving
 

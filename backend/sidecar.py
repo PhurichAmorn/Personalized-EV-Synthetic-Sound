@@ -196,6 +196,8 @@ class Sidecar:
                         result = self.bridge.snapshot()
                 elif not self.controller.running and was_running:
                     self.startup.stop()
+                elif command in ('toggle', 'vehicleStart'):
+                    result = self.bridge.snapshot()
                 self.send({'id': ident, 'result': result})
                 self.dirty = True  # publish the command's effect on the next 33 ms tick
             except (ValueError, TypeError) as exc:

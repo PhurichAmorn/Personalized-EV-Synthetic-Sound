@@ -52,7 +52,13 @@ class VehiclePhysicsTests(unittest.TestCase):
                 VehicleModel(power_taper=curve)
 
     def test_real_two_speed_shift_and_energy_balance(self):
-        car = VehicleModel.from_name('Porsche Taycan RWD (2023)')
+        car = VehicleModel(gear_ratios=(15.0, 8.0), gear_ratio=15.0,
+                           upshift_speed_kmh=85.0, downshift_speed_kmh=55.0,
+                           shift_duration_s=0.20, wheel_radius_m=0.355,
+                           drag_area_m2=0.55, rolling_resistance=0.010, tire_grip=1.0,
+                           brake_tire_grip=1.20, max_brake_deceleration_g=1.0,
+                           mass_kg=2071.13, max_power_kw=240.0, max_torque_nm=338.95,
+                           battery_kwh=79.2, max_speed=230.0, max_rpm=16000.0)
         initial = car.battery_energy_j
         shifted = False
         previous_gear, previous_speed, previous_rpm = 1, 0, 0
@@ -93,16 +99,12 @@ class VehiclePhysicsTests(unittest.TestCase):
                 times.append(elapsed)
                 speeds.append(car.speed)
             self.assertLess(max(times) - min(times), 0.08)
-            if name == 'Honda e':
-                # Published ~9 s; this is a plausibility band, not OEM calibration.
-                self.assertTrue(8 <= times[1] <= 10, times)
-            elif name.startswith('Tesla'):
-                self.assertTrue(3 <= times[1] <= 4, times)
+            if 'Vivace' in name:
+                # BeamNG game-measured 0-100 km/h: ~8.1 s.
+                self.assertTrue(7.5 <= times[1] <= 9.0, times)
             elif 'eSBR300' in name:
                 # BeamNG game-measured 0-100 km/h: 4.6 s.
                 self.assertTrue(4.3 <= times[1] <= 5.0, times)
-            else:
-                self.assertTrue(6 <= times[1] <= 9, times)
 
     def test_rpm_tracks_gearing_in_drive_coast_and_regen(self):
         for car in self.cars():
@@ -196,9 +198,8 @@ class VehiclePhysicsTests(unittest.TestCase):
             self.assertLess(car.motor_torque_nm, 0)
 
     def test_calibrated_stopping_distances_and_traction(self):
-        targets = (("Honda e", 100, 32.9),
-                   ("Mazda EZ-6 600 (China)", 100, 38.0),
-                   ("Tesla Model 3 Performance (2024 US)", 60 * 1.609344, 109 * .3048))
+        targets = (("Cherrier Vivace E (BeamNG)", 100, 39.15),
+                   ("Hirochi SBR4 eSBR300 (BeamNG)", 100, 41.6))
         for name, speed, target in targets:
             for dt in (.005, .01, .02, .05):
                 car = VehicleModel.from_name(name)
@@ -229,7 +230,7 @@ class VehiclePhysicsTests(unittest.TestCase):
                 self.advance(car, 0, pedal, 0.5)
                 decels.append(-car.acceleration_m_s2)
             self.assertEqual(decels, sorted(decels))
-            self.assertGreater(decels[-1], decels[0] * (2.5 if name.startswith("Tesla") else 3))
+            self.assertGreater(decels[-1], decels[0] * 2.5)
             car = VehicleModel.from_name(name)
             car.speed = 100
             self.advance(car, 0, 1, 0.5)

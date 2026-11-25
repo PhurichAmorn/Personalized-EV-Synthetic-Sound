@@ -124,13 +124,13 @@ class SimulatorIntegrationTests(unittest.TestCase):
     def test_start_stop_selection_and_keyboard_priority(self):
         self.key(QEvent.Type.KeyPress, Qt.Key.Key_W)
         self.assertEqual(self.controller.throttle, 0)
-        self.controller.selectVehicle('Performance EV')
-        self.assertEqual('Performance EV', self.controller.selectedVehicle)
+        self.controller.selectVehicle('BeamNG eSBR300')
+        self.assertEqual('BeamNG eSBR300', self.controller.selectedVehicle)
         self.controller.toggle()
         self.start_audio.assert_called_once()
         self.assertTrue(self.controller.running)
-        self.controller.selectVehicle('Compact EV')
-        self.assertEqual('Performance EV', self.controller.selectedVehicle)
+        self.controller.selectVehicle('BeamNG Vivace E')
+        self.assertEqual('BeamNG eSBR300', self.controller.selectedVehicle)
         self.key(QEvent.Type.KeyPress, Qt.Key.Key_W)
         for _ in range(30):
             self.tick()
@@ -158,7 +158,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertEqual(self.controller.car.soc, 0.8)
 
     def test_only_neutral_presets_are_exposed(self):
-        self.assertEqual(self.controller.vehicleNames, ['Compact EV', 'Performance EV', 'BeamNG eSBR300', 'BeamNG Vivace E'])
+        self.assertEqual(self.controller.vehicleNames, ['BeamNG Vivace E', 'BeamNG eSBR300'])
         for name in VehicleModel.available_names():
             self.controller.selectVehicle(name)
             self.assertEqual(self.controller.selectedVehicle, 'BeamNG Vivace E')
@@ -270,7 +270,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertEqual(signals['soundThemeChanged'].count(), 0)  # Retired profile cannot change the sound.
         c.toggle()
         self.assertEqual(signals['sessionChanged'].count(), 2)
-        c.selectVehicle('Performance EV')
+        c.selectVehicle('BeamNG eSBR300')
         self.assertEqual(signals['vehicleChanged'].count(), 1)
 
 

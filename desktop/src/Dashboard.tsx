@@ -160,7 +160,24 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
         <button ref={customizeButton} className="display-customize-button" aria-label={t('Customize dashboard display')} aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>{t('DISPLAY')}</span></button>
         <button className={'display-customize-button' + (signalOpen ? ' active' : '')} aria-pressed={signalOpen} aria-label={t('Show or hide the sound signal panel')} onClick={() => setSignalOpen(open => !open)}><span className="customize-light" /><span>{t('SIGNAL')}</span></button>
-        <div className="info-holder"><button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button><pre className="specs-popover">{state.specs}</pre></div>
+        <div className="info-holder">
+          <button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button>
+          <pre className="specs-popover">
+            {(() => {
+              const text = state.specs || ''
+              const match = text.match(/(Simulat(?:or|ed) values? are approximate\.?)$/i)
+              if (match && match.index !== undefined) {
+                return (
+                  <>
+                    {text.slice(0, match.index)}
+                    <span className="specs-disclaimer">{match[1]}</span>
+                  </>
+                )
+              }
+              return text
+            })()}
+          </pre>
+        </div>
         <LanguageSelect />
       </header>}
       {customizerOpen && <div className="display-customizer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) { setCustomizerOpen(false); customizeButton.current?.focus() } }}>

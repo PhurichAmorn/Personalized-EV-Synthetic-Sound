@@ -146,6 +146,7 @@ class DesktopBridge:
             raise ValueError('Finish the source-discovery trial before native search or audio debugging')
         if name == 'vehicleStart':
             if not c.running:c.toggle()
+            return {'running': c.running, 'starting': c.sound_starting}
         elif name == 'sourceMode':
             c.selectSource(self._text(payload, 'value'))
         elif name == 'toggle':

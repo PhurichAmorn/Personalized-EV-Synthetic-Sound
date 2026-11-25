@@ -23,7 +23,7 @@ class LiveSearchTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         from simulation.vehicle_model import VehicleModel
-        self.controller = Mock(car=VehicleModel.from_name("Compact EV"), selectedVehicle='Compact EV', running=False)
+        self.controller = Mock(car=VehicleModel.from_name("BeamNG Vivace E"), selectedVehicle='BeamNG Vivace E', running=False)
         from audio import SoundEngine
         self.controller.audio = SoundEngine()
         self.search = LiveSearch(self.controller, root=Path(self.directory.name))
