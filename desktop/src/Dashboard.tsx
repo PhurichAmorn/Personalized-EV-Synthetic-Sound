@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import ClusterGauge from './ClusterGauge'
 import SoundEditor, { useCarSound } from './SoundEditor'
-import SoundSignal from './SoundSignal'
-import type { SoundDebug } from './Diagnostics'
 import NavRail from './NavRail'
 import type { State } from './App'
 import { playWelcome } from './welcomeSound'
@@ -72,15 +70,6 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
   const [soundLabOpen, setSoundLabOpen] = useState(initialSoundLab)
   const [showInputs, setShowInputs] = useState(false)
   const [customizerOpen, setCustomizerOpen] = useState(false)
-  // Sound signal panel: opened from the header (SIGNAL); polls the backend synth only while open.
-  const [signalOpen, setSignalOpen] = useState(false)
-  const [soundDebug, setSoundDebug] = useState<SoundDebug | null>(null)
-  useEffect(() => {
-    if (!signalOpen) return
-    void onCommand('debugVisible', { value: true })
-    const timer = window.setInterval(() => { void Promise.resolve(onCommand('soundDebug')).then(data => { if (data) setSoundDebug(data as SoundDebug) }).catch(() => {}) }, 100)
-    return () => { window.clearInterval(timer); setSoundDebug(null); void onCommand('debugVisible', { value: false }) }
-  }, [signalOpen])
   const customizeButton = useRef<HTMLButtonElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const [display, setDisplay] = useState<DisplayMode>(() => {
@@ -159,7 +148,6 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         {!!state.mySounds?.length && <select className="vehicle-selector" aria-label="GS sound: final pick of a session" title="GS sound" value={state.mySound?.session ?? ''} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('mySound', { id: event.target.value })}><option value="">Standard sound</option>{state.mySounds.map(s => <option key={s.session} value={s.session}>{s.created.slice(5, 16).replace('T', ' ')} · {s.label || 'sound'}</option>)}</select>}
         <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
         <button ref={customizeButton} className="display-customize-button" aria-label={t('Customize dashboard display')} aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>{t('DISPLAY')}</span></button>
-        <button className={'display-customize-button' + (signalOpen ? ' active' : '')} aria-pressed={signalOpen} aria-label={t('Show or hide the sound signal panel')} onClick={() => setSignalOpen(open => !open)}><span className="customize-light" /><span>{t('SIGNAL')}</span></button>
         <div className="info-holder">
           <button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button>
           <pre className="specs-popover">
@@ -208,6 +196,5 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
       {(error || state.audioError || sourceAudioError) && <div role="alert" className="dashboard-error">{error || state.audioError || sourceAudioError}</div>}
       <SoundEditor onAudioError={setSourceAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />
     </div>
-    {signalOpen && <SoundSignal analyser={car.analyser} soundDebug={soundDebug} onClose={() => setSignalOpen(false)} />}
   </div>
 }
