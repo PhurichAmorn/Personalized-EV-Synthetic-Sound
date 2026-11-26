@@ -21,8 +21,10 @@ export default function OverlayHost({ state, error, page, onCommand, onPersonali
     if (!state.running) car.stop()
     await onCommand('toggle')
   }
-  // The HUD never takes keyboard focus from the game, including on the Personalize page: it has no text fields, and A/B choices work by mouse or gamepad.
-  useEffect(() => { void window.__TAURI__?.core.invoke('set_overlay_focusable', { focusable: false }) }, [page])
+  // The HUD never takes keyboard focus from the game, except on the last-question panel (session over, comment box): typing there must not reach the game.
+  const discovery = state.sourceDiscovery
+  const typing = page === 'search' && !!discovery && !discovery.active && !!discovery.final && discovery.rating == null
+  useEffect(() => { void window.__TAURI__?.core.invoke('set_overlay_focusable', { focusable: typing }) }, [page, typing])
   return <>
     {/* One card for both pages: Personalize keeps the live graphs and adds the session below them. */}
     <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onClose={onClose} onStartStop={() => void startStop()} analyser={car.analyser}

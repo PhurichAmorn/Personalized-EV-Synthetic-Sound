@@ -9,7 +9,7 @@ export const responseRiseSeconds: Record<SoundResponse, number> = { exponential:
 export function soundResponse(value: number, mode: SoundResponse) {
   const x = unit(value)
   if (x === 0 || x === 1) return x
-  if (mode === 'exponential') return x * x
+  if (mode === 'exponential') return x * x * x  // p = 3 (was 2, 2026-11-26): lower for longer, steeper near full pedal
   if (mode === 'logarithmic') return Math.log1p(9 * x) / Math.log(10)
   return x
 }

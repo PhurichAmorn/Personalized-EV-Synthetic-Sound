@@ -27,8 +27,7 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   const locked = state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active
   const [dragError, setDragError] = useState('')
   // Sound graphs (wave and spectrogram, both shown). Never shown during an experiment session: seeing the sound could bias what the participant rates.
-  // The sound's wave and spectrogram come back once the session is finished and saved (never during one: they could bias a rating).
-  const discovery = state.sourceDiscovery, savedFinal = !!personalize && !!discovery && !discovery.active && !!discovery.final && discovery.rating != null
+  // The saved page shows the sound map (FinalMap) instead of these graphs.
   const session = state.search.active || !!state.sourceDiscovery?.active
   // Personalize: the window grows to fit the session (no scrolling), and returns to its driving size afterwards.
   const card = useRef<HTMLElement>(null)
@@ -95,9 +94,9 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
         <LoadGraph load={state.motorLoad ?? 0} />
       </div>
     </div>
-    {((!personalize && !session) || savedFinal) && <div>
+    {!personalize && !session && <div>
       <div className="overlay-caption">{t('SOUND')}</div>
-      {(['wave', 'spectrogram'] as const).map(view => <SoundGraph key={view} granular={granular || savedFinal} active={savedFinal || (state.running && !state.starting)} view={view} analyser={analyser} onCommand={onCommand} />)}
+      {(['wave', 'spectrogram'] as const).map(view => <SoundGraph key={view} granular={granular} active={state.running && !state.starting} view={view} analyser={analyser} onCommand={onCommand} />)}
     </div>}
     {personalize && <section className="overlay-personalize" aria-label="Personalize sound">{personalize}</section>}
     {(error || state.beamngError || dragError) && <p className="beamng-overlay-error" role="alert">{error || state.beamngError || dragError}</p>}

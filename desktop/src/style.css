@@ -266,8 +266,8 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-personalize .search-dialog { width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .overlay-personalize .search-dialog-header { position: static; padding: 0 0 6px; border: 0; background: transparent; }
 .overlay-personalize .search-dialog-header h2 { display: none; } .overlay-personalize .search-dialog-header { justify-content: flex-end; }
-.overlay-personalize .search-close { width: 28px; height: 28px; border-radius: 6px; padding: 0; display: grid; place-items: center; background: rgb(245 107 107 / 14%); }
-.overlay-personalize .search-close:hover:not(:disabled) { background: rgb(245 107 107 / 28%); }
+.overlay-personalize .control.search-close { width: 28px; height: 28px; border-radius: 6px; padding: 0; min-width: 0; display: grid; place-items: center; background: rgb(245 107 107 / 14%); }
+.overlay-personalize .control.search-close:hover:not(:disabled) { background: rgb(245 107 107 / 28%); }
 .overlay-personalize .search-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
 .search-dialog-header .search-close { width: 32px; height: 32px; border-radius: 6px; padding: 0; display: grid; place-items: center; }
 .search-dialog-header .search-close .x-icon { width: 18px; height: 18px; stroke-width: 2.5; }
@@ -554,7 +554,7 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .dashboard-controls.personalize-active .controls-spacer { align-items: flex-start; }
 .dashboard-controls.personalize-active .dashboard-search-slot .search-dialog { height: auto; max-height: calc(100vh - 380px); min-height: 260px; }
 .x-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
-.overlay-personalize .search-close .x-icon { width: 28px; height: 28px; }
+.overlay-personalize .search-close .x-icon { width: 14px; height: 14px; }
 .beamng-overlay-close .x-icon { width: 24px; height: 24px; }
 
 /* Native dropdown lists ignore the page colours (the BeamNG overlay is transparent, so the list came out white on white): give them a solid dark list. */
@@ -569,22 +569,22 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 /* Sound trace: how the search worked */
 .algo-view { display: grid; gap: 14px; margin: 14px 0 18px; padding: 14px; border: 1px solid #3a3a3a; border-radius: 10px; background: #1b1b1b; }
 .algo-view h3 { margin: 0; font-size: 14px; }
-.algo-view h4 { margin: 0 0 6px; font-size: 12px; color: #cfcfcf; font-weight: 600; }
+.algo-view h4 { margin: 0 0 6px; font-size: 14px; color: #cfcfcf; font-weight: 600; }
 .algo-approach { margin: 0; font-size: 13px; color: #d6d6d6; }
 .algo-approach span { color: #a8a8a8; }
 .algo-timeline { display: flex; flex-wrap: wrap; gap: 6px; }
 .algo-chip { display: grid; justify-items: center; gap: 1px; min-width: 30px; padding: 4px 3px 3px; border: 1px solid #3a3a3a; border-radius: 6px; font-size: 11px; }
 .algo-chip i, .algo-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .algo-chip small { color: #a8a8a8; font-size: 10px; }
-.algo-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 6px 0 0; font-size: 11px; color: #bdbdbd; }
+.algo-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 6px 0 0; font-size: 13px; color: #bdbdbd; }
 .algo-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .algo-legend .algo-note { color: #8c8c8c; }
 .algo-map, .algo-weights { width: 100%; max-width: 460px; height: auto; }
 .algo-grid { stroke: #2e2e2e; stroke-width: 1; }
 .algo-zero { stroke: #5a5a5a; stroke-width: 1; }
-.algo-axis { fill: #9a9a9a; font-size: 9px; }
+.algo-axis { fill: #9a9a9a; font-size: 14px; }
 .algo-path { fill: none; stroke: #8a8a8a; stroke-width: 1; stroke-dasharray: 3 3; }
-.algo-dot { fill: #111; font-size: 8px; font-weight: 700; pointer-events: none; }
+.algo-dot { fill: #111; font-size: 10px; font-weight: 700; pointer-events: none; }
 .algo-final { stroke: #fff; stroke-width: 2; }
 .algo-sd { stroke: #7d7d7d; stroke-width: 1.5; }
 .algo-pos { fill: #6cc4f0; }
@@ -679,3 +679,15 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .thanks-body .algo-block { margin: 0; }
 .thanks-body .algo-block h4 { margin: 0 0 2px; font-size: 12px; }
 .thanks-body .algo-map { max-height: 150px; }
+
+/* BeamNG popup: the Personalize X sits in the results panel's header row (the popup's separate header row is hidden); the dashboard keeps its header X. */
+.overlay-only-close { display: none; flex-shrink: 0; }
+.overlay-personalize .overlay-only-close { display: block; }
+.overlay-personalize .search-dialog-header { display: none; }
+.overlay-personalize .source-comparison-header { flex-wrap: wrap; row-gap: 6px; }
+.overlay-personalize .source-comparison-header > div:nth-child(2) { flex-wrap: wrap; flex: 1 1 auto; }
+/* The X stays pinned in the results panel's top right corner however the header row wraps. */
+.overlay-personalize .source-search-comparison { position: relative; }
+.overlay-personalize .overlay-only-close { position: absolute; top: 8px; right: 8px; z-index: 2; }
+.overlay-personalize .source-comparison-header { padding-right: 34px; min-height: 28px; }
+.start-session-row { display: flex; justify-content: flex-end; margin-top: 10px; }
