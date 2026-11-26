@@ -6,7 +6,7 @@ The search should help a listener find a sound character they prefer, then allow
 
 This document keeps the search goal beside a concise description of the implemented policy so agents can see both intended behavior and current limits. It is not a session-by-session log. Update it when feedback, search stages, candidate representation, or the research goal changes materially; routine UI or parameter edits alone do not require changes.
 
-The primary Personalize sound interface now runs source discovery, described below. The earlier session-flow sections describe the retained native-profile search; its form is shown only for an already active legacy session. New native-profile sessions use the current probe mapping. Older saved sessions keep their stored algorithm and profile mapping when resumed. Sessions remain local under `experiment_data/interactive/`.
+The primary Personalize sound interface now runs source discovery, described below. The earlier session-flow sections describe the legacy native-profile search, kept as a baseline in `experiment/legacy/` (UI: `desktop/src/legacy/`); the app can no longer start a new one. New native-profile sessions use the current probe mapping. Older saved sessions keep their stored algorithm and profile mapping when resumed. Sessions remain local under `experiment_data/interactive/`.
 
 ## Session flow
 
@@ -56,7 +56,109 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Level search (current app default: `source-levels-v1`, `LevelDiscovery`)
+### Building-block search (`source-blocks-v1`, `BlockDiscovery`): selectable per session ("Building blocks")
+
+Added 2026-11-21. No pool: each sound is built on the spot from building blocks (`experiment/sound_blocks.py`) and played by the app's existing stack voice (`mapVoice.ts`), so the app has no new synth code.
+
+- **Blocks.** Body texture (Soft, Blocks, Electric, Glass) and top texture for the 3 upper octave layers (Glass, Electric, Blocks, Plain, Synth, Bell synth, Moody); top level (soft/medium/strong). Partner (2026-11-22): an optional second style on the highest layer only, limited to the mixes heard as good in two mixed-top tests (Moody + Glass; Glass + Moody or Synth pad; Digital + Bell synth; Bell synth + Glass or Digital; Plain + Glass or Moody; Synth pad + Glass). A sound has one synth voice, so a synth-voice partner brings its own settings and only joins non-synth tops; ensemble applies to synth layers only. Space is fixed at large. Moody is the synth voice on a minor chord with ensemble (two copies of each upper layer, ±12 cents; the body stays clean), with fixed settings. When the top is Synth or Bell synth: buzz (off/strong), chord (off/on, a minor chord), bell, vowel. On every sound: pitch (47-119 Hz), brightness (measured cruise sharpness) and space (dry/large). 4 layers, still movement and the driving behaviour are fixed (medium space and wobble were heard as no change).
+- **Chosen by ear (2026-11-21 listening pages).** More layers were heard only as "wider" (fixed at 4). Strings, strings pad, cello and synth were heard as one style (Synth). Hollow's steps were not heard (dropped). Chord type alone was not a style. Bell and vowel are heard only at full setting (on/off). In the first session, Moody synth vs Synth (minor vs major chord) sounded the same, so they became one start (Synth pad) and chord became on/off. A strong top covers a soft body (Plain and Synth bodies under a Glass top: gap 0.31), so the body list is short. Body + top was heard as different from one texture, and so was each top level. Knob test (2026-11-22): ensemble was heard as good on Synth only, so Moody returned as its own top and start (kept in the moody compare); a resonant filter, slow filter drift and a rhythmic pulse were not heard (left out), and chord on other tops was heard as worse on Glass.
+- **Safe area.** `tools/sound_map/block_sweep.py` (run on laptop B) plays every combination through the full-drive check at 4 low-pass points and writes `experiment/sound_blocks_table.json`: the cruise sharpness at each point, the octave-band spectrum, and whether it passes. The session offers a sound only if its table entry passes in Rising (for Evolving sessions too: Evolving fails mostly on fluctuation just over 0.20, from its own stage loop on top of a pad's swell; 2026-11-22), judged at the measured point at or above its low-pass, so a brighter setting is never assumed safe. Brightness targets become low-pass settings through that table, and a sound records the brightness it actually reaches. Synth knobs are measured on the Soft body at 3 pitches and on every body at the middle pitch (a Blocks body covered buzz in the first session); wobble on the Soft body; other pitches and levels use the nearest entry. Without a table, sounds play unchecked, the export says so (`table.checked`), and no brightness changes are offered (a guessed filter step was not heard, first session).
+- **Medium changes.** The first sessions heard one-step guesses as the same, and the next ones heard 8-semitone jumps with 3 blocks as too large, so changes are medium: pitch 4 semitones (always heard), brightness 0.15 acum (measured; none without a table), top level one step, space dry/large, buzz off/strong. A change of body, top level or synth knob also needs a measured octave-band gap of at least 0.35 (in the listening pages, 0.15-0.31 were not heard and 0.34-0.37 were just heard). Top-texture swaps are exempt: they were always heard, though the octave-band gap misses bell partials and grain (Synth pad vs Glass measures 0.33).
+- **Flow (17 pairs).**
+  - Pair 1: the Glass start, Rising vs Evolving (Both good or Neither keep Rising). A second motion pair on Synth pad was tried and removed: it sounded too alike.
+  - Pairs 2-3: the four starts in random pairs: Glass, Pure, Bell synth, Moody. If the table leaves one out, the lone start meets the best so far. One start for each style heard as different while driving: Moody and Synth pad were heard as near-alike (the same voice and chord; Moody adds ensemble), and so were Pure and Digital (2026-11-22 sessions). Synth pad and Digital stay reachable by changes.
+  - Pair 4: playoff of the two best winners (Bradley-Terry) that have not met yet.
+  - Pairs 5-14: the champion (first and after Neither: Bradley-Terry best on the answers; then winner stays) against broad challengers that change 2 blocks at once. Candidates are drawn at random and ordered by a Thompson sample of a Bayesian Bradley-Terry model over block features, plus distance from every sound heard, so areas not heard yet come first. A change that just lost (a block value of the last pair's losing sound) is not offered again straight away.
+  - Since 2026-11-25 a broad challenger is also checked as a whole against the measured octave-band gap (at least 0.35 from the champion unless it moves pitch). Before, only one-block changes were checked, and a Plain+Glass vs Blocks+Bell synth pair (gap 0.20) was offered and heard as the same sound. There is no ceiling yet: two listener sessions found pairs with gaps of 1.4 and 1.6 too big, against a median of 1.0 and a 90th percentile of 1.8; a ceiling is untested.
+  - Until 2026-11-24 pair 14 replayed pair 4 (A and B swapped) and the challenger pairs were 5-13. A listener found it pointless after ten pairs on a new champion, so since 2026-11-25 pair 14 is one more challenger pair (class attribute `replay`, default False; `replay=True` with `adaptive=9` is the old session; the benchmark reproduces it with `REPLAY=1`). The benchmark results in docs/research/benchmark_blocks_results.md were run with the replay; the effect of removing it has not been measured.
+  - Pairs 15-16: one medium change of the champion, pitch or brightness first. If both are used up or fail the table, any other change is used.
+  - Pair 17 plays the shortlist #1 against the start it was tuned from (`tuning_check` in the export: did the tuning beat the untuned start), or against the strongest sound it has not met when #1 is a start.
+- **Final list.** Bradley-Terry on the answers alone, at most 2 sounds per top texture, each clearly different from the others: another top, body, top level or synth knob, or 8+ semitones. One pitch step or the space alone does not count (final-list #2 and #3 differing only in those sounded alike, 2026-11-22).
+- **Export.** `liked` (every winner, and both sounds of a Both good answer), `repeats` (the replay and whether it agreed), `table`, the shortlist and the ranking as in the sound-map search.
+
+- **Experimental variants (2026-11-23, `experiment/block_arms.py`, Search selector "Building blocks: ... (experimental)").** The same session with one change, in how pairs 5-14 are chosen: `blocks-infogain` challengers ordered by expected best of the pair (EUBO) over 200 draws from the same linear model, `blocks-random` challengers in random order (control); `blocks-robust` the champion is the Bradley-Terry best of everything heard, not the last winner; `blocks-pbo` challengers ordered by EUBO under a GP preference model (Hamming kernel on blocks, RBF on pitch and brightness); `blocks-duel` no champion, two sounds picked by two posterior draws of the same GP from 400 random table-passing sounds plus those heard. Policies `source-blocks-v1-<name>`. Benchmarked on simulated listeners 2026-11-23/24: none beat Building blocks by the bar set in advance (InfoGain is slightly better but under it); see docs/research/benchmark_blocks_results.md. Not tested with listeners.
+
+### Sound-map search (phase 1, `source-map-regions-1`, `RegionMapDiscovery`): selectable per session
+
+Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
+fixed preset set. Personalize sound now has a search selector: *Building blocks* = `BlockDiscovery` (the default and standard session), *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
+
+- **Pool.** `experiment/sound_map_pool.json`, frozen from `tools/sound_map` (see its README): an open archive (no grid, no size limit) of
+  sounds made with the plain synth or the generic `blocks` voice (FM, noise band, waveshaper, amplitude modulation, inharmonic partials),
+  each kept only if it passed the rule-based guardrail (MoSQITo sharpness, roughness, pulsing, plus partial crowding), the full 22 s Rising
+  drive check, and sounds different from every other kept sound. Built live in the app (`levels.ts` kind `map`, stems from `mapVoice.ts`).
+  v1 (2026-11-16) was 90 plain-synth sounds in a pitch x sharpness x texture grid; its one session ended on a near-copy of the listener's
+  own Cinematic pad (octave-band distance 0.13), which led to v2. v2 (233 sounds, 2026-11-17) played every sound dry (no chorus, vibrato or
+  body EQ) with the app's small too-similar steps; the listener heard most sounds as alike and plain, which led to v3: chorus, engine vibrato
+  (up to 20 cents) and body EQ are searched per sound, and every "distinct" step is larger (chorus and vibrato count as traits). In the
+  v3 pool 61% of sounds had over 10 cents of vibrato and a session sounded ghostly (2026-11-17), so v4 (118 sounds) caps vibrato at 8 cents
+  and starts half of new sounds dry (vibrato median 3.1 cents).
+- **Layered pool (current app pool, 2026-11-18).** `experiment/sound_map_pool.json` = `tools/sound_map/saved/layered_pool.json`: 61 octave-stack
+  sounds (3-5 layers, each one texture, no air, no chorus, pulsing limit 0.2). Checked in Evolving too (`drive.py pool`): 59 pass; the
+  other 2 play only in Rising sessions.
+- **Session, styles (current, 2026-11-18; `StyleMapDiscovery`, policy `source-map-styles-1`).** The regions session with the pool's texture
+  styles as regions instead of k-means: electric, strings, glass, choir, plain, and blend (a stack sound's style = the family of at least half
+  its layers and more than any other; otherwise blend, kept because the owner's favourite of 2026-11-18 was one;
+  `tools/sound_map/generate.py --style` grows one style's library). Pairs 1-3 play each style's most typical sound (with fewer than six
+  styles the remaining slots take the sounds most unlike those already played). The model also learns the style (one-hot beside the 9
+  traits). Region ranking uses a Beta(2,2) prior so a style with two lucky wins does not outrank one with 18-5, and ignores pairs within one style. Styles with no pool sound
+  are left out; the current 61-sound pool is mostly electric and blend: the per-style pools fill the rest.
+- **Phase 2: fine-tuning (2026-11-18, in `StyleMapDiscovery`).** Pairs 17-19 put the champion against checked variations of it; pair 20
+  stays the top-two confirmation. A variation is a pool sound with one named move (brighter, darker, deeper, higher, fuller, thinner,
+  smoother, shimmer, body+, body-, two layer swaps) or a bright/pitch combination, made offline by `tools/sound_map/variations.py`
+  and kept only if it passes the quick guardrail and the full Rising drive check (Evolving stored and used to gate Evolving sessions)
+  and is 0.6-1.5 'distinct' steps from its parent: audibly different, still the same sound (2026-11-20: steps doubled to filter x2,
+  4/7 semitones, sharpness >= 0.08 acum, raised to 0.10 after the owner's brightness listening check; the 0.3 / x1.4 / 2-semitone steps drew 'Both good' twice in a row). Nothing is generated during a session.
+  Move trends: a variation that wins gives +1 to its moves and -1 to their opposites; one that loses -1. The next variation is the one
+  whose moves have the best trend, then the model's Thompson sample. When a variation becomes champion, pairs continue with its
+  parent's other variations (one level deep; combinations cover two-step moves). Changes are not shown to the listener; the export has
+  `phase2` (move trends, variations heard). Without variations in the pool the pairs fall back to phase-1 challengers.
+- **Session, grid opening by pitch (current, 2026-11-20; `HeardMapDiscovery` on a `build_pool.py --grid` pool).** Pair 1 Rising
+  vs Evolving. Pair 2 deep vs high, pair 3 that winner vs middle: each the band's sound with sharpness near 0.55 acum (a level every band
+  reaches), pitch near the band's median, other traits near the pool's middle, so the answer is about pitch alone. Both good: the model's
+  higher-rated sound goes on and both count as beating a neutral sound; Neither on pair 2: the one nearer middle in pitch goes on. A pitch
+  answer counts for both cells of each band in the region record. Before, pairs 2-4 played the six cells' typical sounds, changing pitch
+  and brightness at once. A dark vs bright pair 4 was tried and dropped the same day: in a brightness listening check the owner heard
+  sharpness gaps under about 0.09 acum as the same (0 of 7 pairs, 6 of 7 at 0.09 and above) and marked every step from 0.42 to 0.86 acum
+  acceptable, and the middle band's typical dark and bright sounds are only 0.08 acum apart. Brightness is left to exploring and the tuning copies.
+  Pairs 4-11 explore cells, 12 replays pair 3, the pitch winner vs middle (A/B swapped; pair 2 was replayed until 2026-11-20, but deep vs high can be two sounds the
+  listener rejects; the second repeat at pair 16 was dropped as it cut into the champion run),
+  13-16 champion run (the first champion, and the one after Neither, is the Bradley-Terry best on the answers, not the trait model's
+  pick; `champion_starts` in the export), 17-19 tuning, 20 the final list's #1 against the strongest sound it has not met. Final list: Bradley-Terry on the
+  answers alone (3 virtual even games per sound), sounds heard at least twice first, none that lost every pair; a tuned copy that beats its parent (or a sibling copy) takes over
+  that sound's earlier answers as the same sound improved (the export keeps both rankings, `ranking.plain` and `ranking.inherited`); every A/B press is logged (`plays`).
+- **Session, regions (2026-11-17, kept as `RegionMapDiscovery`).** Broad then narrow. The pool is split into 6 regions (k-means on the 9 traits). Pairs 1-3: each
+  region's most typical sound, the same opening for every listener. Pairs 4-10: two regions per pair, picked by a Thompson sample of each
+  region's win rate, each played by the model's best guess in that region. Pairs 11-19: winner stays as below, with challengers from the
+  best region (70%) or the runner-up; two Neither answers open the next region. Pair 20 and shortlist as below. Reason: the random start and
+  rim-first opening made sessions feel random and could start in an odd corner; the listener asked for about 10 pairs of broad clues first.
+- **Session, v5/v6 (kept in code as `SoundMapDiscovery`).** v6 adds pair 1: one sound (nearest the pool centre) Rising vs Evolving; the choice sets the motion for the rest (Both good / Neither keep Rising); Evolving uses only sounds that also pass in Evolving (`drive.py pool`), the whole pool until that check is run. The regions session opens with the same pair 1 (its region pairs then start one pair later). v5: Rising only. 20 direct choices with the tuning search's answers (Prefer A / B, Both good, Neither). Pairs 1-3: six sounds spread
+  around the middle ring of the pool (v4 and before: as far apart as the whole pool allows, from a random first sound). Pairs 4-5: playoff of the opening winners.
+  Pairs 6-19: the champion against the unheard pool sound with the highest Thompson-sampled utility, never a near-copy of the champion (backend
+  check on spectrum, pitch, inharmonicity, roughness and pulsing; the app's spectrum-and-pitch check is used for the tuning search only). Winner stays: a challenger that wins becomes champion and defends next. Pair 20 plays the shortlist's #1
+  against #2 as they stand, so the last answer decides which of the top two leads. The shortlist is in model order among sounds heard at
+  least twice (v4; v3 put the champion first after a champion-vs-runner-up pair 20, and in simulation one noisy last game often put a
+  weaker sound there).
+- **Model.** Bayesian Bradley-Terry (as `TuningDiscovery`) over 9 traits that work for both voices (pitch, sharpness, roughness, pulsing,
+  inharmonicity, spectral centre, voice, chorus, vibrato), each as z and z^2 so a middle value can be preferred.
+- **Simulated listeners (2026-11-16, `tools/benchmark_sound_map.py`, 300 per condition, hidden ideal-point taste, noisy answers).** The shortlist's
+  top sound was in the listener's top 5% of the pool in about 31% of sessions, the same as random challengers (30%, +-5%). Linear-only features,
+  posterior-mean or full-spread sampling, radial-basis features and a nearness bonus were all within that noise. Interpretation (project): with
+  about 90 sounds and 20 pairs, the best-vs-challenger structure and the shortlist do the work; the model should only matter once the pool is
+  large, i.e. with phase 2. So phase 1 tests the pool and the session with listeners, not the model.
+  On the v2 pool (233 sounds, 2026-11-17): pick in the listener's top 5% in 22% of sessions vs 25% for random challengers (+-5%), top 10% in
+  40% vs 39%. Still a tie: 20 pairs hear under a tenth of the pool, and the pair policy is the open question below.
+  On the v3 pool (99 sounds, 2026-11-17): 26% vs 28% (+-5%), top 10% 42% vs 45%; a tie.
+  On the v4 pool (118 sounds, 400 per condition, 2026-11-17): regions 26% top 5% (+-4%), top 10% 44%, median rank 12%; v5 23%, 37%, 15%;
+  random challengers 18%, 35%, 15%. First version ahead of random on top 10%; still to be checked by listeners.
+- **Not built (phase 2).** Growing new sounds around the listener's favourites between pairs (mutation + the same guardrail).
+- **Open question: pair design (deferred, 2026-11-17).** Champion vs challenger ("winner stays", added after the first session) is one
+  choice, kept for now. The alternative to discuss: pairs chosen to learn the listener's taste, which need not include the favourite (e.g. two
+  sound types against each other to see which way the listener leans), as in preferential BO acquisitions (EUBO, information gain). In
+  simulation every pair policy tied with random on the 90-sound pool, so compare them once the sound space is wider.
+- **Status.** Untested with listeners. The guardrail limits come from one listener's labels.
+
+### Level search (previous default: `source-levels-v1`, `LevelDiscovery`)
 
 Goal unchanged: help a listener with no sound in mind find one they enjoy. A sound is now built from settings instead of a style:
 a simplified base sound (Type: Strings / Choir / Glass, Brightness and Register, 3 settings each) plus six transformation
@@ -127,7 +229,7 @@ Known limit: moves that always come together in a chain share credit (in the rep
 
 **Measuring success.** With listeners: satisfaction with the final sound; whether they choose it again later (liking can change with repeated exposure; Münder et al. 2025); whether different people end in different places; time taken. Benchmark (later): simulated listeners with different hidden tastes over the styles, not one target sound.
 
-**Current app policy: open pool (`source-open-groups-gp-v4`, `OpenDiscovery`).** The family-preset trial described after this section is kept in code (`SourceDiscovery`) as the baseline. It was replaced in the app because sessions stayed inside the six family presets and, in the [simulated-listener benchmark](source_search_benchmark.md), did no better than random proposals.
+**Earlier app policy (replaced by Building blocks; the app now uses `BlockDiscovery`): open pool (`source-open-groups-gp-v4`, `OpenDiscovery`).** The family-preset trial described after this section is kept in code (`SourceDiscovery`) as the baseline. It was replaced in the app because sessions stayed inside the six family presets and, in the [simulated-listener benchmark](source_search_benchmark.md), did no better than random proposals.
 
 - **Pool.** Every layer uses the generic `blocks` voice. It combines a harmonic series (slope, even-harmonic gain, up to 48 partials, optional inharmonic stretch) with two optional resonant peaks and a low-pass, and adds optional half-order pulse lope, FM, a looping noise band, a tanh waveshaper and amplitude modulation. Root pitch is 0.4–2 times the reference (about 70–350 Hz). Recipes have 1–3 layers, all drawn at random. Families are not inputs, and the loudness normalization and signal checks are unchanged.
 - **Same flow as before.** 20 listening steps (14 rated pairs, then 4 diverse finalists and a 6-pair Bradley-Terry final round), the 0.10 audio-distance gate, and an explicit final choice.

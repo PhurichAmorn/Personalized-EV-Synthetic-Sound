@@ -63,10 +63,10 @@ class LauncherTests(unittest.TestCase):
     @staticmethod
     def fake_npm(project):
         (project / 'desktop' / 'node_modules' / '.bin').mkdir(parents=True)
-        (project / 'desktop' / 'node_modules' / '.bin' / 'tauri').touch()
+        (project / 'desktop' / 'node_modules' / '.bin' / 'tauri').write_text('#!/bin/sh\n')  # Git Bash on Windows counts a file as executable (-x) only with a shebang
         (project / 'desktop' / 'node_modules' / '.bin' / 'tauri').chmod(0o755)
         binary = project / 'fake-bin'
         binary.mkdir()
         npm = binary / 'npm'
-        npm.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> npm-calls.txt\nif [ "$1" = ci ]; then touch node_modules/.bin/tauri; fi\n')
+        npm.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> npm-calls.txt\nif [ "$1" = ci ]; then printf "#!/bin/sh\\n" > node_modules/.bin/tauri; chmod 755 node_modules/.bin/tauri; fi\n')
         npm.chmod(0o755)

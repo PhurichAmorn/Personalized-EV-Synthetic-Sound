@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { State } from './App'
 import BeamNGOverlay from './BeamNGOverlay'
-import SoundEditor from './SoundEditor'
-import type { SourceHandle } from './SteadySource'
-import type { GranularMode } from './granularPlayer'
+import SoundEditor, { useCarSound } from './SoundEditor'
 
 type Props = {
   state: State
@@ -11,36 +9,25 @@ type Props = {
   page: 'dashboard' | 'search'
   onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
   onPersonalize: () => void
-  onLeave: () => void
+  onClose: () => void
   searchPanel: ReactNode
 }
 
 /** BeamNG mode: the overlay owns the sound player (the dashboard window does not exist in this mode). */
-export default function OverlayHost({ state, error, page, onCommand, onPersonalize, onLeave, searchPanel }: Props) {
-  const sound = useRef<SourceHandle>(null)
-  const [granularSelected, setGranularSelected] = useState(true)
-  const [granularMode, setGranularMode] = useState<GranularMode>('evolving')
+export default function OverlayHost({ state, error, page, onCommand, onPersonalize, onClose, searchPanel }: Props) {
+  const car = useCarSound(state, onCommand, page === 'search')
   const [audioError, setAudioError] = useState('')
-  useEffect(() => {
-    if (state.running && !state.starting && granularSelected && !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active) sound.current?.start(true)
-  }, [state.running, state.starting])
   const startStop = async () => {
-    if (!state.running) {
-      sound.current?.stop()
-      await onCommand('sourceAudition', { value: false })
-    }
+    if (!state.running) car.stop()
     await onCommand('toggle')
   }
-  // The HUD never takes keyboard focus from the game, except on the Personalize page where typing is needed.
-  useEffect(() => { void window.__TAURI__?.core.invoke('set_overlay_focusable', { focusable: page === 'search' }) }, [page])
+  // The HUD never takes keyboard focus from the game, including on the Personalize page: it has no text fields, and A/B choices work by mouse or gamepad.
+  useEffect(() => { void window.__TAURI__?.core.invoke('set_overlay_focusable', { focusable: false }) }, [page])
   return <>
     {/* One card for both pages: Personalize keeps the live graphs and adds the session below them. */}
-    <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onStartStop={() => void startStop()} analyser={() => sound.current?.analyser() ?? null}
-          granular={granularSelected} granularMode={granularMode}
-          onGranular={() => { setGranularSelected(true); sound.current?.start(true) }}
-          onGranularCycle={() => { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }}
-          onTheme={name => { setGranularSelected(false); sound.current?.stop(); void onCommand('theme', { name }) }}
-          personalize={page === 'search' ? searchPanel : undefined} onLeave={onLeave} />
-    <SoundEditor onAudioError={setAudioError} personalizeOpen={page === 'search'} onSourceSelected={() => setGranularSelected(true)} granularMode={granularMode} onModeChange={setGranularMode} ref={sound} active state={state} onCommand={onCommand} embedded />
+    <BeamNGOverlay state={state} error={error || audioError} onCommand={onCommand} onPersonalize={onPersonalize} onClose={onClose} onStartStop={() => void startStop()} analyser={car.analyser}
+          granular={car.gs} granularMode={car.mode} onGranular={car.start} onGranularCycle={car.cycle}
+          personalize={page === 'search' ? searchPanel : undefined} />
+    <SoundEditor onAudioError={setAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded />
   </>
 }

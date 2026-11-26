@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -173,15 +174,6 @@ fn main() {
                 }
             }
         })
-        .on_menu_event(|app, event| {
-            let (label, title, route, size) = match event.id().as_ref() {
-                "open_telemetry" => ("telemetry", "EV Sound Lab · Telemetry", "telemetry", (840.0, 640.0)),
-                "open_sound_signal" => ("sound-signal", "EV Sound Lab · Sound signal", "sound-signal", (840.0, 700.0)),
-                _ => return,
-            };
-            let app = app.clone();
-            std::thread::spawn(move || open_tool_window(app, label, title, route, size, false));
-        })
         .setup(|app| {
             #[cfg(target_os = "macos")]
             let app_menu = SubmenuBuilder::new(app, "EV Sound Lab")
@@ -195,15 +187,9 @@ fn main() {
                 .separator()
                 .quit()
                 .build()?;
-            let view = SubmenuBuilder::new(app, "View")
-                .text("open_telemetry", "Telemetry")
-                .text("open_sound_signal", "Sound signal")
-                .build()?;
-            let menu_builder = MenuBuilder::new(app);
+            // No View menu (2026-11-18): the sound signal opens from the dashboard's SIGNAL button; the telemetry window was removed.
             #[cfg(target_os = "macos")]
-            let menu_builder = menu_builder.item(&app_menu);
-            let menu = menu_builder.item(&view).build()?;
-            app.set_menu(menu)?;
+            app.set_menu(MenuBuilder::new(app).item(&app_menu).build()?)?;
             mark("setup begins");
             start_backend(app.handle())?;
             mark("backend process spawned");

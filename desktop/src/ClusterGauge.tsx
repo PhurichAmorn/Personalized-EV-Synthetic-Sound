@@ -10,8 +10,8 @@ type Props = {
   startupBlend?: number
 }
 
-const top = 40
-const bottom = 390
+const top = 34
+const bottom = 314  // 390 before: a shorter gauge, so the page does not scroll
 const circleStart = 135
 const circleSweep = 270
 const circleRadius = 140
@@ -29,7 +29,7 @@ function circleArc(from: number, to: number, radius = circleRadius, sweep = 1) {
 
 function position(kind: Props['kind'], y: number) {
   const progress = Math.max(0, Math.min(1, (y - top) / (bottom - top)))
-  const bend = Math.pow(Math.sin(Math.PI * progress), 1.15) * 100
+  const bend = (.75 * (1 - Math.abs(2 * progress - 1)) + .25 * Math.sin(Math.PI * progress)) * 100  // mostly a triangle: a pointed tip in the middle, not a round bulge
   return kind === 'power' ? 154 - bend : 66 + bend
 }
 
@@ -61,7 +61,7 @@ function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, s
       ? shownCharge > 0 ? 180 - 45 * Math.min(1, shownCharge) : 180 + 180 * fraction
       : circleStart + circleSweep * fraction
     const needleColor = '#e5e5e5'
-    return <svg viewBox="-15 0 290 430" className="cluster-gauge cluster-circle-gauge" role="img" aria-label={isPower ? 'Circular power and regeneration gauge' : 'Circular speed gauge'}>
+    return <svg viewBox="-15 38 290 297" className="cluster-gauge cluster-circle-gauge" role="img" aria-label={isPower ? 'Circular power and regeneration gauge' : 'Circular speed gauge'}>
       {isPower
         ? <><path d={circleArc(180, 360, circleRadius)} className="circle-gauge-track circle-gauge-power-track" />
           {fraction > 0 && <path d={circleArc(180, 180 + 180 * fraction, circleRadius)} className="circle-gauge-active" />}
@@ -110,13 +110,13 @@ function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, s
   const labelColor = '#d6d6d6'
   const fadeEnd = marker === fillStart ? fillEnd : fillStart
 
-  return <svg viewBox="0 0 220 430" className={'cluster-gauge ' + (kind === 'power' ? 'cluster-power-gauge' : 'cluster-speed-gauge')} role="img" aria-label={kind === 'power' ? 'Power and charge gauge' : 'Speed gauge'}>
+  return <svg viewBox="0 0 220 340" className={'cluster-gauge ' + (kind === 'power' ? 'cluster-power-gauge' : 'cluster-speed-gauge')} role="img" aria-label={kind === 'power' ? 'Power and charge gauge' : 'Speed gauge'}>
     <defs>
       <clipPath id={`gauge-fill-${kind}`}><rect x="0" y={fillStart} width="220" height={Math.max(0, fillEnd - fillStart)} /></clipPath>
       <linearGradient id={`gauge-color-${kind}`} gradientUnits="userSpaceOnUse" x1="0" y1={marker} x2="0" y2={fadeEnd}><stop stopColor={fillColor} stopOpacity=".9" /><stop offset="1" stopColor={fillColor} stopOpacity=".08" /></linearGradient>
     </defs>
     <text x={kind === 'power' ? 134 : 56} y="18" fill="#d4d4d4" fontSize="10" letterSpacing="3" textAnchor={kind === 'power' ? 'end' : 'start'}>{kind === 'power' ? 'POWER %' : 'km/h'}</text>
-    <path d={bandPath(kind, top, bottom)} fill="#313131" />
+    <path d={bandPath(kind, top, bottom)} fill="#313131" shapeRendering="geometricPrecision" />
     <path d={bandPath(kind, top, bottom)} fill={`url(#gauge-color-${kind})`} clipPath={`url(#gauge-fill-${kind})`} />
     {kind === 'speed' && Array.from({ length: Math.floor(maximum / 10) + 1 }, (_, index) => index * 10).filter(value => !speedLabels.includes(value)).map(value => {
       const y = labelY(value)

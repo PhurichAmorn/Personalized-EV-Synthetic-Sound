@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import ClusterGauge from './ClusterGauge'
-import SoundEditor from './SoundEditor'
+import SoundEditor, { useCarSound } from './SoundEditor'
 import NavRail from './NavRail'
-import type { SourceHandle } from './SteadySource'
-import type { GranularMode } from './granularPlayer'
 import type { State } from './App'
+import { playWelcome } from './welcomeSound'
+import { LanguageSelect, useT } from './i18n'
+import { Brand } from './PageShell'
 
 type Props = {
   state: State
@@ -18,38 +19,31 @@ type Props = {
 }
 
 type DisplayMode = 'classic' | 'sport' | 'digital'
-// Soft glow colour under the speed reading; the rest of the UI stays black and white.
-const glows = { White: '#f2f2f2', Ice: '#75c9e8', Mint: '#74d4b0', Violet: '#b9a0ed', Amber: '#e8bd68', Rose: '#ef8ba5' }
-const displays: { id: DisplayMode; name: string; description: string }[] = [
-  { id: 'classic', name: 'Classic', description: 'Twin circular gauges' },
-  { id: 'sport', name: 'Sport', description: 'Twin vertical meters' },
-  { id: 'digital', name: 'Digital', description: 'Speed and power bars' },
+const displays: { id: DisplayMode; name: string }[] = [
+  { id: 'classic', name: 'Classic' },
+  { id: 'sport', name: 'Sport' },
+  { id: 'digital', name: 'Digital' },
 ]
 
+/** Preview of an instrument display: the real cluster components with demo values, scaled down (so it always matches). */
 function DisplayPreview({ mode }: { mode: DisplayMode }) {
-  if (mode === 'classic') return <svg className="display-preview-svg" viewBox="0 0 100 72" aria-hidden="true">
-    <path d="M 3 36 A 17 17 0 0 1 37 36" fill="none" stroke="var(--accent)" strokeWidth="3" opacity=".2" />
-    <path d="M 3 36 A 17 17 0 0 0 8 48" fill="none" stroke="#323232" strokeWidth="2" />
-    <path d="M 3 36 A 17 17 0 0 1 15 21" fill="none" stroke="var(--accent)" strokeWidth="3" />
-    <path d="M 3 36 A 17 17 0 0 0 4.3 42.5" fill="none" stroke="#848484" strokeWidth="1.5" opacity=".8" />
-    <path d="M 20 36 L 16 23 L 20.8 36 Z" fill="var(--accent)" /><circle cx="20" cy="36" r="2.5" fill="#f5f5f5" />
-    <path d="M 68 48 A 17 17 0 1 1 92 48" fill="none" stroke="#3c3c3c" strokeWidth="3" />
-    <path d="M 68 48 A 17 17 0 0 1 74 24" fill="none" stroke="var(--accent)" strokeWidth="3" />
-    <path d="M 80 36 L 74 24 L 80.8 35.5 Z" fill="var(--accent)" /><circle cx="80" cy="36" r="2.5" fill="#f5f5f5" />
-    <text x="20" y="60" textAnchor="middle">PWR</text><text x="80" y="60" textAnchor="middle">SPD</text>
-  </svg>
-  if (mode === 'digital') return <svg className="display-preview-svg" viewBox="0 0 100 72" aria-hidden="true"><text x="50" y="34" textAnchor="middle" className="preview-speed">88</text><text x="30" y="48" textAnchor="middle" className="preview-meter-label">POWER</text><text x="70" y="48" textAnchor="middle" className="preview-meter-label">SPEED</text><rect x="12" y="54" width="36" height="4" rx="2" fill="#3c3c3c" /><rect x="12" y="54" width="23" height="4" rx="2" fill="var(--accent)" /><rect x="52" y="54" width="36" height="4" rx="2" fill="#3c3c3c" /><rect x="52" y="54" width="20" height="4" rx="2" fill="var(--accent)" /></svg>
-  return <svg className="display-preview-svg" viewBox="0 0 100 72" aria-hidden="true"><path d="M 19 9 C 35 28 35 46 19 63" fill="none" stroke="var(--accent)" strokeWidth="5" /><path d="M 81 9 C 65 28 65 46 81 63" fill="none" stroke="#707070" strokeWidth="5" /><text x="50" y="43" textAnchor="middle">88</text></svg>
+  const design = mode === 'classic' ? 'circle' : undefined
+  return <div className="display-preview" aria-hidden="true"><div className="display-preview-scene"><div className={'dashboard-cluster display-' + mode}>
+    {mode !== 'digital' && <ClusterGauge kind="power" power={.55} charge={0} design={design} />}
+    <div className="cluster-center"><div className="speed-reading"><span>88</span><small>km/h</small></div>{mode === 'digital' && <PowerChargeBar power={.55} charge={0} />}</div>
+    {mode !== 'digital' && <ClusterGauge kind="speed" speed={88} maximum={220} design={design} />}
+  </div></div></div>
 }
 
 function easeInOut(t: number) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2 }
 function easeOut(t: number) { return 1 - Math.pow(1 - t, 3) }
 
 function InputMeter({ label, level }: { label: 'BRAKE' | 'THROTTLE'; level: number }) {
+  const t = useT()
   return <div className="input-meter">
     <span>{Math.round(level * 100)}%</span>
     <div className="input-meter-track"><div className={label === 'BRAKE' ? 'brake-fill' : 'throttle-fill'} style={{ height: `${Math.max(0, Math.min(1, level)) * 100}%` }} /></div>
-    <small>{label}</small>
+    <small>{t(label)}</small>
   </div>
 }
 
@@ -69,13 +63,9 @@ function PowerChargeBar({ power, charge }: { power: number; charge: number }) {
 }
 
 export default function Dashboard({ state, error, onCommand, onPersonalize, onTrace, searchPanel, personalizeOpen = false, initialSoundLab = false }: Props) {
-  const sound = useRef<SourceHandle>(null)
   const [sourceAudioError, setSourceAudioError] = useState('')
-  const [granularMode, setGranularMode] = useState<GranularMode>('evolving')
-  const [granularSelected, setGranularSelected] = useState(true)
-  useEffect(() => {
-    if (state.running && !state.starting && granularSelected && !state.search.active && !state.soundSweepActive && !state.sourceDiscovery?.active) sound.current?.start(true)
-  }, [state.running, state.starting])
+  const car = useCarSound(state, onCommand, personalizeOpen)
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const [soundLabOpen, setSoundLabOpen] = useState(initialSoundLab)
   const [showInputs, setShowInputs] = useState(false)
@@ -86,11 +76,6 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
     const saved = localStorage.getItem('ev-sound-display')
     return saved === 'sport' || saved === 'digital' ? saved : 'classic'
   })
-  const [glow, setGlow] = useState<keyof typeof glows>(() => {
-    const saved = localStorage.getItem('ev-sound-glow')
-    return saved && saved in glows ? saved as keyof typeof glows : 'White'
-  })
-  const setGlowColor = (value: keyof typeof glows) => { setGlow(value); localStorage.setItem('ev-sound-glow', value) }
   const [startupProgress, setStartupProgress] = useState(0)
   const [startupBlend, setStartupBlend] = useState(0)
   useEffect(() => {
@@ -124,10 +109,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
   }, [customizerOpen])
   const connected = !!state.controllerName
   const startVehicleFromButton = async () => {
-    if (!state.running) {
-      sound.current?.stop()
-      await onCommand('sourceAudition', { value: false })
-    }
+    if (!state.running) { car.stop(); playWelcome() }  // welcome choir on the click itself, not after the backend answers
     await onCommand('toggle')
   }
   const status = state.soundSweepActive ? 'AUDIO DEBUG' : state.starting ? 'STARTING' : state.running ? 'READY' : 'STANDBY'
@@ -147,38 +129,52 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
       controls[0].focus()
     }
   }
-  return <div className={'dashboard-screen display-' + display} style={{ '--ambient': glows[glow] } as CSSProperties}>
+  return <div className="dashboard-screen" style={{ '--ambient': '#f2f2f2' } as CSSProperties}>
     <NavRail active={soundLabOpen ? 'soundlab' : 'dashboard'} expanded={expanded} onSelect={target => {
       if (target === 'trace') { setSoundLabOpen(false); onTrace(); return }
       setSoundLabOpen(target === 'soundlab')
-      if (target === 'dashboard' && granularSelected && state.running) sound.current?.start()
+      if (target === 'dashboard') car.resume()
     }} />
-    <div className="dashboard-main">
+    <div className={'dashboard-main'}>
       {/* Header and cluster unmount while Sound Lab is open, so backend state updates do not re-render hidden gauges. */}
       {!soundLabOpen && <header className="dashboard-header">
-        <button className="header-sidebar" title="Toggle sidebar" aria-label="Toggle sidebar" onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
-        <div className="dashboard-brand"><strong>EV SOUND LAB</strong><small>DRIVE SIMULATOR</small></div>
+        <button className="header-sidebar" title={t('Toggle sidebar')} aria-label={t('Toggle sidebar')} onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
+        <Brand sub="DRIVE SIMULATOR" />
         <div className="header-spacer" />
-        <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : 'SOUND'}</span>
-        <div className="theme-buttons" role="group" aria-label="Sound theme">
-          <div className="theme-option"><button className={'theme-button' + (granularSelected ? ' active' : '')} aria-pressed={granularSelected} disabled={state.search.active || state.soundSweepActive} onClick={() => { setGranularSelected(true); sound.current?.start(true) }}>GS</button><button className="theme-recipe" aria-label={`Next granular mode, currently ${granularMode}`} title={`Change mode: ${granularMode}`} disabled={state.search.active || state.soundSweepActive} onClick={() => { setGranularMode(mode => mode === 'steady' ? 'rise' : mode === 'rise' ? 'evolving' : 'steady'); setGranularSelected(true); sound.current?.start(true) }}><span aria-hidden="true">⏭</span><small>{granularMode === 'steady' ? 'Steady' : granularMode === 'rise' ? 'Rise' : 'Evolving'}</small></button></div>
-          {state.soundThemes.map(name => <div className="theme-option" key={name}>
-            <button className={'theme-button ' + name.toLowerCase() + (name === state.soundTheme && !granularSelected ? ' active' : '')} aria-label={`${name} sound, ${state.soundRecipeSelection[name]}`} aria-pressed={name === state.soundTheme && !granularSelected} disabled={state.search.active || state.soundSweepActive || state.sourceDiscovery?.active} onClick={() => { setGranularSelected(false); sound.current?.stop(); onCommand('theme', { name }) }}>{name}</button>
-            <button className="theme-recipe" aria-label={`Change ${name} sound recipe, currently ${state.soundRecipeSelection[name]}`} title={`Change tune: ${state.soundRecipeSelection[name]}`} disabled={state.search.active || state.soundSweepActive || state.sourceAudition} onClick={() => onCommand('recipeCycle', { name })}><span aria-hidden="true">⏭</span><small>{state.soundRecipeSelection[name]}</small></button>
-          </div>)}
+        <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : t('SOUND')}</span>
+        <div className="theme-buttons" role="group" aria-label="Sound motion">
+          {(['rise', 'evolving'] as const).map(mode => <div className="theme-option" key={mode}><button className={'theme-button' + (car.gs && car.mode === mode ? ' active' : '')} aria-pressed={car.gs && car.mode === mode} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onClick={() => car.select(mode)}>{t(mode === 'rise' ? 'Rising' : 'Evolving')}</button></div>)}
         </div>
-        <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
-        <button ref={customizeButton} className="display-customize-button" aria-label="Customize dashboard display and ambient color" aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>DISPLAY</span></button>
-        <div className="info-holder"><button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button><pre className="specs-popover">{state.specs}</pre></div>
+        {!!state.mySounds?.length && <select className="vehicle-selector" aria-label="GS sound: final pick of a session" title="GS sound" value={state.mySound?.session ?? ''} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('mySound', { id: event.target.value })}><option value="">Standard sound</option>{state.mySounds.map(s => <option key={s.session} value={s.session}>{s.created.slice(5, 16).replace('T', ' ')} · {s.label || 'sound'}</option>)}</select>}
+        <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
+        <button ref={customizeButton} className="display-customize-button" aria-label={t('Customize dashboard display')} aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>{t('DISPLAY')}</span></button>
+        <div className="info-holder">
+          <button className="info-button" aria-label="Vehicle specifications" title="Vehicle specifications">i</button>
+          <pre className="specs-popover">
+            {(() => {
+              const text = state.specs || ''
+              const match = text.match(/(Simulat(?:or|ed) values? are approximate\.?)$/i)
+              if (match && match.index !== undefined) {
+                return (
+                  <>
+                    {text.slice(0, match.index)}
+                    <span className="specs-disclaimer">{match[1]}</span>
+                  </>
+                )
+              }
+              return text
+            })()}
+          </pre>
+        </div>
+        <LanguageSelect />
       </header>}
       {customizerOpen && <div className="display-customizer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) { setCustomizerOpen(false); customizeButton.current?.focus() } }}>
         <section className="display-customizer" role="dialog" aria-modal="true" aria-labelledby="display-customizer-title" onKeyDown={trapCustomizerFocus}>
-          <header className="customizer-header"><div><h2 id="display-customizer-title">Display</h2><p>Set your instrument style.</p></div><button ref={closeButton} className="customizer-close" onClick={() => { setCustomizerOpen(false); customizeButton.current?.focus() }}>Close</button></header>
-          <section className="customizer-section" aria-labelledby="display-mode-title"><h3 id="display-mode-title">Instrument display</h3><div className="display-mode-options" role="group" aria-label="Instrument display style">{displays.map(option => <button key={option.id} className={'display-mode-option' + (display === option.id ? ' selected' : '')} aria-pressed={display === option.id} onClick={() => setDisplayMode(option.id)}><DisplayPreview mode={option.id} /><strong>{option.name}</strong><small>{option.description}</small></button>)}</div></section>
-          <section className="customizer-section ambient-section" aria-labelledby="ambient-title"><h3 id="ambient-title">Speed glow</h3><div className="ambient-options" role="group" aria-label="Glow under the speed reading">{Object.entries(glows).map(([name, color]) => <button key={name} className={'ambient-option' + (glow === name ? ' selected' : '')} aria-label={name} aria-pressed={glow === name} onClick={() => setGlowColor(name as keyof typeof glows)}><span style={{ backgroundColor: color }} /></button>)}</div></section>
+          <header className="customizer-header"><div><h2 id="display-customizer-title">{t('Display')}</h2><p>{t('Set your instrument style.')}</p></div><button ref={closeButton} className="customizer-close" onClick={() => { setCustomizerOpen(false); customizeButton.current?.focus() }}>{t('Close')}</button></header>
+          <section className="customizer-section" aria-labelledby="display-mode-title"><h3 id="display-mode-title">{t('Instrument display')}</h3><div className="display-mode-options" role="group" aria-label="Instrument display style">{displays.map(option => <button key={option.id} className={'display-mode-option' + (display === option.id ? ' selected' : '')} aria-pressed={display === option.id} onClick={() => setDisplayMode(option.id)}><DisplayPreview mode={option.id} /><strong>{t(option.name)}</strong></button>)}</div></section>
         </section>
       </div>}
-      {!soundLabOpen && <section className="dashboard-cluster" aria-label="Instrument cluster">
+      {!soundLabOpen && <section className={'dashboard-cluster display-' + display} aria-label="Instrument cluster">  {/* mode class on the cluster, not the screen: the previews inside the screen keep their own */}
         {display !== 'digital' && <ClusterGauge kind="power" power={state.power} charge={state.charge} startupProgress={startupProgress} startupBlend={startupBlend} design={display === 'classic' ? 'circle' : undefined} />}
         <div className="cluster-center">
           <div className="speed-reading"><span>{!state.running || state.starting ? '—' : Math.round(state.speed)}</span><small>km/h</small></div>
@@ -190,15 +186,15 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
       </section>}
       <section className={'dashboard-controls' + (personalizeOpen ? ' personalize-active' : '')} hidden={soundLabOpen} aria-label="Driving controls">
         <div className="input-controls">
-          <button className={'controller-status' + (connected ? ' connected' : '')} title={state.controllerError || 'W throttle · S brake · controller triggers'} onClick={() => setShowInputs(!showInputs)}>{connected ? '●  CONTROLLER CONNECTED' : '○  CONTROLLER DISCONNECTED'}</button>
+          <button className={'controller-status' + (connected ? ' connected' : '')} title={state.controllerError || t('W throttle · S brake · controller triggers')} onClick={() => setShowInputs(!showInputs)}>{t(connected ? '●  CONTROLLER CONNECTED' : '○  CONTROLLER DISCONNECTED')}</button>
           <div className="input-meters"><InputMeter label="BRAKE" level={state.brakeInput} /><InputMeter label="THROTTLE" level={state.throttleInput} /></div>
-          {showInputs && <div className="input-options"><label><input type="checkbox" checked={state.controllerEnabled} onChange={event => onCommand('controllerEnabled', { value: event.target.checked })} /> Controller enabled</label><select aria-label="Controller" onChange={event => onCommand('controller', { id: Number(event.target.value) })}><option value="-1">Automatic</option>{state.availableControllers.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}</select></div>}
+          {showInputs && <div className="input-options"><label><input type="checkbox" checked={state.controllerEnabled} onChange={event => onCommand('controllerEnabled', { value: event.target.checked })} /> {t('Controller enabled')}</label><select aria-label="Controller" onChange={event => onCommand('controller', { id: Number(event.target.value) })}><option value="-1">{t('Automatic')}</option>{state.availableControllers.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}</select></div>}
         </div>
         <div className={'controls-spacer' + (searchPanel ? ' has-search-panel' : '')}>{searchPanel && <div className="dashboard-search-slot">{searchPanel}</div>}</div>
-        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={state.running ? 'Stop vehicle' : 'Start vehicle'} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{state.starting ? 'STARTING' : state.running ? 'STOP' : 'START'}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound'}</button></>}</div>
+        <div className="start-controls">{!personalizeOpen && <><button type="button" className="start-button" aria-label={t(state.running ? 'Stop vehicle' : 'Start vehicle')} disabled={state.starting || state.soundSweepActive} onClick={() => void startVehicleFromButton()}><span className={'start-indicator' + (state.running ? ' on' : '')} /><strong>{t(state.running ? 'STOP' : 'START')}</strong></button><button className="personalize-button" disabled={state.soundSweepActive} onClick={onPersonalize}>{t(state.sourceDiscovery?.active ? 'Resume session' : 'Personalize sound')}</button></>}</div>
       </section>
       {(error || state.audioError || sourceAudioError) && <div role="alert" className="dashboard-error">{error || state.audioError || sourceAudioError}</div>}
-      <SoundEditor onAudioError={setSourceAudioError} personalizeOpen={personalizeOpen} onSourceSelected={() => setGranularSelected(true)} granularMode={granularMode} onModeChange={setGranularMode} ref={sound} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />
+      <SoundEditor onAudioError={setSourceAudioError} {...car.editor} active state={state} onCommand={onCommand} embedded={!soundLabOpen} />
     </div>
   </div>
 }

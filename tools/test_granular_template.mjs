@@ -77,9 +77,9 @@ assert.equal(steadyA.semitones,steadyB.semitones,'Steady pitch depends on power,
 assert.equal(steadyA.driveGain,steadyB.driveGain,'Steady level depends on power, not speed')
 assert.ok(drivingSoundTargets({...comfort,power:.9},false,'linear','steady').semitones>steadyA.semitones)
 let previousRise=-Infinity
-for(const speed of [0,20,50,90,120,160,220]) {
+for(const speed of [0,20,50,90,120]) {  // Rise climbs up to 120 km/h, then holds
  const target=drivingSoundTargets({...comfort,speedKmh:speed},false,'linear','rise')
- assert.ok(target.semitones>previousRise && target.semitones<=1,'Rise keeps climbing beyond 90 km/h within the low register')
+ assert.ok(target.semitones>previousRise && target.semitones<=3,'Rise keeps climbing with speed up to top speed')
  previousRise=target.semitones
 }
 const sportBase=drivingSoundTargets(comfort,false,'linear','rise')
@@ -89,39 +89,35 @@ console.log('Steady is power-led; Rise climbs with speed and opens with accelera
 const launch={...cruise,speedKmh:15,rpm:500,maxRpm:12000,power:.2,throttle:.8,motorLoad:.8}
 for(const mode of ['rise','evolving']) {
  const low=drivingSoundTargets(launch,false,'exponential',mode)
- const revved=drivingSoundTargets({...launch,rpm:3500},false,'exponential',mode)
- assert.ok(revved.semitones-low.semitones>2,'RPM must create an audible launch climb')
+ const revved=drivingSoundTargets({...launch,speedKmh:45,rpm:3500},false,'exponential',mode)
+ assert.ok(revved.semitones-low.semitones>2,'Speed must create an audible launch climb (pitch follows speed, not RPM, 2026-11-18)')
  assert.ok(revved.semitones<=1)
 }
 const lowPowerRise=drivingSoundTargets(launch,false,'linear','rise')
 const highPowerRise=drivingSoundTargets({...launch,power:.9},false,'linear','rise')
 assert.ok(highPowerRise.semitones>lowPowerRise.semitones,'Rise must also respond to power at the same RPM/speed')
 assert.ok(drivingSoundTargets({...launch,power:.35},false,'exponential','steady').semitones>-12,'Steady must climb from its deeper start at low power')
-console.log('Launch pitch responds clearly to RPM and power, with restrained upper register.')
+console.log('Launch pitch responds clearly to speed and power, with restrained upper register.')
 const settleAt=speed=>drivingSoundTargets({...cruise,speedKmh:speed},false,'linear','evolving').loopHold
-assert.equal(settleAt(99),0)
-assert.equal(settleAt(99.9),0)
-assert.equal(settleAt(100),1)
-assert.equal(settleAt(110),1)
-assert.equal(settleAt(120),1)
+for(const speed of [99,100,120]) assert.equal(settleAt(speed),0)  // sweeps keep going up to top speed (2026-11-18)
 assert.equal(drivingSoundTargets({...cruise,speedKmh:120},false,'linear','rise').loopHold,0)
-console.log('Evolving repeats normally below 100 km/h and switches to sustained sound at the threshold.')
+console.log('Evolving keeps sweeping at every speed.')
 
 for(const mode of ['steady','rise','evolving']) {
  const resting=drivingSoundTargets({...input,power:0,rpm:0,maxRpm:12000},false,'linear',mode)
  assert.equal(resting.semitones,-11,'Every mode starts with the same gentle one-semitone slowdown')
  const full=drivingSoundTargets({...cruise,power:1,throttle:1,motorLoad:1,rpm:12000,maxRpm:12000,speedKmh:300},false,'linear',mode)
- assert.ok(full.semitones>resting.semitones+8 && full.semitones<=(mode==='evolving'?5:1))
+ assert.ok(full.semitones>resting.semitones+8 && full.semitones<=({evolving:5,rise:3}[mode]??1))
 }
 console.log('All GS modes have a deeper start and retain their upper-register headroom.')
 let previousSustained=-Infinity
 for(const speed of [100,110,130,160,220]) {
  const target=drivingSoundTargets({...cruise,speedKmh:speed},false,'linear','evolving')
- assert.equal(target.loopHold,1)
- assert.ok(target.rate>previousSustained,'Above 100 the non-looping tone must continue rising with speed')
+ assert.equal(target.loopHold,0)
+ assert.ok(target.rate>previousSustained,'Above 100 the tone must continue rising with speed')
  previousSustained=target.rate
 }
-console.log('Above 100, the sustained branch keeps climbing without bringing back phrase loops.')
+console.log('Above 100, pitch keeps climbing while the sweeps keep running.')
 // Rise starts slower/deeper, then rejoins the original upper register.
 const launchRate=drivingSoundTargets({...input,power:0,rpm:0,maxRpm:12000},false,'linear','rise')
 assert.equal(launchRate.semitones,-11)
@@ -142,6 +138,7 @@ assert.ok(evolvingFast.rate>evolvingLow.rate,'Evolving must inherit speed-led Ri
 assert.ok(drivingSoundTargets({...launch,acceleration:3},false,'linear','evolving').cutoff>drivingSoundTargets({...launch,acceleration:0},false,'linear','evolving').cutoff)
 for(const mode of ['steady','rise','evolving']) {
  const regen=drivingSoundTargets({...cruise,motorLoad:-.7},false,'linear',mode)
- assert.ok(Math.abs(regen.driveGain-.12*.7)<1e-12,'Regen gets the stronger shared level')
- assert.equal(drivingSoundTargets({...cruise,motorLoad:0},false,'linear',mode).driveGain,0,'Coasting stays silent')
+ assert.ok(Math.abs(regen.driveGain-(mode==='rise'?.9*.004:0)-.06*.7)<1e-12,'Regen level (halved 2026-11-18, was too loud); Rise adds its rolling floor')
+ if(mode==='rise') assert.ok(regen.semitones>drivingSoundTargets({...cruise,motorLoad:0},false,'linear',mode).semitones+1,'Regen sounds higher')
+ assert.ok(Math.abs(drivingSoundTargets({...cruise,motorLoad:0},false,'linear',mode).driveGain-(mode==='rise'?.9*.004:0))<1e-12,'Coasting: silent, except Rise stays softly audible')
 }

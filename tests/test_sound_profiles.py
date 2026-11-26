@@ -5,7 +5,7 @@ import numpy as np
 
 from audio import SOUND_THEMES
 from audio import SoundEngine
-from experiment.live_search import GP_CONTROLS, profile_for
+from experiment.legacy.live_search import GP_CONTROLS, profile_for
 
 
 class SoundProfileTests(unittest.TestCase):

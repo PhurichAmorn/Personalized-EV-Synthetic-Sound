@@ -52,7 +52,13 @@ class VehiclePhysicsTests(unittest.TestCase):
                 VehicleModel(power_taper=curve)
 
     def test_real_two_speed_shift_and_energy_balance(self):
-        car = VehicleModel.from_name('Porsche Taycan RWD (2023)')
+        car = VehicleModel(gear_ratios=(15.0, 8.0), gear_ratio=15.0,
+                           upshift_speed_kmh=85.0, downshift_speed_kmh=55.0,
+                           shift_duration_s=0.20, wheel_radius_m=0.355,
+                           drag_area_m2=0.55, rolling_resistance=0.010, tire_grip=1.0,
+                           brake_tire_grip=1.20, max_brake_deceleration_g=1.0,
+                           mass_kg=2071.13, max_power_kw=240.0, max_torque_nm=338.95,
+                           battery_kwh=79.2, max_speed=230.0, max_rpm=16000.0)
         initial = car.battery_energy_j
         shifted = False
         previous_gear, previous_speed, previous_rpm = 1, 0, 0
@@ -93,13 +99,12 @@ class VehiclePhysicsTests(unittest.TestCase):
                 times.append(elapsed)
                 speeds.append(car.speed)
             self.assertLess(max(times) - min(times), 0.08)
-            if name == 'Honda e':
-                # Published ~9 s; this is a plausibility band, not OEM calibration.
-                self.assertTrue(8 <= times[1] <= 10, times)
-            elif name.startswith('Tesla'):
-                self.assertTrue(3 <= times[1] <= 4, times)
-            else:
-                self.assertTrue(6 <= times[1] <= 9, times)
+            if 'Vivace' in name:
+                # BeamNG game-measured 0-100 km/h: ~8.1 s.
+                self.assertTrue(7.5 <= times[1] <= 9.0, times)
+            elif 'eSBR300' in name:
+                # BeamNG game-measured 0-100 km/h: 4.6 s.
+                self.assertTrue(4.3 <= times[1] <= 5.0, times)
 
     def test_rpm_tracks_gearing_in_drive_coast_and_regen(self):
         for car in self.cars():
@@ -128,7 +133,7 @@ class VehiclePhysicsTests(unittest.TestCase):
 
     def test_top_speed_uses_only_road_load_power(self):
         for car in self.cars():
-            self.advance(car, 1, 0, 60, dt=0.02)
+            self.advance(car, 1, 0, 120, dt=0.02)
             self.assertAlmostEqual(car.speed, car.max_speed, delta=0.001)
             self.assertLessEqual(car.rpm, car.max_rpm)
             required = car.road_load_n * car.speed / 3.6 / car.drivetrain_efficiency
@@ -193,9 +198,8 @@ class VehiclePhysicsTests(unittest.TestCase):
             self.assertLess(car.motor_torque_nm, 0)
 
     def test_calibrated_stopping_distances_and_traction(self):
-        targets = (("Honda e", 100, 32.9),
-                   ("Mazda EZ-6 600 (China)", 100, 38.0),
-                   ("Tesla Model 3 Performance (2024 US)", 60 * 1.609344, 109 * .3048))
+        targets = (("Cherrier Vivace E (BeamNG)", 100, 39.15),
+                   ("Hirochi SBR4 eSBR300 (BeamNG)", 100, 41.6))
         for name, speed, target in targets:
             for dt in (.005, .01, .02, .05):
                 car = VehicleModel.from_name(name)
@@ -226,7 +230,7 @@ class VehiclePhysicsTests(unittest.TestCase):
                 self.advance(car, 0, pedal, 0.5)
                 decels.append(-car.acceleration_m_s2)
             self.assertEqual(decels, sorted(decels))
-            self.assertGreater(decels[-1], decels[0] * (2.5 if name.startswith("Tesla") else 3))
+            self.assertGreater(decels[-1], decels[0] * 2.5)
             car = VehicleModel.from_name(name)
             car.speed = 100
             self.advance(car, 0, 1, 0.5)
@@ -234,33 +238,6 @@ class VehiclePhysicsTests(unittest.TestCase):
             self.assertGreater(car.friction_force_n, 0)
             car.update(1, 0, 0.01)
             self.assertEqual(car.friction_force_n, 0)
-
-    def test_full_cold_hot_batteries_still_allow_service_braking(self):
-        for car in self.cars():
-            car.soc = 1
-            car.auxiliary_power_w = 0
-            car.speed = 100
-            self.advance(car, 0, 1, 1)
-            self.assertEqual(car.regen, 0)
-            self.assertGreater(car.friction_force_n, 0)
-            self.assertLess(car.speed, 90)
-            self.assertEqual(car.soc, 1)
-        for temperature in (-20, 55):
-            car = VehicleModel(battery_temperature_c=temperature, speed=80)
-            self.advance(car, 0, 1, 1)
-            self.assertEqual(car.regen, 0)
-            self.assertGreater(car.friction_force_n, 0)
-
-    def test_soc_and_temperature_charge_taper(self):
-        car = VehicleModel()
-        normal = car.charge_power_limit_w
-        car.soc = 0.95
-        self.assertAlmostEqual(car.charge_power_limit_w, normal * 0.5)
-        car.soc = 0.99
-        self.assertAlmostEqual(car.charge_power_limit_w, normal * 0.1)
-        car.soc = 0.8
-        car.battery_temperature_c = 0
-        self.assertAlmostEqual(car.charge_power_limit_w, normal * 0.4)
 
     def test_coasting_and_low_speed_stop(self):
         coast = VehicleModel(speed=80, lift_off_deceleration_g=0)
@@ -293,20 +270,6 @@ class VehiclePhysicsTests(unittest.TestCase):
             self.assertTrue(0 < car.battery_recovered_energy_j < kinetic)
             self.assertGreater(car.soc, 0.8)
             self.assert_energy(car, initial_battery, 100)
-
-    def test_empty_battery_and_stationary_auxiliaries(self):
-        car = VehicleModel(soc=0)
-        self.advance(car, 1, 0, 2)
-        self.assertEqual(car.speed, 0)
-        self.assertEqual(car.battery_power_w, 0)
-        car = VehicleModel(speed=80, soc=0)
-        self.advance(car, 0, 1, 1)
-        self.assertGreater(car.soc, 0)
-        car = VehicleModel()
-        initial = car.battery_energy_j
-        self.advance(car, 0, 0, 2)
-        self.assertEqual(car.speed, 0)
-        self.assertAlmostEqual(initial - car.battery_energy_j, 1000, delta=1e-5)
 
     def test_energy_balance_acceleration_braking_and_limits(self):
         for car in self.cars():
@@ -351,12 +314,6 @@ class VehiclePhysicsTests(unittest.TestCase):
             car = VehicleModel.from_name(name)
             self.advance(car, .03, 0, .5)
             self.assertGreater(car.speed, 0)
-            car.speed, car.soc = 60, 1
-            car.auxiliary_power_w = 0
-            car.motor_torque_nm = 0
-            self.advance(car, 0, 0, 1)
-            self.assertEqual(car.regen, 0)
-            self.assertEqual(car.friction_force_n, 0)
 
     def test_input_validation_and_noop_timestep(self):
         car = VehicleModel()
@@ -368,7 +325,7 @@ class VehiclePhysicsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 car.update(*arguments)
         for arguments in ({'mass_kg': 0}, {'wheel_radius_m': -1}, {'soc': 1.1},
-                          {'motor_efficiency': 1.1}, {'battery_temperature_c': math.nan}):
+                          {'motor_efficiency': 1.1}):
             with self.assertRaises(ValueError):
                 VehicleModel(**arguments)
 

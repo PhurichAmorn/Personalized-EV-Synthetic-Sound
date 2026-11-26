@@ -49,10 +49,10 @@ export function createClient(send: Send, subscribe: Subscribe, idStart = 0) {
 declare global {
   interface Window {
     __TAURI__?: {
-      window?: { getCurrentWindow: () => { close: () => Promise<void>; startDragging: () => Promise<void>; startResizeDragging: (direction: 'SouthEast') => Promise<void>; setSize: (size: unknown) => Promise<void> } }
-      dpi?: { LogicalSize: new (width: number, height: number) => unknown }
+      window?: { getCurrentWindow: () => { close: () => Promise<void>; startDragging: () => Promise<void>; startResizeDragging: (direction: 'SouthEast') => Promise<void>; setSize: (size: unknown) => Promise<void>; setPosition: (position: unknown) => Promise<void>; scaleFactor: () => Promise<number>; outerPosition: () => Promise<{ x: number; y: number }> } }
+      dpi?: { LogicalSize: new (width: number, height: number) => unknown; LogicalPosition: new (x: number, y: number) => unknown }
       core: { invoke: (name: string, args: Record<string, unknown>) => Promise<void> }
-      event: { listen: (name: string, handler: (event: { payload: string }) => void) => Promise<() => void>; emit: (name: string, payload?: unknown) => Promise<void> }
+      event: { listen: <T = string>(name: string, handler: (event: { payload: T }) => void) => Promise<() => void>; emit: (name: string, payload?: unknown) => Promise<void> }
     }
   }
 }

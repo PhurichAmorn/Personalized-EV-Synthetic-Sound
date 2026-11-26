@@ -73,31 +73,17 @@ export class GranularEngine {
 
 const ease = value => { const x=Math.max(0,Math.min(1,value)); return x*x*(3-2*x) }
 const handoff=value=>{const x=Math.max(0,Math.min(1,value))**.75;return x*x*x*(10+x*(-15+6*x))}
-// Two overlapping rises transform the stationary source; no alternate WAV is needed.
+// Shepard-style Evolving: two voices an octave apart rise together with speed (one octave per stage, stage = speed / 40 km/h).
+// Each voice fades in from below and out at the top (gains sin^2 + cos^2 = 1), so a new layer keeps arriving and nothing resets.
+// Slowing runs the same thing backwards, smoothly. Pitch rides on top of the usual speed climb (rate).
 export class EvolvingEngine {
-  constructor(data,rate) {
-    this.rate=rate; this.right=0; this.scanPosition=0; this.scanStep=1; this.holdTarget=null; this.cycleSpeed=null
-    this.voices=[new GranularEngine(data,rate),new GranularEngine(data,rate)]
-  }
-  sample(rate,hold=0,cycleSpeed=1) {
-    const target=Number.isFinite(cycleSpeed)?Math.max(.25,Math.min(1,cycleSpeed)):1
-    this.cycleSpeed=this.cycleSpeed===null?target:this.cycleSpeed+(target-this.cycleSpeed)*(1-Math.exp(-1/(.25*this.rate)))
+  constructor(data,rate) { this.rate=rate; this.right=0; this.voices=[new GranularEngine(data,rate),new GranularEngine(data,rate)] }
+  sample(rate,hold=0,cycleSpeed=1,stage=0) {
     let left=0,right=0
     for(let i=0;i<2;i++) {
-      const local=(this.scanPosition/this.rate+i*2.5)%5
-      const rise=ease(local/4.5)
-      const envelope=Math.sin(Math.PI/2*handoff(local/2))*Math.cos(Math.PI/2*handoff((local-2.5)/2))
-      const value=this.voices[i].sample(rate*2**(9*rise/12))
-      left+=value*envelope;right+=this.voices[i].right*envelope
-    }
-    if(hold>=.5 && this.holdTarget===null) this.holdTarget=this.scanPosition+Math.max(0,2.2*this.rate-this.scanPosition%(2.5*this.rate))
-    else if(hold<.5) this.holdTarget=null
-    if(this.holdTarget===null) {
-      this.scanStep=Math.min(this.cycleSpeed,this.scanStep+1/(.2*this.rate));this.scanPosition+=this.scanStep
-    } else {
-      const remaining=this.holdTarget-this.scanPosition
-      if(remaining<1){this.scanPosition=this.holdTarget;this.scanStep=0}
-      else {this.scanStep=Math.min(this.scanStep,Math.sqrt(remaining/(.25*this.rate)));this.scanPosition+=Math.min(remaining,this.scanStep)}
+      const u=((stage+i)%2+2)%2, gain=Math.sin(Math.PI/2*u)**2  // u in [0,2): position of this voice through its two-octave climb
+      const value=this.voices[i].sample(rate*2**(u-1))
+      left+=value*gain; right+=this.voices[i].right*gain
     }
     this.right=right
     return left
@@ -120,6 +106,7 @@ export class EngineStage {
       return biquad(1+alpha*A,-2*Math.cos(w),1-alpha*A,1+alpha/A,-2*Math.cos(w),1-alpha/A)
     }),...(config.lowpassHz?[(()=>{const w=2*Math.PI*config.lowpassHz/sampleRate,alpha=Math.sin(w)/(2*.707),c=Math.cos(w)
       return biquad((1-c)/2,1-c,(1-c)/2,1+alpha,-2*c,1-alpha)})()]:[])]
+    this.lowRate=1  // lowpassFollow: cutoff = lowpassHz x playback rate, coefficients updated when the rate moves 0.5%
     this.state=[0,1].map(()=>this.filters.map(()=>[0,0,0,0]))
     const k=sampleRate/44100
     this.rooms=[0,1].map(side=>({combs:[557,593,641,677].map(d=>({buffer:new Float64Array(Math.round((d+side*17)*k)),index:0,low:0})),
@@ -140,6 +127,13 @@ export class EngineStage {
       this.to=1+this.config.rasp*(.15*random+alternate)  // mostly the regular half-order alternation (tonal growl); fully random sounded noisy (tone-to-noise 17 vs 34 dB) and wobbly
     }
     const gain=this.config.rasp?this.from+(this.to-this.from)*(.5-.5*Math.cos(Math.PI*this.cycle)):1
+    if(this.config.lowpassFollow&&this.config.lowpassHz&&Math.abs(rate/this.lowRate-1)>.005) {
+      this.lowRate=rate;const w=2*Math.PI*Math.min(this.fs*.45,this.config.lowpassHz*rate)/this.fs,alpha=Math.sin(w)/(2*.707),c=Math.cos(w),a0=1+alpha
+      this.filters[this.filters.length-1]={b:[(1-c)/2/a0,(1-c)/a0,(1-c)/2/a0],a:[-2*c/a0,(1-alpha)/a0]}
+      // the peaks move with pitch too: a fixed peak kept one octave layer loud while the rest climbed (heard as only some octaves rising)
+      this.config.resonances.forEach(([hz,gainDb,q],i)=>{const A=10**(gainDb/40),w=2*Math.PI*Math.min(this.fs*.45,hz*rate)/this.fs,al=Math.sin(w)/(2*q),k=Math.cos(w),d=1+al/A
+        this.filters[i]={b:[(1+al*A)/d,-2*k/d,(1-al*A)/d],a:[-2*k/d,(1-al/A)/d]}})
+    }
     const out=[left*gain,right*gain]
     for(let c=0;c<2;c++) for(let f=0;f<this.filters.length;f++) {
       const {b,a}=this.filters[f],s=this.state[c][f],x=out[c]
@@ -160,14 +154,14 @@ export class SourceLoopEngine {
   setSource(data) {
     this.data=data; this.previous=this.renderer; this.renderer=this.evolving ? new EvolvingEngine(data,this.rate) : new GranularEngine(data,this.rate); this.fade=0
   }
-  sample(rate,hold=0,evolving=0,cycleSpeed=1) {
+  sample(rate,hold=0,evolving=0,cycleSpeed=1,stage=0) {
     if((evolving>=.5)!==this.evolving) {this.evolving=evolving>=.5;this.setSource(this.data)}
-    let value=this.renderer.sample(rate,hold,cycleSpeed)
+    let value=this.renderer.sample(rate,hold,cycleSpeed,stage)
     this.right=this.renderer.right
     if(this.engineStage&&!this.previous) { const [l,r]=this.engineStage.process(value,this.right,rate); this.right=r; return l }
     if(!this.previous) return value
     const mix=ease(this.fade/(.16*this.rate))
-    let result=this.previous.sample(rate,hold,cycleSpeed)*(1-mix)+value*mix
+    let result=this.previous.sample(rate,hold,cycleSpeed,stage)*(1-mix)+value*mix
     this.right=this.previous.right*(1-mix)+this.renderer.right*mix
     if(++this.fade>=.16*this.rate) this.previous=null
     if(this.engineStage) { const [l,r]=this.engineStage.process(result,this.right,rate); this.right=r; result=l }
@@ -177,7 +171,7 @@ export class SourceLoopEngine {
 
 if (typeof registerProcessor === 'function') {
   class GranularProcessor extends AudioWorkletProcessor {
-    static get parameterDescriptors() { return [{name:'rate',defaultValue:1,minValue:.1,maxValue:4,automationRate:'a-rate'}, {name:'hold',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}, {name:'evolve',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}, {name:'cycleSpeed',defaultValue:1,minValue:.25,maxValue:1,automationRate:'k-rate'}] }
+    static get parameterDescriptors() { return [{name:'rate',defaultValue:1,minValue:.1,maxValue:4,automationRate:'a-rate'}, {name:'hold',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}, {name:'evolve',defaultValue:0,minValue:0,maxValue:1,automationRate:'k-rate'}, {name:'cycleSpeed',defaultValue:1,minValue:.25,maxValue:1,automationRate:'k-rate'}, {name:'stage',defaultValue:0,minValue:0,maxValue:100,automationRate:'k-rate'}] }
     constructor() {
       super(); this.startFrame = Infinity; this.stopFrame = Infinity; this.engine = null
       this.port.onmessage = ({data}) => {
@@ -191,11 +185,11 @@ if (typeof registerProcessor === 'function') {
       }
     }
     process(inputs,outputs,parameters) {
-      const output = outputs[0][0], rates = parameters.rate, hold = parameters.hold?.[0] ?? 0, evolving = parameters.evolve?.[0] ?? 0, cycleSpeed = parameters.cycleSpeed?.[0] ?? 1
+      const output = outputs[0][0], rates = parameters.rate, hold = parameters.hold?.[0] ?? 0, evolving = parameters.evolve?.[0] ?? 0, cycleSpeed = parameters.cycleSpeed?.[0] ?? 1, stage = parameters.stage?.[0] ?? 0
       for (let i=0;i<output.length;i++) {
         const frame = currentFrame+i
         const active=this.engine && frame>=this.startFrame && frame<this.stopFrame
-        output[i] = active ? this.engine.sample(rates.length===1?rates[0]:rates[i],hold,evolving,cycleSpeed) : 0
+        output[i] = active ? this.engine.sample(rates.length===1?rates[0]:rates[i],hold,evolving,cycleSpeed,stage) : 0
         if(outputs[0][1]) outputs[0][1][i]=active ? this.engine.right : 0
       }
       if (currentFrame+output.length>=this.stopFrame) { this.port.postMessage('ended'); return false }

@@ -23,7 +23,6 @@ class DesktopBridgeTest(unittest.TestCase):
 
     def tearDown(self):
         self.controller.search.close()
-        self.controller.experiment.close()
         self.controller.shutdown()
 
     def test_source_audition_mutes_native_audio_and_restores_volume(self):
@@ -43,13 +42,14 @@ class DesktopBridgeTest(unittest.TestCase):
 
     def test_snapshot_exposes_signed_motor_load(self):
         self.controller.car.motor_torque_nm = -.5 * self.controller.car.max_regen_torque_nm
+        self.controller.sim_regen = .5  # smoothed regen level, set by the tick from deceleration
         self.assertAlmostEqual(self.bridge.snapshot()['motorLoad'], -.5)
         self.controller.car.motor_torque_nm = .5 * self.controller.car.max_torque_nm
         self.assertAlmostEqual(self.bridge.snapshot()['motorLoad'], .5)
 
     def test_snapshot_exposes_existing_vehicle_and_search_state(self):
         state = self.bridge.snapshot()
-        self.assertEqual(state['vehicle'], 'Compact EV')
+        self.assertEqual(state['vehicle'], 'BeamNG Vivace E')
         self.assertFalse(state['running'])
         self.assertEqual(state['hasGears'], self.controller.hasGears)
         self.assertFalse(state['search']['active'])

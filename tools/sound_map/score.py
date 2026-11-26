@@ -12,7 +12,7 @@ OUT = os.path.join(HERE, 'out')
 def prepare():
     """Build the synth bundles and render the labelled sounds once; everything runs inside out/."""
     os.makedirs(OUT, exist_ok=True); os.chdir(OUT)
-    if not os.path.exists('synth.mjs'): subprocess.run(['node', os.path.join(HERE, 'build.mjs')], check=True)
+    subprocess.run(['node', os.path.join(HERE, 'build.mjs')], check=True)  # always: a bundle left from before a git pull runs old synth code
     if not os.path.exists('manifest.json'): subprocess.run(['node', 'labelled.mjs'], check=True)
 
 
@@ -35,7 +35,7 @@ def lowpass(x, cutoff, q, period=None):
     return out
 
 
-def play(loop, fx, rate, pedal):
+def play(loop, fx, rate, pedal, raw=False):
     """Approximation of the engine at a fixed pedal: pitch shift, pedal-following low-pass, tremolo/pump.
     Skipped: reverb, chorus, vibrato, rasp (granular-only), body EQ."""
     n = int(FS * SECONDS)
@@ -46,6 +46,7 @@ def play(loop, fx, rate, pedal):
         t = np.arange(n) / FS * fx['tremRate']
         lfo = 2 * (t % 1) - 1 if fx.get('pump') else np.sin(2 * np.pi * t)
         x *= 1 - fx['tremDepth'] / 2 + fx['tremDepth'] / 2 * lfo
+    if raw: return x / .13 * 20e-6 * 10 ** (SPL / 20)  # Pa at the app's own level (rms .13 = SPL); loudness.py
     return x / np.sqrt(np.mean(x ** 2)) * 20e-6 * 10 ** (SPL / 20)  # Pa
 
 
@@ -62,6 +63,16 @@ def dissonance(partials, rate):
     lo, df = np.minimum.outer(f, f), np.abs(np.subtract.outer(f, f))
     s = .24 / (.0207 * lo + 18.96)
     return float((np.outer(a, a) * (np.exp(-3.5 * s * df) - np.exp(-5.75 * s * df))).sum() / 2 / a.sum() ** 2)
+
+
+def crowding(partials, fx, rate, pedal):
+    """Pairs of audible partials above 1 kHz closer than a quarter critical band, after the pedal-following low-pass.
+    Many such pairs beat against each other and were heard as noise or wind (listener marks, 2026-11-16)."""
+    p = np.array(partials); f = p[:, 0] * rate
+    fc = np.clip(fx['tone'] * 2 ** (fx.get('follow', 0) * (2 * pedal - 1)), 200, 20000); q = 10 ** (fx.get('res', .6) / 20)  # WebAudio: Q in dB
+    a = p[:, 1] / np.sqrt((1 - (f / fc) ** 2) ** 2 + (f / fc / q) ** 2); a = a / a.max()
+    hi = np.sort(f[(f > 1000) & (a > .03)])
+    return float(sum(int(np.sum(hi[i + 1:] - hi[i] < .25 * 24.7 * (4.37 * hi[i] / 1000 + 1))) for i in range(len(hi))))
 
 
 def annoyance(n5, s, r, f):
@@ -83,7 +94,7 @@ if __name__ == '__main__':
           s = float(sharpness_din_st(x, FS))
           r = float(np.mean(roughness_dw(x[:FS * 2], FS)[0]))
           fl = fluctuation(x)
-          row[where] = dict(N5=n5, S=s, R=r, F=fl, D=dissonance(item['partials'], rate), PA=annoyance(n5, s, r, fl * 4))
+          row[where] = dict(N5=n5, S=s, R=r, F=fl, C=crowding(item['partials'], item['fx'], rate, pedal), D=dissonance(item['partials'], rate), PA=annoyance(n5, s, r, fl * 4))
       rows.append(row); print(item['id'], file=sys.stderr)
   json.dump(rows, open('scores.json', 'w'), indent=1)
   # Self-check: the guardrail rule (generate.LIMITS) must reject both Drops and pass every kept sound.

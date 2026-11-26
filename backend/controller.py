@@ -8,7 +8,17 @@ from PySide6.QtCore import QObject, Property, Signal, Slot, QTimer, QEvent, Qt
 from audio import DEBUG_THEMES, SOUND_RECIPES, SOUND_THEMES
 from audio import SoundEngine
 from simulation.vehicle_model import VehicleModel, SIMULATOR_PRESETS
-from backend.beamng_telemetry import TorqueScaler
+from backend.beamng_telemetry import TorqueScaler, regen_full_w, regen_level
+
+# Evolving sweep pace (2026-11-21): one octave per 80 km/h felt right on the eSBR300; a car that gains speed faster (more power per kg)
+# gets more km/h per octave, so a full-pedal launch sweeps at the same pace in every car. ponytail: power per kg stands for acceleration;
+# use a measured 0-100 time per car if a car is heard as off.
+EVOLVING_REF_KMH, EVOLVING_REF_CAR = 80.0, 'Hirochi SBR4 eSBR300 (BeamNG)'
+
+
+def evolving_kmh_per_octave(car):
+    ref = VehicleModel.from_name(EVOLVING_REF_CAR)
+    return EVOLVING_REF_KMH * (car.max_power_kw / car.effective_mass_kg) / (ref.max_power_kw / ref.effective_mass_kg)
 
 
 class SimulatorController(QObject):
@@ -24,7 +34,7 @@ class SimulatorController(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.car = VehicleModel.from_name('Compact EV')
+        self.car = VehicleModel.from_name('BeamNG Vivace E')  # starting car: Vivace E (2026-11-20); eSBR300 was the starting car on 2026-11-19
         self.source_mode = 'Simulator'
         self.beamng_state = None
         self.beamng_received_at = 0.0
@@ -32,6 +42,7 @@ class SimulatorController(QObject):
         self.beamng_previous_sample = None
         self.beamng_error = ''
         self.beamng_torque = TorqueScaler()
+        self.sim_regen = 0.0  # simulator regen 0..1, smoothed like BeamNG's (0.15 s)
         self.beamng_signed_load = None  # torque-based -1..+1 (None when the car has no motor device)
         self.beamng_stale_after = 0.5
         self.audio = SoundEngine()
@@ -61,9 +72,7 @@ class SimulatorController(QObject):
         self._sweep_last_tick = None
         self.sweep_rpm = 1000.0
         self.sweep_throttle = 20.0
-        from experiment.experiment_manager import ExperimentManager
-        self._experiment = ExperimentManager(self, self)
-        from experiment.live_search import LiveSearch
+        from experiment.legacy.live_search import LiveSearch
         self._search = LiveSearch(self, self)
 
     speed = Property(float, lambda self: self._telemetry_value('speed_m_s', self.car.speed / 3.6) * 3.6, notify=changed)
@@ -83,9 +92,9 @@ class SimulatorController(QObject):
     running = Property(bool, lambda self: self.timer.isActive(), notify=sessionChanged)
     vehicleNames = Property('QStringList', lambda self: list(SIMULATOR_PRESETS), constant=True)
     speedGaugeMaximum = Property(float, lambda self: 300.0 if self.car.max_speed > 220 else 220.0, notify=vehicleChanged)
+    kmhPerOctave = Property(float, lambda self: evolving_kmh_per_octave(self.car), notify=vehicleChanged)
     selectedVehicle = Property(str, lambda self: self.car.name, notify=vehicleChanged)
     soundThemes = Property('QStringList', lambda self: list(SOUND_THEMES), constant=True)
-    experiment = Property(QObject, lambda self: self._experiment, constant=True)
     search = Property(QObject, lambda self: self._search, constant=True)
     soundSweepActive = Property(bool, lambda self: self.sweep_timer.isActive(), notify=sessionChanged)
     selectedSoundTheme = Property(str, lambda self: self.sound_theme, notify=soundThemeChanged)
@@ -123,11 +132,11 @@ class SimulatorController(QObject):
         value = lambda key: '' if state.get(key) is None else f'{state[key]:.4f}'
         with open(path, 'a') as handle:
             if fresh:
-                handle.write('t,speed_kmh,throttle,brake,motor_torque,regen_field,regen_torque,motor_load_field,app_signed_load,app_regen,peak_drive,peak_regen\n')
+                handle.write('t,speed_kmh,throttle,brake,motor_torque,regen_field,regen_torque,motor_load_field,app_signed_load,app_regen,acceleration\n')
             handle.write(f"{now:.2f},{state['speed_m_s'] * 3.6:.2f},{value('throttle')},{value('brake')},{value('motor_torque')},"
                          f"{value('regen')},{value('regen_torque')},{value('motor_load')},"
                          f"{'' if self.beamng_signed_load is None else f'{self.beamng_signed_load:.4f}'},{self._regen_level():.4f},"
-                         f"{self.beamng_torque.peaks[0]:.1f},{self.beamng_torque.peaks[1]:.1f}\n")
+                         f"{self.beamng_acceleration:.3f}\n")
 
     def _telemetry_load(self, fallback):
         """Signed motor load -1..+1: scaled real torque if the car reports it, else BeamNG's load field."""
@@ -143,6 +152,8 @@ class SimulatorController(QObject):
         # The packet's "regen" is the regen-mode setting (stays at 100% while coasting), not actual braking torque.
         if self.source_mode == 'BeamNG' and self.beamng_signed_load is not None:
             return max(0.0, -self.beamng_signed_load)
+        if self.source_mode == 'Simulator':
+            return max(0.0, -self._signed_motor_load())
         return self._telemetry_value('regen', self.car.regen)
 
     def _beamng_fresh(self):
@@ -162,7 +173,8 @@ class SimulatorController(QObject):
         self.beamng_previous_sample = (speed, now)
         torque = state.get('motor_torque')
         self.beamng_signed_load = (None if torque is None else
-                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0, speed))
+                                   self.beamng_torque.update(torque, now - self.beamng_received_at if self.beamng_state is not None else 0.0, speed,
+                                                             state.get('regen_power'), self.car.max_torque_nm, regen_full_w(self.car)))
         self.beamng_state = state
         self.beamng_received_at = now
         self._record_beamng(now, state)
@@ -289,15 +301,13 @@ class SimulatorController(QObject):
 
     @Slot()
     def toggle(self):
-        if self._experiment.state in ('edit', 'rendering', 'compare', 'saved'):
-            return
         if self.soundSweepActive:
             return
         if self.running:
             self.shutdown()
             if self.source_mode == 'Simulator':
                 self.car = VehicleModel.from_name(self.car.name)
-            self.display_power = self.display_charge = 0.0
+            self.display_power = self.display_charge = self.sim_regen = 0.0
         else:
             try:
                 self.audio.start()
@@ -354,8 +364,8 @@ class SimulatorController(QObject):
         if self.source_mode == 'BeamNG':
             return max(-1.0, min(1.0, self._telemetry_load(0.0)))
         torque = self.car.motor_torque_nm
-        limit = self.car.max_torque_nm if torque >= 0 else self.car.max_regen_torque_nm
-        return max(-1.0, min(1.0, torque / max(limit, 1e-9)))
+        # Same scales as BeamNG: drive by peak torque, regen by how hard the car slows (smoothed in _tick).
+        return min(1.0, torque / self.car.max_torque_nm) if torque >= 0 else -self.sim_regen
 
     def _update_audio(self):
         if self.soundSweepActive:
@@ -456,6 +466,8 @@ class SimulatorController(QObject):
         self._last_tick = now
         if self.source_mode == 'Simulator':
             self.car.update(self.throttle, self.brake, dt)
+            c = self.car;target = regen_level(c.motor_torque_nm * c.rpm * 2 * math.pi / 60, regen_full_w(c)) if c.motor_torque_nm < 0 else 0.0
+            self.sim_regen += (target - self.sim_regen) * (1 - math.exp(-dt / 0.15))  # instant jumps heard as too aggressive (2026-11-19)
         elif self._beamng_fresh():
             load = self._signed_motor_load()
             self.display_power, self.display_charge = max(0.0, load), max(0.0, -load)
@@ -463,7 +475,7 @@ class SimulatorController(QObject):
         if self.source_mode == 'BeamNG':
             self.changed.emit()
             return
-        charge = min(1.0, self.car.regen / max(self.car.max_regen_fraction, 1e-9))
+        charge = self.sim_regen if self.car.motor_torque_nm < 0 else 0.0
         power_target = min(1.0, max(0.0, self.throttle)) if self.car.motor_torque_nm > 0 else 0.0
         current = self.display_power - self.display_charge
         # Both directions pass through zero without lighting both sections.

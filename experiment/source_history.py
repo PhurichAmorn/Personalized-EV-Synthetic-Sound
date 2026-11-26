@@ -10,7 +10,8 @@ ID=re.compile(r'[0-9a-f]{32}')
 class SourceHistory:
     def __init__(self,discovery,root=ROOT):
         self.discovery=discovery;self.root=root;self.session=None;self.created=None
-        self.preview={};self.keys=set();self.token=0;self.lock=threading.Lock()
+        self.picked=None;self.preview={};self.keys=set();self.token=0;self.lock=threading.Lock()
+        self._refresh()
     def begin(self):
         self.session=uuid.uuid4().hex;self.created=datetime.now().astimezone().isoformat(timespec='seconds')  # computer's own clock and zone
     def save(self):
@@ -19,14 +20,34 @@ class SourceHistory:
         self.root.mkdir(parents=True,exist_ok=True)
         data={**self.discovery.export(),'id':self.session,'created':self.created}
         for candidate in data['candidates'].values():candidate.pop('urls',None);candidate.pop('traces',None)  # cache paths; previews are regenerated
-        temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data));temp.replace(self.root/f'{self.session}.json')
+        temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{self.session}.json')
+        if data.get('final'):self.picked=self.session  # a final pick made in this run becomes the driver's sound
+        self._refresh()
+    def _refresh(self):
+        """Final picks of all sessions (newest first) and the driver's sound GS plays. The app starts on the standard sound (my_sound None):
+        a saved winner plays only after it is picked in the list or a session finishes in this run; a restart goes back to the standard sound."""
+        finals=[]
+        for path in sorted(self.root.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True):
+            try:d=json.loads(path.read_text(encoding='utf8'));c=d['candidates'][d['final']] if d.get('final') else None
+            except (OSError,ValueError,KeyError):continue
+            if c:finals.append({'session':path.stem,'created':d.get('created',''),'id':d['final'],'label':c.get('label',''),'recipe':c['recipe']})
+        self.my_sounds=[{k:f[k] for k in ('session','created','label','recipe','id')} for f in finals]
+        self.my_sound=next((f for f in finals if f['session']==self.picked),None)
+    def choose(self,ident):
+        """GS plays this session's final sound from now on in this run; an empty id goes back to the standard sound."""
+        if ident:
+            if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
+            self.picked=ident
+        else:self.picked=None
+        self._refresh()
+        return True
     def _read(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
-        return json.loads((self.root/f'{ident}.json').read_text())
+        return json.loads((self.root/f'{ident}.json').read_text(encoding='utf8'))
     def listing(self):
         rows=[]
         for path in self.root.glob('*.json'):
-            try:d=json.loads(path.read_text());rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists'])})
+            try:d=json.loads(path.read_text(encoding='utf8'));rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists']),'rating':d.get('final_rating')})
             except (OSError,ValueError,KeyError):continue
         starred=self.starred()
         for row in rows:row['starred']=row['id'] in starred
@@ -46,7 +67,7 @@ class SourceHistory:
     def get(self,ident):return self._read(ident)
     def delete(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
-        (self.root/f'{ident}.json').unlink(missing_ok=True)
+        (self.root/f'{ident}.json').unlink(missing_ok=True);self._refresh()
         if ident in self.starred():self.star(ident,False)
         return True
     def render(self,ident,candidate):

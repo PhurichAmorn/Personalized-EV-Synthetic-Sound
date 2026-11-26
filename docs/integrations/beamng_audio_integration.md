@@ -10,7 +10,7 @@ The app does **not** mute BeamNG's stock drivetrain audio. The mod also tries to
 
 1. Install `beamng/evsound_telemetry` in BeamNG's `mods/unpacked/` folder and enable **EV Sound Lab telemetry** under **Options → Other → Protocols**.
 2. Start EV Sound Lab and pick **BeamNG** in the startup chooser. The overlay opens and switches the app to BeamNG telemetry; the app listens on `127.0.0.1:4445`.
-3. Start sound in the overlay. Use **Personalize sound** to enter the existing session setup and comparison flow; **Back to driving** returns to telemetry.
+3. Start sound in the overlay. Use **Personalize sound** to enter the existing session setup and comparison flow; the **X** closes it (during a session it asks: Pause, which Resume session continues, or End).
 4. BeamNG sends at most 30 packets per second. Display/audio timing also includes app, operating-system, and output-device buffering; no zero-latency guarantee.
 5. Stop or pause the game to confirm the overlay reports disconnect and the app sound fades. Restart the app and pick **Simulator** to use local simulation.
 
@@ -121,7 +121,7 @@ If the study later needs a custom EV motor model to change vehicle acceleration,
 | Accelerator | Pedal intent | BeamNG electrics commonly expose normalized throttle input. |
 | Motor RPM | Not accepted by the current sound API | The engine derives virtual order RPM from speed. Adding measured motor RPM would be a separate sound-interface change. |
 | Motor torque/load or power | Sound intensity/body | Use signed direction if available so drive and regen can be distinguished. |
-| Brake/regen | Regenerative sound blend | Brake input is not necessarily equal to regenerative torque; inspect actual powertrain signals. |
+| Brake/regen | Regenerative sound blend | Regen level = the mod's regen power (motor torque x motor speed) over the motor's regen torque cap at 140 km/h (eSBR300: 92 kW); the Simulator uses the same rule. Brake input is not regen: past the motor cap it only adds friction brakes. |
 | Acceleration | Transient emphasis | Derive from speed if direct acceleration is unavailable; smooth and validate. |
 
 ## First proof-of-concept acceptance criteria

@@ -3,85 +3,56 @@ import math
 
 
 VEHICLE_CONFIGS = {
-    "Honda e": {
-        "max_power_kw": 100.0, "max_torque_nm": 315.0, "mass_kg": 1513.0,
-        # 10,000 RPM is the published peak-power range endpoint, not a rev limit.
-        "max_speed": 145.0, "max_rpm": 12000.0,  # estimated simulation ceiling
-        "battery_kwh": 35.5, "battery_type": "Lithium-ion",
-        "range_km": 222, "range_standard": "WLTP",
-        # Honda Japan specifies 9.545:1; loaded radius estimated from rear 205/55R16.
-        "gear_ratio": 9.545, "wheel_radius_m": 0.310,
-        "wheelbase_m": 2.530, "cg_height_m": 0.500,
-        # ADAC Advance/17-inch 32.9 m at 100 km/h: proxy for this base trim.
-        "max_brake_deceleration_g": 1.27609388, "brake_tire_grip": 1.40,
-        "brake_calibration": "32.9 m from 100 km/h (ADAC Advance/17-inch proxy)",
+    "Hirochi SBR4 eSBR300 (BeamNG)": {
+        # The BeamNG car used in the study (fictional vehicle). Values from the game files (sbr.zip, config
+        # electric_300, read 2026-11-19): one rear motor, open diff, final drive 7.6, 0.32 m rear tyre, 40 kWh.
+        # Torque 500 Nm flat, then the game curve (taper = curve torque x speed / peak power). ponytail: the taper
+        # cannot rise, so 4000-6000 rpm uses constant power (462 Nm at 5000 rpm vs game 450).
+        "max_power_kw": 241.9, "max_torque_nm": 500.0, "mass_kg": 1571.0, "drive_layout": "RWD",
+        "power_taper": ((0.0, 1.0), (7000.0, 1.0),
+                        (8000.0, 0.987), (9000.0, 0.974), (10000.0, 0.974), (11000.0, 0.952), (12000.0, 0.831),
+                        (13000.0, 0.76), (14000.0, 0.667), (15000.0, 0.584), (16000.0, 0.554)),
+        "battery_kwh": 40.0, "battery_type": "Lithium-ion (BeamNG)", "range_km": 0, "range_standard": "not published",
+        "max_speed": 247.0, "max_rpm": 16000.0, "gear_ratio": 7.6, "wheel_radius_m": 0.320,  # game-measured top speed
+        # ponytail: wheelbase and cg height not in the game files read; estimates. Grip, drag and battery limits
+        # tuned so the sim matches game-measured 0-100 4.6 s, 0-200 16.2 s, top 247 km/h (sim 4.7 / 16.2 / 247).
+        "wheelbase_m": 2.60, "cg_height_m": 0.46, "tire_grip": 1.10, "drag_area_m2": 0.60,
+        "max_discharge_power_kw": 270.0, "max_charge_power_kw": 150.0,
+        "max_regen_torque_nm": 100.0, "max_regen_power_kw": 150.0,  # game motor values (torque at the motor)
+        "max_brake_deceleration_g": 0.994, "brake_tire_grip": 1.20,
+        # One-pedal Full (the game default): lift-off asks for the whole 100 Nm regen; recorded coast 87->20 km/h in ~10 s.
+        "lift_off_deceleration_g": 0.17,
+        "brake_calibration": "Game-measured 0.994 g (100-0 km/h in 39.6 m)",
+        "motor_map_description": "BeamNG eSBR300 electric_300 motor torque curve (game files)",
     },
-    "Mazda EZ-6 600 (China)": {
-        "max_power_kw": 190.0, "max_torque_nm": 320.0, "mass_kg": 1962.0,
-        "max_speed": 170.0, "max_rpm": 18000.0,  # estimated simulation ceiling
-        "battery_kwh": 68.8, "battery_type": "LFP",
-        "range_km": 600, "range_standard": "CLTC",
-        # Estimated reduction, not a verified EZ-6 ratio. Radius from rear 245/45R19.
-        "gear_ratio": 13.561, "wheel_radius_m": 0.345,
-        "wheelbase_m": 2.895, "cg_height_m": 0.520,
-        # Provisional dry-road 38 m target; no verified 600 BEV stopping test.
-        "max_brake_deceleration_g": 1.09517433, "brake_tire_grip": 1.30,
-        "brake_calibration": "38 m from 100 km/h (provisional estimate, unverified)",
-        "drag_area_m2": 0.62, "rolling_resistance": 0.010,
-        "usable_battery_kwh": 64.0,
-        "max_regen_torque_nm": 180.0, "max_regen_power_kw": 100.0,
-        "max_charge_power_kw": 80.0, "max_discharge_power_kw": 225.0,
-    },
-    "Tesla Model 3 Performance (2024 US)": {
-        "max_power_kw": 380.3, "max_torque_nm": 741.0, "mass_kg": 1851.0,
-        # ponytail: exploratory taper, not digitized MPP/OEM measurements.
-        # Replace these assumed knots when trim-specific numeric data is available.
-        "power_taper": ((0.0, 1.0), (9000.0, 1.0), (12000.0, 0.95),
-                        (16000.0, 0.82), (20000.0, 0.65)),
-        "motor_map_description": "Estimated high-RPM taper; numerical points unverified",
-        "drive_layout": "AWD", "max_speed": 262.0, "max_rpm": 20000.0,
-        "battery_kwh": 82.0, "battery_type": "Lithium-ion (estimated capacity)",
-        "range_km": 488, "range_standard": "EPA, 2024",
-        "gear_ratio": 9.03, "wheel_radius_m": 0.330,
-        "wheelbase_m": 2.875, "cg_height_m": 0.480,
-        # ponytail: aggregate dual-motor envelope and ideal AWD torque allocation;
-        # replace with separate axle motor maps when measured data is available.
-        "tire_grip": 1.05, "drag_area_m2": 0.50, "rolling_resistance": 0.010,
-        "usable_battery_kwh": 75.0,
-        "max_regen_torque_nm": 250.0, "max_regen_power_kw": 90.0,
-        "max_charge_power_kw": 75.0, "max_discharge_power_kw": 430.0,
-        "lift_off_deceleration_g": 0.18,
-        # Edmunds 2024 US Performance: 109 ft from 60 mph, not 100 km/h.
-        "max_brake_deceleration_g": 1.17509739, "brake_tire_grip": 1.35,
-        "brake_calibration": "109 ft from 60 mph (Edmunds 2024 Performance)",
-    },
-    "Porsche Taycan RWD (2023)": {
-        # MY23 US standard battery, normal output; Launch Control is not simulated.
-        "max_power_kw": 240.0, "max_torque_nm": 338.95, "mass_kg": 2071.13,
-        "max_speed": 230.13, "max_rpm": 16000.0,
-        "battery_kwh": 79.2, "usable_battery_kwh": 71.0,
-        "battery_type": "Lithium-ion", "range_km": 335, "range_standard": "EPA, MY23",
-        "gear_ratio": 15.0, "gear_ratios": (15.0, 8.0), "wheel_radius_m": .355,
-        "wheelbase_m": 2.9007, "rear_weight_fraction": .51, "cg_height_m": .48,
-        # ponytail: Sport-like shift strategy and timing are estimates, not OEM maps.
-        "upshift_speed_kmh": 85.0, "downshift_speed_kmh": 55.0, "shift_duration_s": .20,
-        "tire_grip": 1.0, "brake_tire_grip": 1.20,
-        "max_brake_deceleration_g": 1.0,
-        "brake_calibration": "Estimated 1.0 g dry braking; unverified",
-        "drag_area_m2": .55, "rolling_resistance": .010,
-        "max_regen_torque_nm": 200.0, "max_regen_power_kw": 140.0,
-        "max_charge_power_kw": 120.0, "max_discharge_power_kw": 285.0,
-        # Porsche defaults to coasting on lift-off; service brake blends regeneration.
-        "lift_off_deceleration_g": 0.0,
-        "motor_map_description": "Estimated motor envelope; real 2-speed layout, estimated shifting",
+    "Cherrier Vivace E (BeamNG)": {
+        # Second BeamNG car (fictional vehicle, shown in game as the Cherrier FCV Vivace E). Values from the game
+        # files (vivace.zip, config vivace_E, read 2026-11-20): one FRONT motor, final drive 9, 215/45R17 tyre
+        # (0.3127 m), 50 kWh, 1866 kg. Torque 291 Nm flat to 4500 rpm, then the game curve (taper = curve torque x
+        # speed / peak power). Regen has no jbeam limits, so the game uses the motor's own: 291 Nm and peak power.
+        # ponytail: the model has no FWD layout, so RWD with the front weight share as the driven-axle share.
+        "max_power_kw": 144.5, "max_torque_nm": 291.0, "mass_kg": 1866.0, "drive_layout": "RWD",
+        "rear_weight_fraction": 0.58,
+        "power_taper": ((0.0, 1.0), (6000.0, 1.0), (7000.0, 0.994), (8000.0, 0.985), (9000.0, 0.979),
+                        (10000.0, 0.955), (11000.0, 0.877), (12000.0, 0.739), (13000.0, 0.565), (14000.0, 0.355)),
+        "battery_kwh": 50.0, "battery_type": "Lithium-ion (BeamNG)", "range_km": 0, "range_standard": "not published",
+        "max_speed": 159.0, "max_rpm": 14000.0, "gear_ratio": 9.0, "wheel_radius_m": 0.3127,  # game-reported top speed
+        # ponytail: wheelbase, cg height, grip and drag are estimates (not read from the game files); the sim gives 0-100 8.2 s, 100-0 38.8 m, top 159 km/h against the game 8.1 s, 37.1 m, 159 km/h.
+        "wheelbase_m": 2.60, "cg_height_m": 0.50, "tire_grip": 1.0, "drag_area_m2": 0.70,
+        "max_discharge_power_kw": 160.0, "max_charge_power_kw": 150.0,
+        "max_regen_torque_nm": 291.0, "max_regen_power_kw": 144.5,  # game defaults: the motor's own torque and power
+        "max_brake_deceleration_g": 1.06, "brake_tire_grip": 1.20,
+        "lift_off_deceleration_g": 0.06,
+        "brake_calibration": "Game-reported 1.06 g (100-0 km/h in 37.1 m)",
+        "motor_map_description": "BeamNG Vivace E front motor torque curve (game files)",
     },
 }
 
 
-# Public simulator presets; the manufacturer configurations remain internal references.
+# Public simulator presets: the two calibrated BeamNG cars.
 SIMULATOR_PRESETS = {
-    "Compact EV": "Honda e",
-    "Performance EV": "Tesla Model 3 Performance (2024 US)",
+    "BeamNG Vivace E": "Cherrier Vivace E (BeamNG)",
+    "BeamNG eSBR300": "Hirochi SBR4 eSBR300 (BeamNG)",
 }
 
 
@@ -92,26 +63,26 @@ class VehicleModel:
     Published peak specs do not supply an OEM torque/BMS map. Unverified road
     load, tire, response, and battery limits below are calibration estimates.
     """
-    name: str = "Honda e"
+    name: str = "Cherrier Vivace E (BeamNG)"
     drive_layout: str = "RWD"
     brake_calibration: str = "Generic brake calibration, unverified"
-    max_power_kw: float = 100.0
-    max_torque_nm: float = 315.0
+    max_power_kw: float = 144.5
+    max_torque_nm: float = 291.0
     power_taper: tuple[tuple[float, float], ...] = ()
-    motor_map_description: str = "Estimated constant-torque / constant-power envelope"
-    mass_kg: float = 1513.0
-    max_speed: float = 145.0  # km/h; electronic speed limit, independent of gearing
-    max_rpm: float = 12000.0  # simulation ceiling; mechanical maximum unverified
-    battery_kwh: float = 35.5
-    battery_type: str = "Lithium-ion"
-    range_km: int = 222
-    range_standard: str = "WLTP"
+    motor_map_description: str = "BeamNG Vivace E front motor torque curve (game files)"
+    mass_kg: float = 1866.0
+    max_speed: float = 159.0  # km/h; electronic speed limit, independent of gearing
+    max_rpm: float = 14000.0  # simulation ceiling; mechanical maximum unverified
+    battery_kwh: float = 50.0
+    battery_type: str = "Lithium-ion (BeamNG)"
+    range_km: int = 0
+    range_standard: str = "not published"
     speed: float = 0.0
     rpm: float = 0.0
     regen: float = 0.0  # recovered battery power / peak propulsion shaft power
     drive_power: float = 0.0  # positive motor shaft power / peak shaft power
 
-    gear_ratio: float = 9.545
+    gear_ratio: float = 9.0
     gear_ratios: tuple[float, ...] = ()
     current_gear: int = 1
     upshift_speed_kmh: float = 85.0
@@ -143,11 +114,10 @@ class VehicleModel:
     brake_response_s: float = 0.08
     speed_limit_response_s: float = 0.40
 
-    # ponytail: fixed battery temperature and estimated BMS maps; replace with
-    # measured maps/thermal dynamics when vehicle calibration data is available.
+    # Driving only: SOC is energy bookkeeping; it never limits driving or regen (a drained pack capped
+    # full throttle near 50 km/h, 2026-11-19). Only the fixed power caps below limit the motor.
     usable_battery_kwh: float = 28.5
     soc: float = 0.80
-    battery_temperature_c: float = 25.0
     max_regen_torque_nm: float = 160.0
     max_regen_power_kw: float = 50.0  # generator shaft limit
     max_charge_power_kw: float = 40.0  # battery acceptance, independent of DC charger
@@ -219,8 +189,6 @@ class VehicleModel:
             raise ValueError("Braking tire grip must be finite and nonnegative.")
         if not math.isfinite(self.speed) or self.speed < 0:
             raise ValueError("Initial speed must be finite and nonnegative.")
-        if not math.isfinite(self.battery_temperature_c):
-            raise ValueError("Battery temperature must be finite.")
         self.rpm = self.speed / 3.6 * self.motor_rad_s_per_m_s * 60 / (2 * math.pi)
 
     @classmethod
@@ -279,16 +247,11 @@ class VehicleModel:
 
     @property
     def charge_power_limit_w(self) -> float:
-        # Estimated taper over the last 10% SOC and at cold/hot pack temperatures.
-        temperature = max(0.0, min(1.0, (self.battery_temperature_c + 10) / 25,
-                                   (55 - self.battery_temperature_c) / 15))
-        return self.max_charge_power_kw * 1000 * temperature * min(1.0, (1 - self.soc) / 0.10)
+        return self.max_charge_power_kw * 1000
 
     @property
     def discharge_power_limit_w(self) -> float:
-        temperature = max(0.0, min(1.0, (self.battery_temperature_c + 20) / 25,
-                                   (60 - self.battery_temperature_c) / 15))
-        return self.max_discharge_power_kw * 1000 * temperature * min(1.0, self.soc / 0.05)
+        return self.max_discharge_power_kw * 1000
 
     def update(self, throttle: float, brake: float, dt: float) -> None:
         if not all(math.isfinite(x) for x in (throttle, brake, dt)):
@@ -334,7 +297,7 @@ class VehicleModel:
         # Upper speed bound makes torque/power limits valid across the whole step.
         omega_bound = (v + self.tire_grip * 9.81 * dt) * k
         available = self.propulsion_torque_limit(omega_bound * 60 / (2 * math.pi))
-        battery_available = min(self.discharge_power_limit_w, self.battery_energy_j / dt)
+        battery_available = self.discharge_power_limit_w
         auxiliaries = min(self.auxiliary_power_w, battery_available)
         propulsion_budget = max(0.0, battery_available - auxiliaries)
         copper_k = self.copper_loss_at_peak_w / self.max_torque_nm**2
@@ -360,9 +323,7 @@ class VehicleModel:
         requested_brake = regen_request if brake else 0.0
         fade = min(1.0, v / self.regen_fade_speed_m_s)
         fade = fade * fade * (3 - 2 * fade)
-        charge_budget = min(self.charge_power_limit_w,
-                            (self.usable_battery_kwh * 3_600_000 - self.battery_energy_j)
-                            / dt + auxiliaries)
+        charge_budget = self.charge_power_limit_w + auxiliaries
         regen_cap = min(self.max_regen_torque_nm,
                         self.max_regen_power_kw * 1000 / max(v * k, 1e-9),
                         charge_budget / max(v * k * self.regen_efficiency, 1e-9))

@@ -1,4 +1,4 @@
-import hashlib, json, pathlib, tempfile, time, unittest
+import hashlib, json, os, pathlib, tempfile, time, unittest
 from experiment.source_history import SourceHistory
 from experiment.source_search import OpenDiscovery
 
@@ -26,6 +26,7 @@ class SourceHistoryTest(unittest.TestCase):
         self.history.save()
         (row,) = self.history.listing()
         self.assertEqual(row['completed'], 1)
+        self.assertIsNone(row['rating'])  # not rated yet
         self.assertTrue(row['created'].count(':') >= 2)
         saved = self.history.get(row['id'])
         ident = saved['history'][0]['pair'][0]
@@ -52,6 +53,34 @@ class SourceHistoryTest(unittest.TestCase):
             self.history.get('../etc/passwd')
         with self.assertRaises(ValueError):
             self.history.star('../etc/passwd', True)
+
+
+    def test_my_sound_starts_standard_then_chosen_final(self):
+        root = self.history.root
+        def session(ident, final, at):
+            (root / f'{ident}.json').write_text(json.dumps({'final': final, 'candidates': {'f': {'label': 'L', 'recipe': {'kind': 'map'}}}}))
+            os.utime(root / f'{ident}.json', (at, at))
+        session('a' * 32, 'f', 1)
+        session('b' * 32, None, 2)  # newer, but no final pick
+        self.assertIsNone(SourceHistory(self.discovery, root).my_sound)  # the app starts on the standard sound
+        self.history.choose('a' * 32)
+        self.assertEqual(self.history.my_sound['session'], 'a' * 32)
+        self.history.delete('a' * 32)
+        self.assertIsNone(self.history.my_sound)  # deleting the session forgets its sound
+
+    def test_choose_an_older_final(self):
+        root = self.history.root
+        for ident, at in (('a' * 32, 1), ('b' * 32, 2)):
+            (root / f'{ident}.json').write_text(json.dumps({'final': 'f', 'created': '2026-11-17T10:00', 'candidates': {'f': {'label': ident[0], 'recipe': {}}}}))
+            os.utime(root / f'{ident}.json', (at, at))
+        history = SourceHistory(self.discovery, root)
+        self.assertEqual([s['session'] for s in history.my_sounds], ['b' * 32, 'a' * 32])
+        self.assertIsNone(history.my_sound)  # standard sound until one is picked
+        history.choose('a' * 32)
+        self.assertEqual(history.my_sound['label'], 'a')
+        history.choose('')
+        self.assertIsNone(history.my_sound)  # back to the standard sound
+        self.assertIsNone(SourceHistory(self.discovery, root).my_sound)  # a restart starts standard again
 
 
 if __name__ == '__main__':

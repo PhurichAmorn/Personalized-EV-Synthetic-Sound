@@ -2,14 +2,21 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.source_search import TuningDiscovery
+from experiment.block_arms import DuelBlocks, InfoGainBlocks, PBOBlocks, RandomBlocks, RobustBlocks
+from experiment.source_search import BlockDiscovery, HeardMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
 
 
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
-        self.source_discovery = TuningDiscovery()  # seven starting sounds + tuning moves; LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery kept as baselines
+        # Per session: 'blocks' = building-block sounds built on the spot (experiment/sound_blocks.py, 2026-11-21), the standard session;
+        # 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map).
+        # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
+        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery(),
+                         # experimental pair-selection variants of 'blocks' (experiment/block_arms.py, 2026-11-23): not benchmarked yet
+                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks(), 'blocks-infogain': InfoGainBlocks()}
+        self.source_discovery = self.searches['blocks']
         self.history = SourceHistory(self.source_discovery)
 
     def snapshot(self):
@@ -18,12 +25,13 @@ class DesktopBridge:
         return {
             'sourceDiscovery': self.source_discovery.snapshot(),
             'historyPreview': self.history.preview,
+            'mySound': self.history.my_sound, 'mySounds': self.history.my_sounds,
             'sourceMode': c.sourceMode, 'beamngConnected': c.beamngConnected,
             'beamngError': c.beamngError, 'beamngThrottle': c.telemetryThrottle,
             'beamngBrake': c.telemetryBrake, 'beamngRegen': c.telemetryRegen,
             'running': c.running, 'starting': c.sound_starting,
             'speed': c.speed, 'rpm': c.rpm, 'gear': c.gear, 'hasGears': c.hasGears,
-            'maxRpm': c.maxRpm, 'speedGaugeMaximum': c.speedGaugeMaximum,
+            'maxRpm': c.maxRpm, 'speedGaugeMaximum': c.speedGaugeMaximum, 'kmhPerOctave': c.kmhPerOctave,
             'power': c.power, 'charge': c.charge, 'regenActive': c.regenActive,
             'acceleration': c.beamng_acceleration if c.sourceMode == 'BeamNG' else c.car.acceleration_m_s2,
             'motorLoad': c._signed_motor_load(), 'sourceAudition': c.source_audition,
@@ -58,7 +66,6 @@ class DesktopBridge:
                 'pairRecipes': {slot: s.data['candidates'][ident].get('recipe_name', '')
                                 for slot, ident in s.data.get('pair', {}).items()} if s.data else {},
             },
-            'experiment': {'state': c.experiment.state, 'error': c.experiment.error},
         }
 
     @staticmethod
@@ -67,6 +74,31 @@ class DesktopBridge:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
             raise ValueError(f'Invalid {key} pedal value')
         return float(value)
+
+    def _block_options(self):
+        """Choices of the Sound Lab block builder: the session's own block vocabulary (experiment/sound_blocks.py)."""
+        from experiment import sound_blocks as sb
+        return {'bodies': list(sb.BODIES), 'tops': list(sb.TOPS), 'partners': {k: list(v) for k, v in sb.PARTNERS.items()}, 'levels': list(sb.TOP_LEVELS),
+                'pitches': sb.PITCHES, 'buzz': list(sb.BUZZ_STEPS), 'brightness': list(sb.BRIGHT_GRID), 'names': sb.NAMES,
+                'default': {**sb.DEFAULT, 'brightness': sb.BRIGHT_GRID[2]}, 'synthTops': ['synth', 'bell']}  # only what a session can reach: buzz off/strong, 5 brightness steps
+
+    def _block_summary(self):
+        """How many sounds the Sound Lab can build and the session can reach (experiment/sound_blocks.py summary); counted once, about a second."""
+        from experiment import sound_blocks as sb
+        if not hasattr(self, '_block_summary_cache'):
+            table = sb.load_table()
+            self._block_summary_cache = sb.summary(table) if table else {'error': 'No safe-area table yet (tools/sound_map/block_sweep.py), so the count is not available.'}
+        return self._block_summary_cache
+
+    def _block_build(self, payload):
+        """One block sound -> the live recipe the session would play (same _recipe: safe-area table, brightness to low-pass, loudness gain), or an error."""
+        from experiment import sound_blocks as sb
+        sound = sb.full({k: v for k, v in (payload.get('blocks') or {}).items() if k in sb.DEFAULT})
+        motion = payload.get('motion') if payload.get('motion') in ('rise', 'evolving') else 'rise'
+        if sound['body'] not in sb.BODIES or sound['top'] not in sb.TOPS or sound['level'] not in sb.TOP_LEVELS or not 0 <= int(sound['pitch']) < len(sb.PITCHES):raise ValueError('Unknown block')
+        if sound['partner'] and sound['partner'] not in sb.PARTNERS.get(sound['top'], ()):sound['partner'] = None
+        recipe = self.searches['blocks']._recipe(sound, motion)
+        return {'recipe': recipe} if recipe else {'error': 'This combination fails the safe-area drive check at this brightness, so a session would never play it. Lower the brightness or change a block.'}
 
     @staticmethod
     def _text(payload, key):
@@ -91,23 +123,32 @@ class DesktopBridge:
             if name == 'sourceDiscoveryStart':
                 if s.active or c.soundSweepActive:raise ValueError('Stop the native experiment or debug sweep first')
                 if discovery.active:raise ValueError('Finish the current source trial before starting another')
+                search = payload.get('search', 'blocks')
+                if search not in self.searches:raise ValueError('Unknown search')
+                discovery = self.source_discovery = self.history.discovery = self.searches[search]
                 discovery.start(payload.get('motion'));self.history.begin()
+            elif name == 'sourceDiscoveryPlayed':discovery.played(self._text(payload,'id'))
             elif name == 'sourceDiscoveryHeard':discovery.heard(self._text(payload,'id'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFeedback':discovery.feedback(payload.get('ratings'),payload.get('context',{}),payload.get('choice'))
             elif name == 'sourceDiscoveryPlayoff':discovery.playoff_feedback(payload.get('choice'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFinish':discovery.finish(payload.get('id'))
-            elif name == 'sourceDiscoveryAccept':discovery.accept(payload.get('answer'))
+            elif name == 'sourceDiscoveryEnd':discovery.end()
+            elif name == 'sourceDiscoveryRate':discovery.rate(payload.get('rating'),payload.get('comment',''))
             elif name == 'sourceDiscoverySkip':discovery.skip_similar(payload.get('ids'))
             elif name == 'sourceDiscoveryExport':return discovery.export()
             elif name == 'sourceDiscoveryRetry':
                 if discovery.busy or not discovery.active:raise ValueError('No failed active trial to retry')
                 with discovery.lock:discovery._prepare()
             else:raise ValueError('Unknown source discovery command')
-            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryAccept'):self.history.save()  # autosave to local history
+            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryEnd','sourceDiscoveryRate'):self.history.save()  # autosave to local history
             return self.snapshot()
+        if name == 'blockOptions':return self._block_options()
+        if name == 'blockBuild':return self._block_build(payload)
+        if name == 'blockSummary':return self._block_summary()
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
         if name == 'historyStar':return self.history.star(self._text(payload,'id'),self._bool(payload,'value'))
+        if name == 'mySound':self.history.choose(self._text(payload,'id'));return self.snapshot()
         if name == 'historyDelete':return self.history.delete(self._text(payload,'id'))
         if name == 'historyPreview':self.history.render(self._text(payload,'id'),self._text(payload,'candidate'));return self.snapshot()
         if name == 'historyPreviewClear':self.history.clear();return self.snapshot()
@@ -115,6 +156,7 @@ class DesktopBridge:
             raise ValueError('Finish the source-discovery trial before native search or audio debugging')
         if name == 'vehicleStart':
             if not c.running:c.toggle()
+            return {'running': c.running, 'starting': c.sound_starting}
         elif name == 'sourceMode':
             c.selectSource(self._text(payload, 'value'))
         elif name == 'toggle':

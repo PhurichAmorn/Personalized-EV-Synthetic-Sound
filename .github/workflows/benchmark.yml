@@ -32,6 +32,16 @@ on:
       noise:
         description: logistic:0.5, logistic:0.25, logistic:1.0, flip:0.1, flip:0.25 or none
         default: logistic:0.5
+      good_z:
+        description: Both good threshold in SD (1e9 removes Both good)
+        default: '3'
+      neither_z:
+        description: Neither threshold in SD (-1e9 removes Neither)
+        default: '0'
+      replay:
+        description: Old session (pair 14 replays pair 4, 9 challenger pairs); off = the app now (no replay, 10 challenger pairs)
+        type: boolean
+        default: false
 
 jobs:
   plan:
@@ -80,13 +90,16 @@ jobs:
           ARMS: ${{ inputs.arms }}
           BUDGETS: ${{ inputs.budgets }}
           NOISE: ${{ inputs.noise }}
+          GOOD_Z: ${{ inputs.good_z }}
+          NEITHER_Z: ${{ inputs.neither_z }}
+          REPLAY: ${{ inputs.replay && '1' || '0' }}
           OUT: chunk.csv
         run: |
           echo "cores: $(nproc)"
           start=$(date +%s)
           python -m tools.benchmark_blocks
           echo "### ${{ matrix.chunk.oracle }} seeds ${{ matrix.chunk.start }}+${{ matrix.chunk.seeds }}: $(( ($(date +%s) - start) / 60 )) min on $(nproc) cores" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: chunk-${{ matrix.chunk.oracle }}-${{ matrix.chunk.start }}
           path: chunk.csv
@@ -101,7 +114,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install numpy scipy
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: chunk-*
           path: chunks
@@ -122,7 +135,7 @@ jobs:
           with open('all_sessions.csv', 'w', newline='') as out:
               w = csv.DictWriter(out, rows[0].keys()); w.writeheader(); w.writerows(rows)
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: benchmark-report
           path: |

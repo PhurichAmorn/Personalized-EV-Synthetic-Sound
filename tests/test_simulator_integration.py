@@ -52,7 +52,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
     def test_real_elapsed_time_drives_model_and_smoothing(self):
         self.controller.toggle()
         self.controller.throttle = 1
-        expected = VehicleModel.from_name('Compact EV')
+        expected = VehicleModel.from_name('BeamNG Vivace E')
         expected.update(1, 0, 0.07)
         self.tick(0.07)
         self.assertAlmostEqual(self.controller.speed, expected.speed, places=7)
@@ -60,7 +60,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
         before = self.controller.speed
         # Laptop sleep/long stalls advance at most 250 ms, not minutes of driving.
         self.tick(60)
-        self.assertLess(self.controller.speed - before, 5)
+        self.assertLess(self.controller.speed - before, 7)  # 250 ms at ~1.1 g
 
     def test_light_pedal_during_regen_never_lights_power(self):
         for name in self.controller.vehicleNames:
@@ -101,6 +101,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
             self.assertGreater(self.controller.power, .8)
             self.controller.car.motor_torque_nm = -10
             self.controller.car.regen = .1
+            self.controller.car.rpm = 3000.0  # regen reads regen power (torque x motor speed)
             previous = self.controller.power
             self.tick()
             self.assertGreater(self.controller.power, 0)
@@ -113,6 +114,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
             self.assertGreater(self.controller.charge, 0)
             self.controller.car.motor_torque_nm = 0
             self.controller.car.regen = 0
+            self.controller.car.acceleration_m_s2 = 0.0
             for _ in range(60):
                 self.tick()
             self.assertEqual(self.controller.power, 0)
@@ -122,13 +124,13 @@ class SimulatorIntegrationTests(unittest.TestCase):
     def test_start_stop_selection_and_keyboard_priority(self):
         self.key(QEvent.Type.KeyPress, Qt.Key.Key_W)
         self.assertEqual(self.controller.throttle, 0)
-        self.controller.selectVehicle('Performance EV')
-        self.assertEqual('Performance EV', self.controller.selectedVehicle)
+        self.controller.selectVehicle('BeamNG eSBR300')
+        self.assertEqual('BeamNG eSBR300', self.controller.selectedVehicle)
         self.controller.toggle()
         self.start_audio.assert_called_once()
         self.assertTrue(self.controller.running)
-        self.controller.selectVehicle('Compact EV')
-        self.assertEqual('Performance EV', self.controller.selectedVehicle)
+        self.controller.selectVehicle('BeamNG Vivace E')
+        self.assertEqual('BeamNG eSBR300', self.controller.selectedVehicle)
         self.key(QEvent.Type.KeyPress, Qt.Key.Key_W)
         for _ in range(30):
             self.tick()
@@ -156,10 +158,10 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertEqual(self.controller.car.soc, 0.8)
 
     def test_only_neutral_presets_are_exposed(self):
-        self.assertEqual(self.controller.vehicleNames, ['Compact EV', 'Performance EV'])
+        self.assertEqual(self.controller.vehicleNames, ['BeamNG Vivace E', 'BeamNG eSBR300'])
         for name in VehicleModel.available_names():
             self.controller.selectVehicle(name)
-            self.assertEqual(self.controller.selectedVehicle, 'Compact EV')
+            self.assertEqual(self.controller.selectedVehicle, 'BeamNG Vivace E')
         for name in self.controller.vehicleNames:
             self.controller.selectVehicle(name)
             self.assertEqual(self.controller.selectedVehicle, name)
@@ -173,13 +175,14 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertIn('No audio device', self.controller.error)
         self.stop_audio.assert_called_once()
 
-    def test_empty_battery_has_no_launch_sound(self):
-        self.controller.car.soc = 0
+    def test_drained_battery_never_caps_full_throttle(self):
+        self.controller.selectVehicle('BeamNG eSBR300')  # the 80 km/h in 250 ticks check was measured on this car
+        self.controller.toggle()
+        self.controller.car.soc = 0  # driving only: a drained pack once capped full throttle near 50 km/h (2026-11-19)
         self.controller.throttle = 1
-        self.tick()
-        self.assertEqual(self.controller.audio.params[1], 0)
-        self.assertEqual(self.controller.speed, 0)
-
+        for _ in range(250):
+            self.tick()
+        self.assertGreater(self.controller.speed, 80)
 
     def test_common_sound_bridge_across_vehicles(self):
         pitches = []
@@ -267,7 +270,7 @@ class SimulatorIntegrationTests(unittest.TestCase):
         self.assertEqual(signals['soundThemeChanged'].count(), 0)  # Retired profile cannot change the sound.
         c.toggle()
         self.assertEqual(signals['sessionChanged'].count(), 2)
-        c.selectVehicle('Performance EV')
+        c.selectVehicle('BeamNG eSBR300')
         self.assertEqual(signals['vehicleChanged'].count(), 1)
 
 

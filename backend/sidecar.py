@@ -196,6 +196,8 @@ class Sidecar:
                         result = self.bridge.snapshot()
                 elif not self.controller.running and was_running:
                     self.startup.stop()
+                elif command in ('toggle', 'vehicleStart'):
+                    result = self.bridge.snapshot()
                 self.send({'id': ident, 'result': result})
                 self.dirty = True  # publish the command's effect on the next 33 ms tick
             except (ValueError, TypeError) as exc:
@@ -207,7 +209,7 @@ class Sidecar:
 
     def close(self):
         self.bridge.history.clear()
-        self.bridge.source_discovery.close()
+        for search in self.bridge.searches.values(): search.close()
         if isinstance(self.input, QSocketNotifier):
             self.input.setEnabled(False)
         self.display.stop()
@@ -219,7 +221,6 @@ class Sidecar:
         self.audio_monitor.close()
         self.gamepad.close()
         self.controller.search.close()
-        self.controller.experiment.close()
         self.controller.shutdown()
 
 

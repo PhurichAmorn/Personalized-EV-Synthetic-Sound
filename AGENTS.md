@@ -19,6 +19,10 @@ Read [the project architecture guide](docs/system/project_architecture.md) for r
 - `tools/`: offline rendering and analysis.
 - `tests/`: automated checks.
 
+## Reading the repo
+
+Start from the layer the task touches. Open these only when the task needs them: `tools/` (one-off render and analysis scripts), `docs/research/` (long evidence notes), `artifacts/` (generated output), and the old native-profile search in `experiment/legacy/`, `desktop/src/legacy/`, and `tests/legacy/` (kept as a baseline; the app cannot start it).
+
 ## Project documents
 
 [Documentation guide](docs/README.md) explains each document's purpose and when to read it.
@@ -28,6 +32,7 @@ Read [the project architecture guide](docs/system/project_architecture.md) for r
 - [Sound behavior](docs/system/sound_behavior.md): existing procedural oscillator method and state mapping; baseline method.
 - [Source-first sound approach](docs/design/source_first_sound_approach.md): separate proposed method; not integrated into driving audio.
 - [Research notes](docs/research/sound_design_research.md) and [interactive search research](docs/research/interactive_search_research.md): evidence and limits behind design choices.
+- [Block-session benchmark plan](docs/research/benchmark_blocks_plan.md) and [results](docs/research/benchmark_blocks_results.md): how the current Building blocks search compares with seven alternatives on simulated listeners (`tools/benchmark_blocks.py`; GitHub Actions workflow `benchmark.yml`).
 - [BeamNG integration](docs/integrations/beamng_audio_integration.md): telemetry mod, UDP receiver, and always-on-top overlay are implemented. BeamNG's own drivetrain sound is not muted. The in-game FMOD path is a proposal only.
 
 ## How to use documentation
@@ -44,6 +49,6 @@ Do not update docs for every feature, UI, or parameter edit. Update a guide when
 - `experiment_data/` contains local participant/session data and must remain untracked. Do not expose or overwrite it during code changes.
 - Do not describe procedural sounds or vehicle presets as exact manufacturer reproductions or validated calibrations.
 - Preserve the existing procedural sound method as a baseline while source-first sound design remains a separate research direction.
-- Use the existing project environment. `./launch.sh` prepares dependencies and runs Tauri in development mode. Automated checks: `.venv/bin/python -m unittest discover -s tests -v` and `cd desktop && npm run build`.
+- Use the existing project environment. `./launch.sh` prepares dependencies and runs Tauri in development mode. Automated checks: `.venv/bin/python -m unittest discover -s tests -v`, `cd desktop && npm test`, and `cd desktop && npm run build`.
 - For Tauri changes, use `cd desktop && npm run tauri dev` while editing. Release packaging is deferred for this research prototype.
 - If C++ audio code changed, rebuild its Python binding with `.venv/bin/python setup.py build_ext --inplace` before checking the Tauri app. Report any build or launch failure instead of claiming the app is updated.

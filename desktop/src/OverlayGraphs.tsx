@@ -107,7 +107,7 @@ function drawWave(canvas: HTMLCanvasElement | null, wave: ArrayLike<number>, lev
   drawing.strokeStyle = '#d6d6d6'; drawing.lineWidth = 1.4; drawing.stroke()
 }
 
-// Spectrogram colour ramp (same as Sound Lab's scope), precomputed once: dark = quiet, bright amber = loud.
+// Spectrogram colour ramp, precomputed once: dark = quiet, bright amber = loud.
 const RAMP = Array.from({ length: 256 }, (_, i) => {
   const level = i / 255, hue = (30 + 30 * level) / 30, light = level * .62, chroma = .9 * Math.min(light, 1 - light)
   const channel = (n: number) => { const k = (n + hue) % 12; return Math.round(255 * (light - chroma * Math.max(-1, Math.min(k - 3, 9 - k, 1)))) }
@@ -116,7 +116,7 @@ const RAMP = Array.from({ length: 256 }, (_, i) => {
 const LOW_HZ = 40, HIGH_HZ = 12000
 
 /** Scroll the spectrogram left and paint one new column (log frequency up, brightness = level) in a single pixel write. */
-function drawColumn(canvas: HTMLCanvasElement | null, db: (hz: number) => number, cssWidth: number) {
+export function drawColumn(canvas: HTMLCanvasElement | null, db: (hz: number) => number, cssWidth: number) {
   if (!canvas) return
   const ratio = window.devicePixelRatio || 1, width = Math.round(canvas.clientWidth * ratio), height = Math.round(canvas.clientHeight * ratio)
   if (width < 2 || height < 2) return

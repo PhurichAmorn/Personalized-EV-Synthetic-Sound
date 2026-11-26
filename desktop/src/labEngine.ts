@@ -6,9 +6,13 @@ import { sourceAudioBuffers } from './sourceDesigner'
 
 /** Shared audio engine: plain stems -> one granular player per stem (driving motion) -> transformation effects.
  * Sound Lab and source discovery both play through this, so a session sounds exactly like the lab. */
+import { trendGains, type StackTrend } from './stackVoice'
 export type Fx = { tone: number; follow: number; bodyHz: number; bodyDb: number; chorus: number; reverb: number; size: number; tremRate: number; tremDepth: number; rasp: number; vibDepth: number; vibRate: number
   pump: number; res: number  // pump 1: tremolo becomes a sidechain-style duck (sudden dip, slow swell); res: low-pass resonance (Q)
   peakHz?: number  // comfort cap: highest note (Hz) the drive may reach
+  stage?: { resonances: [number, number, number][]; lowpassHz: number }  // fixed after-player stage of a 'stack' map voice (mapStage)
+  trend?: StackTrend  // per-player drive trends of a 'stack' map voice with roles (mapTrend)
+  gain?: number  // loudness match (tools/sound_map/loudness.py): playback gain so every pool sound starts equally loud
   drift?: number }  // 1: low-pass breathes +-1100 cents on a 14 s cycle (Dark ambience)
 export type Motion = { mode: 'source' | GranularMode; travel: number; response: SoundResponse; input: 'drive' | 'manual'; position: number; pedal: number }
 // Starts near the original styles' warmth: their chorus and room, a gentle body bump at 450 Hz.
@@ -38,11 +42,12 @@ export function buildRig(context: AudioContext, sources: AudioBuffer[], mode: Mo
   lfo.connect(lfoDepth); lfoDepth.connect(trem.gain); lfo.start()
   const drift = context.createOscillator(), driftDepth = context.createGain()
   drift.frequency.value = 1 / 14; driftDepth.gain.value = 0; drift.connect(driftDepth); driftDepth.connect(low.detune); drift.start()
-  players.forEach(player => player.connect(vib)); vib.connect(trem); trem.connect(body); body.connect(low); low.connect(chorus.input); chorus.output.connect(drive)
+  const stemGains = players.map(() => context.createGain())  // one level per player: roles follow the drive differently (fx.trend)
+  players.forEach((player, i) => { player.connect(stemGains[i]); stemGains[i].connect(vib) }); vib.connect(trem); trem.connect(body); body.connect(low); low.connect(chorus.input); chorus.output.connect(drive)
   drive.connect(dry); dry.connect(master); drive.connect(convolver); convolver.connect(wet); wet.connect(master); master.connect(analyser)
   const startedAt = context.currentTime + .03
   players.forEach(player => player.start(startedAt))
-  const rig = { players, granular, vib, vibLfo, vibDepth, trem, lfo, lfoDepth, drift, driftDepth, body, low, chorus, drive, dry, wet, master, startedAt, driveTarget: 0, size: 0, rasp: -1, rootHz: 0, pump: 0,
+  const rig = { players, stemGains, granular, vib, vibLfo, vibDepth, trem, lfo, lfoDepth, drift, driftDepth, body, low, chorus, drive, dry, wet, master, startedAt, driveTarget: 0, size: 0, engineKey: '', rootHz: 0, pump: 0,
     setRoom(seconds: number) {
       // A new convolver per decay: reassigning .buffer is not allowed in every WebKit version.
       const next = context.createConvolver(), [left, right] = roomImpulse(context.sampleRate, seconds)
@@ -53,7 +58,7 @@ export function buildRig(context: AudioContext, sources: AudioBuffer[], mode: Mo
     dispose() {
       try { players.forEach(player => player.stop(context.currentTime)); lfo.stop(); vibLfo.stop(); drift.stop() } catch { /* already stopped */ }
       players.forEach(player => player.disconnect())
-      ;[vib, vibLfo, vibDepth, drift, driftDepth, trem, lfo, lfoDepth, body, low, drive, dry, wet, master, convolver].forEach(node => node.disconnect()); chorus.dispose()
+      ;[...stemGains, vib, vibLfo, vibDepth, drift, driftDepth, trem, lfo, lfoDepth, body, low, drive, dry, wet, master, convolver].forEach(node => node.disconnect()); chorus.dispose()
     } }
   return rig
 }
@@ -75,9 +80,10 @@ export function applyFx(rig: ReturnType<typeof buildRig>, fx: Fx, rootHz: number
   rig.chorus.setAmount(fx.chorus, now)
   set(rig.dry.gain, 1 - fx.reverb * .5); set(rig.wet.gain, fx.reverb)
   if (Math.abs(rig.size - fx.size) > .01) { rig.size = fx.size; rig.setRoom(fx.size) }
-  if (rig.granular && rig.rasp !== fx.rasp) {
-    rig.rasp = fx.rasp
-    for (const player of rig.players as GranularPlayer[]) player.setEngine(fx.rasp > 0 ? { baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 } : null)
+  const engineKey = JSON.stringify([fx.rasp, fx.stage ?? null])
+  if (rig.granular && rig.engineKey !== engineKey) {
+    rig.engineKey = engineKey
+    for (const player of rig.players as GranularPlayer[]) player.setEngine(fx.stage ? { baseHz: rootHz, rasp: fx.rasp, cabin: 0, ...fx.stage } : fx.rasp > 0 ? { baseHz: rootHz, rasp: fx.rasp, resonances: [], lowpassHz: 0, cabin: 0 } : null)
   }
 }
 
@@ -88,18 +94,24 @@ export function driveRig(rig: Rig, motion: Pick<Motion, 'mode' | 'travel' | 'res
   const now = rig.master.context.currentTime, current = rig
   const set = (param: AudioParam, value: number, smoothing: number) => immediate ? param.setValueAtTime(value, now) : smoothParameter(param, value, now, smoothing)
   if (!current.granular) {
-    set(current.drive.gain, 1, .05); set(current.low.frequency, fx.tone, .05); return
+    set(current.drive.gain, fx.gain ?? 1, .05); set(current.low.frequency, fx.tone, .05); return
   }
   const target = drivingSoundTargets(input, stale, motion.response, motion.mode as GranularMode, motion.travel)
   for (const player of current.players as GranularPlayer[]) {
-    set(player.playbackRate, fx.peakHz && current.rootHz ? Math.min(target.rate, fx.peakHz / current.rootHz) : target.rate, .35)
+    const rate = fx.peakHz && current.rootHz ? Math.min(target.rate, fx.peakHz / current.rootHz) : target.rate
+    // Rising: pitch falls slower than it climbs (1 s vs 0.35 s), so hard braking glides down instead of swooping; Evolving's two crossfading
+    // voices already hide a fast fall (2026-11-20: Rising dropped 3.5 semitones in the last 20 km/h of a 0.9 g stop, heard as a skip).
+    set(player.playbackRate, rate, motion.mode === 'rise' && rate < player.playbackRate.value ? 1 : .35)
     set(player.evolution, motion.mode === 'evolving' ? 1 : 0, .05)
     set(player.cycleSpeed, target.cycleSpeed, .15)
+    set(player.stage, target.stage, .35)
     set(player.loopHold, target.loopHold, .05)
   }
+  const levels = fx.trend ? trendGains(fx.trend, input.speedKmh, target.propulsion) : null
+  current.stemGains.forEach((gain, i) => set(gain.gain, levels ? levels[i] : 1, .35))
   const envelope = driveEnvelopeTarget(target.driveGain, responseRiseSeconds[motion.response], target.driveGain < current.driveTarget)
   current.driveTarget = target.driveGain
-  set(current.drive.gain, envelope.gain, envelope.smoothing)
+  set(current.drive.gain, envelope.gain * (fx.gain ?? 1), envelope.smoothing)
   set(current.low.frequency, clamp(fx.tone * 2 ** (fx.follow * (2 * target.propulsion - 1)), 200, 20000), .15)
 }
 
@@ -112,17 +124,25 @@ export class LabPlayer {
   private timer = 0
   private input: 'live' | 'simulated' = 'live'
   private mode: GranularMode = 'rise'
+  private request = 0  // every play/stop bumps it; a play still waiting (stems, worklet) when a newer one starts gives up
   volume = .7
   get playing() { return !!this.rig }
-  async play(id: string, stems: Float32Array[][], fx: Fx, rootHz: number, input: 'live' | 'simulated', live: () => { input: DrivingInput | undefined; stale: boolean }, simulated: (t: number) => DrivingInput, mode: GranularMode = 'rise', travel = 1) {
-    this.stop(); this.mode = mode
+  /** stems may still be building (a promise): the wait happens here, so a click on another sound meanwhile cancels this one.
+   * Before (2026-11-18), a sound that finished building late started a second rig nobody drove: it played on, deaf to the pedal.
+   * Returns false when a newer play or a stop came first. */
+  async play(id: string, stems: Float32Array[][] | Promise<Float32Array[][]>, fx: Fx, rootHz: number, input: 'live' | 'simulated', live: () => { input: DrivingInput | undefined; stale: boolean }, simulated: (t: number) => DrivingInput, mode: GranularMode = 'rise', travel = 1) {
+    this.stop(); const request = this.request
     if (!this.audio) {
       this.audio = new AudioContext(); this.analyser = this.audio.createAnalyser(); this.analyser.fftSize = 2048; this.analyser.connect(this.audio.destination)
     }
     const context = this.audio
-    await context.resume(); await granularWorklet(context)
+    let voices: Float32Array[][]
+    try { voices = await stems; await context.resume(); await granularWorklet(context) }
+    catch (problem) { if (request !== this.request) return false; throw problem }  // a stale failure must not stop the newer sound
+    if (request !== this.request) return false
+    this.mode = mode
     const motion = { mode, travel, response: 'exponential' as const }
-    const rig = buildRig(context, sourceAudioBuffers(context, stems), mode, this.analyser!)
+    const rig = buildRig(context, sourceAudioBuffers(context, voices), mode, this.analyser!)
     applyFx(rig, fx, rootHz, true)
     this.rig = rig; this.candidateId = id; this.input = input
     const step = (immediate = false) => {
@@ -135,7 +155,7 @@ export class LabPlayer {
     return true as const
   }
   stop() {
-    window.clearInterval(this.timer)
+    this.request++; window.clearInterval(this.timer)
     const rig = this.rig; this.rig = null; this.candidateId = null
     if (rig && this.audio) { rig.master.gain.setTargetAtTime(0, this.audio.currentTime, .03); window.setTimeout(rig.dispose, 200) }
   }
