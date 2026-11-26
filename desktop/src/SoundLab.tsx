@@ -8,10 +8,11 @@ import { simulatedDrive, SIMULATED_DRIVE_SECONDS } from './simulatedDrive'
 import { drawColumn } from './OverlayGraphs'
 
 type Blocks = Record<string, string | number | boolean | null>
-type Options = { bodies: string[]; tops: string[]; partners: Record<string, string[]>; levels: string[]; pitches: number[]; buzz: number[]; names: Record<string, string>; default: Blocks; synthTops: string[] }
+type Options = { bodies: string[]; tops: string[]; partners: Record<string, string[]>; levels: string[]; pitches: number[]; buzz: number[]; brightness: number[]; names: Record<string, string>; default: Blocks; synthTops: string[] }
+type Summary = { error?: string; parameters: [string, number, string][]; free: number; valid: number; safe: number; distinct: number; tops: { top: string; partners: number; knobs: number; valid: number; safe: number; distinct: number }[] }
 type Built = { recipe?: LiveRecipe & { label?: string; blocks?: Blocks; checked?: boolean }; error?: string }
 type WinnerItem = { session: string; created?: string; label: string; recipe?: unknown; id?: string }
-const BUZZ_NAMES = ['Off', 'Some', 'Strong']
+const BUZZ_NAMES = ['Off', 'Some', 'Strong']  // the session only offers Off and Strong (options.buzz)
 
 const logX = (hz: number) => Math.log(hz / 40) / Math.log(300)  // 40 Hz-12 kHz
 
@@ -29,6 +30,7 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
   const [built, setBuilt] = useState<Built>({})
   const [modalOpen, setModalOpen] = useState(false)
   const [previewingId, setPreviewingId] = useState<string | null>(null)
+  const [summary, setSummary] = useState<Summary | null>(null)
   const [fetchedRecipes, setFetchedRecipes] = useState<Record<string, unknown>>({})
 
   useEffect(() => { void Promise.resolve(onCommand('blockOptions')).then(o => { if (o) { setOptions(o as Options); setBlocks((o as Options).default) } }) }, [])
@@ -164,7 +166,7 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
     <div className="lab-fixed">
     <header className="lab-head"><div><small>LISTENING BENCH</small><h2>Sound Lab</h2></div>
       <div className="lab-transport">
-        <span className="lab-seg">{(['rise', 'evolving'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} onClick={() => setMode(item)}>{item === 'rise' ? 'Rising' : 'Evolving'}</button>)}</span>
+        <span className="lab-seg">{(['rise', 'evolving'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => setMode(item)}>{item === 'rise' ? 'Rising' : 'Evolving'}</button>)}</span>
         <button type="button" disabled={!recipe} aria-pressed={playing} onClick={() => void (playing ? stop() : play())}>{playing ? 'Stop' : '▶ Sound sweep'}</button>
         <label className="lab-volume">Vol<input type="range" min="0" max="1" step=".01" value={volume} onChange={event => setVolume(+event.target.value)} /></label>
       </div>
@@ -185,14 +187,27 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
         <div><p className="lab-label">Body (lowest layer)</p><div className="lab-chips">{options.bodies.map(body => <button key={body} type="button" aria-pressed={blocks.body === body} onClick={() => change({ body })}>{options.names[body]}</button>)}</div></div>
         <div><p className="lab-label">Top level</p><div className="lab-chips">{options.levels.map(level => <button key={level} type="button" aria-pressed={blocks.level === level} onClick={() => change({ level })}>{level}</button>)}</div></div>
         <div><p className="lab-label">Pitch</p><div className="lab-chips">{options.pitches.map((hz, index) => <button key={hz} type="button" aria-pressed={blocks.pitch === index} onClick={() => change({ pitch: index })}>{hz} Hz</button>)}</div></div>
-        <label className="lab-slider"><span>Brightness (acum)<output>{(+(blocks.brightness ?? .5)).toFixed(2)}{built.recipe?.blocks && Math.abs(+built.recipe.blocks.brightness! - +(blocks.brightness ?? .5)) > .01 ? ` → reached ${(+built.recipe.blocks.brightness!).toFixed(2)}` : ''}</output></span>
-          <input type="range" min=".2" max="1.4" step=".01" value={+(blocks.brightness ?? .5)} onChange={event => change({ brightness: +event.target.value })} /></label>
+        <div><p className="lab-label">Brightness (acum){built.recipe?.blocks && Math.abs(+built.recipe.blocks.brightness! - +(blocks.brightness ?? .5)) > .01 ? <small> → reached {(+built.recipe.blocks.brightness!).toFixed(2)}</small> : null}</p><div className="lab-chips">{options.brightness.map(level => <button key={level} type="button" aria-pressed={Math.abs(+(blocks.brightness ?? .5) - level) < .005} onClick={() => change({ brightness: level })}>{level.toFixed(2)}</button>)}</div></div>
         {options.synthTops.includes(blocks.top as string) && <div><p className="lab-label">Synth knobs (Synth and Bell synth tops only)</p><div className="lab-chips">
           {options.buzz.map(level => <button key={level} type="button" aria-pressed={blocks.buzz === level} onClick={() => change({ buzz: level })}>Buzz: {BUZZ_NAMES[level]}</button>)}
           <button type="button" aria-pressed={blocks.chord === 'on'} onClick={() => change({ chord: blocks.chord === 'on' ? 'off' : 'on' })}>Chord (minor)</button>
           <button type="button" aria-pressed={!!blocks.bell} onClick={() => change({ bell: !blocks.bell })}>Bell</button>
           <button type="button" aria-pressed={!!blocks.vowel} onClick={() => change({ vowel: !blocks.vowel })}>Vowel</button></div></div>}
       </div>}
+      {options && <details className="lab-space" onToggle={event => { if ((event.target as HTMLDetailsElement).open && !summary) void Promise.resolve(onCommand('blockSummary')).then(result => setSummary(result as Summary)) }}>
+        <summary>How many sounds can a session reach?</summary>
+        {!summary ? <p className="lab-note">Counting…</p> : summary.error ? <p className="lab-error" role="alert">{summary.error}</p> : <>
+          <table className="lab-table"><caption>Parameters</caption><thead><tr><th>Parameter</th><th>Levels</th><th>Values</th></tr></thead>
+            <tbody>{summary.parameters.map(([name, n, values]) => <tr key={name}><td>{name}</td><td>{n}</td><td>{values}</td></tr>)}</tbody></table>
+          <table className="lab-table"><caption>From every combination to the sounds a session plays</caption><tbody>
+            <tr><td>All levels multiplied freely</td><td>{summary.free.toLocaleString()}</td></tr>
+            <tr><td>Combinations that exist (partners and knobs only where a top has them)</td><td>{summary.valid.toLocaleString()}</td></tr>
+            <tr><td>Pass the drive check (sharpness, roughness, fluctuation)</td><td>{summary.safe.toLocaleString()}</td></tr>
+            <tr><td>Distinct sounds (brightness steps that reach the same sound count once)</td><td><strong>{summary.distinct.toLocaleString()}</strong></td></tr></tbody></table>
+          <table className="lab-table"><caption>Per top texture</caption><thead><tr><th>Top</th><th>Partner options</th><th>Knob settings</th><th>Combinations</th><th>Pass check</th><th>Distinct</th></tr></thead>
+            <tbody>{summary.tops.map(row => <tr key={row.top}><td>{options.names[row.top]}</td><td>{row.partners}</td><td>{row.knobs}</td><td>{row.valid.toLocaleString()}</td><td>{row.safe.toLocaleString()}</td><td>{row.distinct.toLocaleString()}</td></tr>)}</tbody></table>
+          <p className="lab-note">Each row multiplies by 4 bodies, 3 top levels, 5 pitches and 5 brightness steps. The lab offers exactly these choices.</p></>}
+      </details>}
       {built.error ? <p className="lab-error" role="alert">{built.error}</p> : built.recipe && <p className="lab-note">{built.recipe.label}</p>}
     </section>
     {modalOpen && <div className="lab-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) closeModal() }}>
@@ -267,9 +282,6 @@ function Scope({ analyser, active, view }: { analyser: RefObject<AnalyserNode | 
   const canvas = useRef<HTMLCanvasElement>(null)
   const live = useRef(active)
   live.current = active
-  const [frozen, setFrozen] = useState(false)
-  const isFrozen = useRef(false)
-  isFrozen.current = frozen
   const prevWave = useRef<Float32Array | null>(null)
   const wake = useRef(() => {})
   useEffect(() => {
@@ -294,7 +306,6 @@ function Scope({ analyser, active, view }: { analyser: RefObject<AnalyserNode | 
       // Not playing: draw nothing (the last picture stays) and stop until playback wakes the loop again.
       if (!on) { frame = 0; return }
       frame = requestAnimationFrame(render)
-      if (isFrozen.current) return
       node!.getFloatFrequencyData(freq); node!.getFloatTimeDomainData(samples)
       const binHz = node!.context.sampleRate / 4096
       if (view === 'spectrogram') {
@@ -392,7 +403,6 @@ function Scope({ analyser, active, view }: { analyser: RefObject<AnalyserNode | 
   return <figure className={'lab-scope lab-scope-' + view}>
     <figcaption>
       <span>{view[0].toUpperCase() + view.slice(1)}</span>
-      {view === 'waveform' && <button type="button" className={'lab-scope-freeze' + (frozen ? ' active' : '')} title={frozen ? 'Resume live waveform' : 'Freeze waveform to inspect static shape'} onClick={() => setFrozen(!frozen)}>{frozen ? 'Resume' : 'Freeze'}</button>}
     </figcaption>
     <canvas ref={canvas} role="img" aria-label={`Live ${view}`} />
   </figure>

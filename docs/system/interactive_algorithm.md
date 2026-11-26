@@ -81,7 +81,7 @@ Added 2026-11-21. No pool: each sound is built on the spot from building blocks 
 ### Sound-map search (phase 1, `source-map-regions-1`, `RegionMapDiscovery`): selectable per session
 
 Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
-fixed preset set. Personalize sound now has a search selector: *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`, the default; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
+fixed preset set. Personalize sound now has a search selector: *Building blocks* = `BlockDiscovery` (the default and standard session), *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.
 
 - **Pool.** `experiment/sound_map_pool.json`, frozen from `tools/sound_map` (see its README): an open archive (no grid, no size limit) of
   sounds made with the plain synth or the generic `blocks` voice (FM, noise band, waveshaper, amplitude modulation, inharmonic partials),

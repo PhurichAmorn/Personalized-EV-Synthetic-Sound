@@ -28,7 +28,7 @@ export default function BeamNGOverlay({ state, error, onCommand, onPersonalize, 
   const [dragError, setDragError] = useState('')
   // Sound graphs (wave and spectrogram, both shown). Never shown during an experiment session: seeing the sound could bias what the participant rates.
   // The sound's wave and spectrogram come back once the session is finished and saved (never during one: they could bias a rating).
-  const discovery = state.sourceDiscovery, savedFinal = !!personalize && !!discovery && !discovery.active && !!discovery.final && discovery.acceptable != null
+  const discovery = state.sourceDiscovery, savedFinal = !!personalize && !!discovery && !discovery.active && !!discovery.final && discovery.rating != null
   const session = state.search.active || !!state.sourceDiscovery?.active
   // Personalize: the window grows to fit the session (no scrolling), and returns to its driving size afterwards.
   const card = useRef<HTMLElement>(null)

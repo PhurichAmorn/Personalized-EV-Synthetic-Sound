@@ -97,7 +97,7 @@ class SourceDiscovery:
     max_attempts=8  # renders tried per pair before giving up
     def __init__(self,renderer=None):
         self.renderer=renderer or SourceRenderer();self.executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='source-discovery')
-        self.lock=threading.RLock();self.epoch=0;self.active=False;self.busy=False;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.final=None;self.rng=random.Random();self.completed=0;self.selected=None;self.auditions=[];self.plays=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating';self.acceptable=None
+        self.lock=threading.RLock();self.epoch=0;self.active=False;self.busy=False;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.final=None;self.rng=random.Random();self.completed=0;self.selected=None;self.auditions=[];self.plays=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating';self.rating=None;self.comment=''
     def close(self):
         self.epoch+=1
         if hasattr(self.renderer,'close'):self.renderer.close()
@@ -107,11 +107,11 @@ class SourceDiscovery:
             def public(ident):
                 c=self.candidates[ident]
                 return {k:c[k] for k in ['id','label','recipe','urls','traces'] if k in c}
-            return {'active':self.active,'busy':self.busy,'error':self.error,'completed':self.completed,'pair':[public(x) for x in self.pair],'heard':list(self.tried),'selected':self.selected,'final':self.final,'finalists':[dict(public(x),**self._finalist_summary(x,strength)) for x,strength in self._bt_order()],'stage':self.stage,'step':self.completed+len(self.playoff_history),'totalSteps':getattr(self,'pairs',TOTAL_STEPS),'playoffDone':len(self.playoff_history),'playoffTotal':PLAYOFF_PAIRS,'quarantined':len(self.quarantine),'policy':self.policy,'checkpoint':self.stage!='discovery','pairMode':self.pair_mode,'maxComparisons':MAX_COMPARISONS,'acceptable':self.acceptable}
+            return {'active':self.active,'busy':self.busy,'error':self.error,'completed':self.completed,'pair':[public(x) for x in self.pair],'heard':list(self.tried),'selected':self.selected,'final':self.final,'finalists':[dict(public(x),**self._finalist_summary(x,strength)) for x,strength in self._bt_order()],'stage':self.stage,'step':self.completed+len(self.playoff_history),'totalSteps':getattr(self,'pairs',TOTAL_STEPS),'playoffDone':len(self.playoff_history),'playoffTotal':PLAYOFF_PAIRS,'quarantined':len(self.quarantine),'policy':self.policy,'checkpoint':self.stage!='discovery','pairMode':self.pair_mode,'maxComparisons':MAX_COMPARISONS,'rating':self.rating}
     def start(self):
         with self.lock:
             if self.busy:raise ValueError('Wait for source preparation to finish')
-            self.epoch+=1;self.active=True;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.completed=0;self.final=None;self.selected=None;self.auditions=[];self.plays=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating';self.acceptable=None
+            self.epoch+=1;self.active=True;self.error='';self.candidates={};self.pair=[];self.history=[];self.tried=set();self.quarantine=[];self.completed=0;self.final=None;self.selected=None;self.auditions=[];self.plays=[];self.excluded=set();self.hearing_context=None;self.diversity_skips=[];self.finalists=[];self.stage='discovery';self.playoff_queue=[];self.playoff_history=[];self.origins={};self.check_parent=None;self.pair_mode='rating';self.rating=None;self.comment=''
             self.seed=random.SystemRandom().randrange(2**31);self.rng=random.Random(self.seed)
             self._prepare()
     def _proposals(self):
@@ -353,14 +353,16 @@ class SourceDiscovery:
         with self.lock:
             self.active=False;self.pair=[];self.playoff_queue=[];self.epoch+=1;self.busy=False
             if hasattr(self.renderer,'cancel'):self.renderer.cancel()
-    def accept(self,answer):
-        """Final absolute check: would the listener be happy with the chosen sound in their car (yes/no)."""
+    def rate(self,rating,comment=''):
+        """Final questions: satisfaction with the chosen sound, 1 (not at all) to 7 (extremely), plus one optional free-text
+        answer (any language, kept as typed): closeness to the imagined sound, what to tune, unnecessary or unclear options."""
         with self.lock:
             if not self.final:raise ValueError('Choose your final sound first')
-            if not isinstance(answer,bool):raise ValueError('Answer yes or no')
-            self.acceptable=answer
+            if isinstance(rating,bool) or not isinstance(rating,int) or not 1<=rating<=7:raise ValueError('Rate from 1 to 7')
+            if not isinstance(comment,str):raise ValueError('Comments must be text')
+            self.rating=rating;self.comment=comment.strip()[:2000]
     def export(self):
-        with self.lock:return deepcopy({'format':'ev-source-discovery-v3','policy':self.policy,'seed':getattr(self,'seed',None),'history':self.history,'auditions':self.auditions,'plays':self.plays,'final':self.final,'final_acceptable':self.acceptable,'finalists':[dict(id=ident,**self._finalist_summary(ident,strength)) for ident,strength in self._bt_order()],'playoff_history':self.playoff_history,'preference_model':preference_summary(self.candidates),'candidates':self.candidates,'quarantine':self.quarantine,'diversity_skips':self.diversity_skips,'note':'14 rated pairs pick 4 diverse finalists by 1–7 rating shrunk toward neutral 4 (prior weight 2). A 6-pair round-robin final round orders them by Bradley-Terry strength; ratings enter only as one virtual game per finalist. Final choice stays explicit. Later candidate proposals use a regularized model of foundation family, layer mix, and layer count, with an exploration bonus. Explicit export only; no automatic participant record.'})
+        with self.lock:return deepcopy({'format':'ev-source-discovery-v3','policy':self.policy,'seed':getattr(self,'seed',None),'history':self.history,'auditions':self.auditions,'plays':self.plays,'final':self.final,'final_rating':self.rating,'final_comment':self.comment,'finalists':[dict(id=ident,**self._finalist_summary(ident,strength)) for ident,strength in self._bt_order()],'playoff_history':self.playoff_history,'preference_model':preference_summary(self.candidates),'candidates':self.candidates,'quarantine':self.quarantine,'diversity_skips':self.diversity_skips,'note':'14 rated pairs pick 4 diverse finalists by 1–7 rating shrunk toward neutral 4 (prior weight 2). A 6-pair round-robin final round orders them by Bradley-Terry strength; ratings enter only as one virtual game per finalist. Final choice stays explicit. Later candidate proposals use a regularized model of foundation family, layer mix, and layer count, with an exploration bonus. Explicit export only; no automatic participant record.'})
 
 
 # Open pool search: no families. Parameters are scaled to [0, 1] (log scale for frequencies) so mutation and the GP treat them alike.
@@ -1099,7 +1101,7 @@ class TuningDiscovery(LevelDiscovery):
             'N(0,1) prior, Laplace approximation; parents by posterior mean, changes ordered by a Thompson sample (half spread). Answers: Prefer A / B; Both good (tie, both beat a neutral sound); Neither (tie, '
             'both lose to it; the next pair builds on other sounds). Shortlist of 5 by posterior mean, at least 2 choices each, any two differ in '
             'family or in at least two settings. Pair 20 is a blind tuning check (the best sound vs the same variant untuned; tuning_check in the '
-            'export), counted like any other choice. The listener picks, then answers yes/no: happy with this sound in their car.')
+            'export), counted like any other choice. The listener picks, then rates the sound from 1 to 7 stars.')
         return data
 
 
@@ -1291,7 +1293,7 @@ class SoundMapDiscovery(TuningDiscovery):
             '(taken from outside the rejected pair), is the Bradley-Terry best on the answers (champion_starts in the export). Pair 20: confirmation, the shortlist #1 against the strongest sound it has not met '
             '(champion and confirmation in the export). Shortlist: Bradley-Terry on the answers alone (3 virtual even games each), sounds heard at least twice first; every press of A/B is in plays. Model: Bayesian Bradley-Terry '
             f'over {len(MAP_FEATURES)} heard traits (pitch, sharpness, roughness, pulsing, inharmonicity, spectral centre, voice, chorus, vibrato), each as z '
-            'and z^2 so a middle value can be best; N(0,1) prior, Laplace approximation. Answers, shortlist and yes/no as the tuning search.')
+            'and z^2 so a middle value can be best; N(0,1) prior, Laplace approximation. Answers, shortlist and the 1-7 rating as the tuning search.')
         return data
 
 MAP_REGIONS=6      # regions of the pool (k-means on the heard traits)

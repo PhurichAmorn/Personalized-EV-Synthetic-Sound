@@ -13,10 +13,10 @@ const traceLab = new LabPlayer()
 
 type Command = <T = unknown>(name: string, payload?: Record<string, unknown>) => Promise<T | null>
 export type HistoryPreview = { session?: string; candidate?: string; status?: 'rendering' | 'ready' | 'error'; url?: string; error?: string }
-type Row = { id: string; created: string; completed: number; final: string | null; finalists: number; done: boolean; starred?: boolean }
+type Row = { id: string; created: string; completed: number; final: string | null; finalists: number; done: boolean; rating?: number | null; starred?: boolean }
 type Saved = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; ratings?: number[]; audio_descriptor?: number[]; origin?: { kind?: string; move?: string; motion?: string; summary?: string } }
 type Session = {
-  id: string; created: string; final: string | null
+  id: string; created: string; final: string | null; final_rating?: number | null; final_comment?: string
   policy?: string; preference_model?: { feature_weights?: Record<string, number>; feature_sd?: Record<string, number> }
   // rating_source: 'rating-1-7' (legacy and normal pairs) or 'choice' (parent check). Sessions before 2026-11-10 have no rating_source and are 1-7.
   history: { pair: string[]; ratings?: { A: number; B: number }; rating_source?: 'rating-1-7' | 'choice'; choice?: 'A' | 'B' | 'equal' | 'good' | 'neither'; winner?: string | null; origin_by_candidate?: Record<string, string> }[]
@@ -115,12 +115,12 @@ export default function TraceHistory({ command, preview }: { command: Command; p
       {!rows.some(row => row.final || row.done) && <p className="text-sm text-neutral-400">{t('No saved sessions yet. Sound discovery sessions save here automatically.')}</p>}
       {rows.filter(row => row.final || row.done).map(row => <button key={row.id} className={'control history-item' + (session?.id === row.id ? ' selected' : '')} aria-pressed={session?.id === row.id} onClick={() => void open(row.id)}>
         <strong>{row.starred && <span className="history-star" aria-label="Starred">★ </span>}{when(row.created)}</strong>
-        <span>{t('{n} comparisons · {state}', { n: row.completed, state: t(row.final ? 'favorite chosen' : 'finalists ranked') })}</span>
+        <span>{t('{n} comparisons · {state}', { n: row.completed, state: t(row.final ? 'favorite chosen' : 'finalists ranked') })}{row.rating != null && ` · ${t('Satisfaction {n}/7', { n: row.rating })}`}</span>
       </button>)}
     </section>
     <section className="panel history-trace" aria-label="Session trace">
       {!session ? <p className="text-neutral-400">{t('Select a session to inspect.')}</p> : <>
-        <div className="trace-panel-head"><div><h2 className="text-xl">{when(session.created)}</h2><p className="mt-1 text-neutral-400">{t('{n} rated pairs · {m} final-round pairs', { n: session.history.length, m: session.playoff_history.length })}</p></div>
+        <div className="trace-panel-head"><div><h2 className="text-xl">{when(session.created)}</h2><p className="mt-1 text-neutral-400">{t('{n} rated pairs · {m} final-round pairs', { n: session.history.length, m: session.playoff_history.length })}{session.final_rating != null && ` · ${t('Satisfaction {n}/7', { n: session.final_rating })}`}</p>{session.final_comment && <p className="mt-1 text-sm text-neutral-300" lang="ja">{session.final_comment}</p>}</div>
           <div className="flex gap-2">
             <button className={'icon-button star-button' + (starred ? ' on' : '')} aria-pressed={starred} title={t(starred ? 'Starred: kept at the top. Click to unstar.' : 'Star to mark this session as one to keep')} aria-label={t('Star session')} onClick={() => void star(session.id, !starred)}>{starred ? '★' : '☆'}</button>
             {confirmDelete ? <><button className="control" onClick={() => setConfirmDelete(false)}>{t('Keep')}</button><button className="control border-red-500" onClick={() => void remove()}>{t(starred ? 'Delete starred session' : 'Delete')}</button></>

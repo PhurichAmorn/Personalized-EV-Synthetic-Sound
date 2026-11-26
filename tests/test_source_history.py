@@ -26,6 +26,7 @@ class SourceHistoryTest(unittest.TestCase):
         self.history.save()
         (row,) = self.history.listing()
         self.assertEqual(row['completed'], 1)
+        self.assertIsNone(row['rating'])  # not rated yet
         self.assertTrue(row['created'].count(':') >= 2)
         saved = self.history.get(row['id'])
         ident = saved['history'][0]['pair'][0]

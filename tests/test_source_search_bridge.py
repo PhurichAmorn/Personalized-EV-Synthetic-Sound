@@ -9,7 +9,7 @@ class SourceSearchBridgeTest(unittest.TestCase):
         self.bridge=DesktopBridge(self.controller)
         for search in self.bridge.searches.values():search.close()
         self.discovery=Mock(active=False,busy=False);self.map=Mock(active=False,busy=False)
-        self.bridge.searches={'tuning':self.discovery,'map':self.map};self.bridge.source_discovery=self.discovery
+        self.bridge.searches={'blocks':self.discovery,'map':self.map};self.bridge.source_discovery=self.discovery
         self.bridge.snapshot=lambda:{'sourceDiscovery':'state'}
 
     def test_commands_forward_ids_and_explicit_export(self):

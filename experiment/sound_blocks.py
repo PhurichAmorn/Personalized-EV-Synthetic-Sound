@@ -19,6 +19,8 @@ CUTOFFS = [800, 1500, 2800, 5200]  # outer low-pass points measured by the sweep
 SPACES = {'dry': {'reverb': 0, 'size': 1.2}, 'large': {'reverb': .4, 'size': 2.5}}  # levels.ts SPACE; medium dropped: medium vs large sounded the same (2026-11-21)
 MOVEMENTS = {'still': 0, 'wobble': 6}  # vibrato cents at 5.2 Hz (levels.ts motion()); not searched: wobble was hard to hear (change test 2026-11-15)
 BUZZ = [{}, {'fundamental': .4, 'brightness': .65}, {'fundamental': .1, 'brightness': .85}]
+BUZZ_STEPS = (0, 2)  # the session moves buzz off <-> strong only; level 1 (some) is never offered
+BRIGHT_GRID = (.25, .4, .55, .7, .85)  # brightness targets (acum) of the benchmark's ground-truth pool (tools/benchmark_blocks.py truth())
 CHORDS = {'off': {}, 'on': {'chord': .8, 'chordType': 1, 'width': 1}}  # minor chord; chord type alone was not heard (major vs minor sounded the same, 2026-11-21)
 
 _OFF = dict(vowel=0, vowelShape=.5, fundamental=1, whine=0, whineRatio=8.75, bellModes=0, detune=0, chordType=0, lowDetune=0, lowCut=0, width=0)
@@ -218,3 +220,49 @@ if __name__ == '__main__':  # self-check
     assert gain_for(t, {'sones': [9.] * 4}, 2000) == 1 and abs(gain_for(t, {'sones': [4.5] * 4}, 2000) - 10 ** .5) < 1e-3  # half as loud: +10 dB
     assert gain_for({}, e, 2000) == 1 and gain_for(t, {'sones': [.01] * 4}, 2000) == round(10 ** .6, 4)  # no loudness: 1; capped at +12 dB
     print(len(items), 'sweep items; self-check OK;', describe({'top': 'synth', 'chord': 'on'}))
+
+
+def knob_settings(top):
+    """Every synth-knob setting a top has: 16 on the Synth and Bell tops (buzz x chord x bell x vowel), one (all off) on the others."""
+    if top not in ('synth', 'bell'): return [{'buzz': 0, 'chord': 'off', 'bell': False, 'vowel': False}]
+    return [{'buzz': bz, 'chord': ch, 'bell': bl, 'vowel': vw} for bz in BUZZ_STEPS for ch in CHORDS for bl in (False, True) for vw in (False, True)]
+
+
+def combos(table):
+    """Every combination body x top x level x pitch x brightness step x partner x knob setting, as [(blocks, passes the drive check)];
+    a passing sound carries the brightness the table reaches (several steps can reach the same one, see pool)."""
+    import itertools
+    out = []
+    for body, top, lv, pi, br in itertools.product(BODIES, TOPS, TOP_LEVELS, range(len(PITCHES)), BRIGHT_GRID):
+        for partner in (None, *PARTNERS.get(top, ())):
+            for knobs in knob_settings(top):
+                s = full({'body': body, 'top': top, 'level': lv, 'pitch': pi, 'brightness': br, 'partner': partner, **knobs})
+                entry = nearest_entry(table, s); cutoff = cutoff_for(entry, br); ok = safe(entry, cutoff)
+                if ok: s['brightness'] = round(sharpness_at(entry, cutoff), 2)
+                out.append((s, ok))
+    return out
+
+
+def pool(table):
+    """The sounds the session can reach (the benchmark's ground truth): the combinations that pass the drive check, each distinct sound once."""
+    seen, out = set(), []
+    for s, ok in combos(table):
+        k = key(s) + f"|{s['brightness']}"
+        if ok and k not in seen: seen.add(k); out.append(s)
+    return out
+
+
+def summary(table):
+    """How big the space is, for the Sound Lab page: parameter levels, then the funnel free product -> valid combinations -> pass the drive check -> distinct sounds, and a row per top."""
+    rows, per_top, seen = combos(table), {}, set()
+    for s, ok in rows:
+        t = per_top.setdefault(s['top'], {'valid': 0, 'safe': 0, 'distinct': 0}); t['valid'] += 1; t['safe'] += ok
+        k = key(s) + f"|{s['brightness']}"
+        if ok and k not in seen: seen.add(k); t['distinct'] += 1
+    knob_n = max(len(knob_settings(t)) for t in TOPS); partner_n = max(len(PARTNERS.get(t, ())) for t in TOPS) + 1
+    free = len(BODIES) * len(TOPS) * len(TOP_LEVELS) * len(PITCHES) * len(BRIGHT_GRID) * partner_n * knob_n
+    return {'parameters': [['Body', len(BODIES), ', '.join(BODIES)], ['Top texture', len(TOPS), ', '.join(TOPS)], ['Top level', len(TOP_LEVELS), ', '.join(TOP_LEVELS)],
+                           ['Pitch', len(PITCHES), ' / '.join(f'{p:g}' for p in PITCHES) + ' Hz'], ['Brightness', len(BRIGHT_GRID), ' / '.join(f'{b:g}' for b in BRIGHT_GRID) + ' acum'],
+                           ['Partner', partner_n, 'none, or 1-2 depending on the top'], ['Synth knobs', knob_n, 'buzz (off/strong) x chord x bell x vowel, Synth and Bell tops only']],
+            'free': free, 'valid': len(rows), 'safe': sum(ok for _, ok in rows), 'distinct': len(seen),
+            'tops': [{'top': t, 'partners': len(PARTNERS.get(t, ())) + 1, 'knobs': len(knob_settings(t)), **per_top[t]} for t in TOPS]}

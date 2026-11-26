@@ -10,13 +10,13 @@ from experiment.source_history import SourceHistory
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
-        # Per session: 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map);
-        # 'blocks' = building-block sounds built on the spot (experiment/sound_blocks.py, 2026-11-21).
+        # Per session: 'blocks' = building-block sounds built on the spot (experiment/sound_blocks.py, 2026-11-21), the standard session;
+        # 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map).
         # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
         self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery(),
                          # experimental pair-selection variants of 'blocks' (experiment/block_arms.py, 2026-11-23): not benchmarked yet
                          'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks(), 'blocks-infogain': InfoGainBlocks()}
-        self.source_discovery = self.searches['tuning']
+        self.source_discovery = self.searches['blocks']
         self.history = SourceHistory(self.source_discovery)
 
     def snapshot(self):
@@ -79,7 +79,16 @@ class DesktopBridge:
         """Choices of the Sound Lab block builder: the session's own block vocabulary (experiment/sound_blocks.py)."""
         from experiment import sound_blocks as sb
         return {'bodies': list(sb.BODIES), 'tops': list(sb.TOPS), 'partners': {k: list(v) for k, v in sb.PARTNERS.items()}, 'levels': list(sb.TOP_LEVELS),
-                'pitches': sb.PITCHES, 'buzz': list(range(len(sb.BUZZ))), 'names': sb.NAMES, 'default': sb.DEFAULT, 'synthTops': ['synth', 'bell']}
+                'pitches': sb.PITCHES, 'buzz': list(sb.BUZZ_STEPS), 'brightness': list(sb.BRIGHT_GRID), 'names': sb.NAMES,
+                'default': {**sb.DEFAULT, 'brightness': sb.BRIGHT_GRID[2]}, 'synthTops': ['synth', 'bell']}  # only what a session can reach: buzz off/strong, 5 brightness steps
+
+    def _block_summary(self):
+        """How many sounds the Sound Lab can build and the session can reach (experiment/sound_blocks.py summary); counted once, about a second."""
+        from experiment import sound_blocks as sb
+        if not hasattr(self, '_block_summary_cache'):
+            table = sb.load_table()
+            self._block_summary_cache = sb.summary(table) if table else {'error': 'No safe-area table yet (tools/sound_map/block_sweep.py), so the count is not available.'}
+        return self._block_summary_cache
 
     def _block_build(self, payload):
         """One block sound -> the live recipe the session would play (same _recipe: safe-area table, brightness to low-pass, loudness gain), or an error."""
@@ -114,7 +123,7 @@ class DesktopBridge:
             if name == 'sourceDiscoveryStart':
                 if s.active or c.soundSweepActive:raise ValueError('Stop the native experiment or debug sweep first')
                 if discovery.active:raise ValueError('Finish the current source trial before starting another')
-                search = payload.get('search', 'tuning')
+                search = payload.get('search', 'blocks')
                 if search not in self.searches:raise ValueError('Unknown search')
                 discovery = self.source_discovery = self.history.discovery = self.searches[search]
                 discovery.start(payload.get('motion'));self.history.begin()
@@ -124,17 +133,18 @@ class DesktopBridge:
             elif name == 'sourceDiscoveryPlayoff':discovery.playoff_feedback(payload.get('choice'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFinish':discovery.finish(payload.get('id'))
             elif name == 'sourceDiscoveryEnd':discovery.end()
-            elif name == 'sourceDiscoveryAccept':discovery.accept(payload.get('answer'))
+            elif name == 'sourceDiscoveryRate':discovery.rate(payload.get('rating'),payload.get('comment',''))
             elif name == 'sourceDiscoverySkip':discovery.skip_similar(payload.get('ids'))
             elif name == 'sourceDiscoveryExport':return discovery.export()
             elif name == 'sourceDiscoveryRetry':
                 if discovery.busy or not discovery.active:raise ValueError('No failed active trial to retry')
                 with discovery.lock:discovery._prepare()
             else:raise ValueError('Unknown source discovery command')
-            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryEnd','sourceDiscoveryAccept'):self.history.save()  # autosave to local history
+            if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryEnd','sourceDiscoveryRate'):self.history.save()  # autosave to local history
             return self.snapshot()
         if name == 'blockOptions':return self._block_options()
         if name == 'blockBuild':return self._block_build(payload)
+        if name == 'blockSummary':return self._block_summary()
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
         if name == 'historyStar':return self.history.star(self._text(payload,'id'),self._bool(payload,'value'))

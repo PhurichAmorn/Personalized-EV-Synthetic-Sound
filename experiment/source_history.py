@@ -20,7 +20,7 @@ class SourceHistory:
         self.root.mkdir(parents=True,exist_ok=True)
         data={**self.discovery.export(),'id':self.session,'created':self.created}
         for candidate in data['candidates'].values():candidate.pop('urls',None);candidate.pop('traces',None)  # cache paths; previews are regenerated
-        temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data));temp.replace(self.root/f'{self.session}.json')
+        temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{self.session}.json')
         if data.get('final'):self.picked=self.session  # a final pick made in this run becomes the driver's sound
         self._refresh()
     def _refresh(self):
@@ -28,7 +28,7 @@ class SourceHistory:
         a saved winner plays only after it is picked in the list or a session finishes in this run; a restart goes back to the standard sound."""
         finals=[]
         for path in sorted(self.root.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True):
-            try:d=json.loads(path.read_text());c=d['candidates'][d['final']] if d.get('final') else None
+            try:d=json.loads(path.read_text(encoding='utf8'));c=d['candidates'][d['final']] if d.get('final') else None
             except (OSError,ValueError,KeyError):continue
             if c:finals.append({'session':path.stem,'created':d.get('created',''),'id':d['final'],'label':c.get('label',''),'recipe':c['recipe']})
         self.my_sounds=[{k:f[k] for k in ('session','created','label','recipe','id')} for f in finals]
@@ -43,11 +43,11 @@ class SourceHistory:
         return True
     def _read(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
-        return json.loads((self.root/f'{ident}.json').read_text())
+        return json.loads((self.root/f'{ident}.json').read_text(encoding='utf8'))
     def listing(self):
         rows=[]
         for path in self.root.glob('*.json'):
-            try:d=json.loads(path.read_text());rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists'])})
+            try:d=json.loads(path.read_text(encoding='utf8'));rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists']),'rating':d.get('final_rating')})
             except (OSError,ValueError,KeyError):continue
         starred=self.starred()
         for row in rows:row['starred']=row['id'] in starred

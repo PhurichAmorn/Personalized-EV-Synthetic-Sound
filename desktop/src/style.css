@@ -258,19 +258,6 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-led.starting { background: #e8bd68; box-shadow: 0 0 6px #e8bd68; animation: overlay-led-pulse .8s ease-in-out infinite alternate; }
 .overlay-led.on { background: #5fd38d; box-shadow: 0 0 7px #5fd38d; }
 @keyframes overlay-led-pulse { to { opacity: .35; } }
-/* Sound signal: right-side panel of the dashboard, four live views stacked. */
-.signal-side { position: sticky; top: 0; display: flex; flex: none; flex-direction: column; gap: 10px; width: 380px; height: 100vh; box-sizing: border-box; padding: 18px 16px; overflow-y: auto; border-left: 1px solid var(--line); background: #171717; }
-.signal-side-header { display: flex; align-items: center; gap: 10px; }
-.signal-side-header h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 500; letter-spacing: .04em; }
-.signal-source { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
-.signal-close { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
-.signal-close:hover { background: rgb(255 255 255 / 10%); color: var(--fg); }
-.signal-panel { display: flex; flex: none; flex-direction: column; padding: 10px 12px 8px; border-radius: 10px; background: rgb(255 255 255 / 4%); }
-.signal-panel-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-.signal-panel-title small { overflow: hidden; color: var(--muted); font-size: 9px; letter-spacing: .02em; text-transform: none; white-space: nowrap; text-overflow: ellipsis; }
-.signal-panel canvas { width: 100%; height: 130px; }
-.signal-panel:nth-of-type(3) canvas { height: 300px; }
-.signal-panel:nth-of-type(4) canvas { height: 240px; }
 @media (prefers-reduced-motion: reduce) { .overlay-led.starting { animation: none; } }
 /* Personalize: card height follows its content and the window is sized to fit it (BeamNGOverlay); the page scrolls only past screen height. */
 .beamng-overlay-card.personalizing { min-height: 0; gap: 10px; }
@@ -279,8 +266,12 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .overlay-personalize .search-dialog { width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .overlay-personalize .search-dialog-header { position: static; padding: 0 0 6px; border: 0; background: transparent; }
 .overlay-personalize .search-dialog-header h2 { display: none; } .overlay-personalize .search-dialog-header { justify-content: flex-end; }
-.overlay-personalize .search-close { width: 38px; height: 38px; border-radius: 8px; background: rgb(245 107 107 / 14%); }
+.overlay-personalize .search-close { width: 28px; height: 28px; border-radius: 6px; padding: 0; display: grid; place-items: center; background: rgb(245 107 107 / 14%); }
 .overlay-personalize .search-close:hover:not(:disabled) { background: rgb(245 107 107 / 28%); }
+.overlay-personalize .search-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
+.search-dialog-header .search-close { width: 32px; height: 32px; border-radius: 6px; padding: 0; display: grid; place-items: center; }
+.search-dialog-header .search-close .x-icon { width: 18px; height: 18px; stroke-width: 2.5; }
+.search-dialog-header .search-close:hover:not(:disabled) { background: rgb(245 107 107 / 18%); }
 .overlay-personalize .search-dialog-header p { font-size: 10px; }
 .overlay-personalize .search-content { display: block; padding: 0; }
 .overlay-personalize .search-content > section + section { margin-top: 8px; }
@@ -451,8 +442,12 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .lab-seg button { border-radius: 0 !important; margin-left: -1px; }
 .lab-seg button:first-child { border-radius: 5px 0 0 5px !important; margin-left: 0; }
 .lab-seg button:last-child { border-radius: 0 5px 5px 0 !important; }
+.lab-seg button:hover { position: relative; z-index: 2; }
+.lab-seg button.active,
+.lab-seg button[aria-pressed="true"] { position: relative; z-index: 1; border-color: var(--accent) !important; background: #3a3a3a !important; color: #ececec !important; }
 .lab-seg-wide { display: flex; margin-bottom: 10px; } .lab-seg-wide button { flex: 1; }
-.lab button[aria-pressed="true"] { background: #3a3a3a; }
+.lab button[aria-pressed="true"],
+.lab button.active { background: #3a3a3a; border-color: var(--accent); color: #ececec; }
 .lab-volume { display: flex; align-items: center; gap: 6px; color: var(--muted); font: 11px var(--font-mono); } .lab-volume input { width: 90px; }
 .lab-error { color: #ffa8a8; }
 .lab-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 16px; align-items: start; }
@@ -493,9 +488,6 @@ body.dpad-cursor-active .dashboard-rail button:focus {
 .lab-note { color: var(--muted); font-size: 12px; }
 .lab-scope { display: grid; gap: 2px; margin: 0 0 6px; } .lab-scope canvas { width: 100%; height: 110px; border-radius: 4px; background: #101010; }
 .lab-scope figcaption { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
-.lab-scope-freeze { min-height: 18px !important; padding: 0 6px !important; border: 1px solid var(--line) !important; border-radius: 3px !important; background: #202020 !important; color: var(--fg) !important; font-size: 9px !important; font-family: var(--font-mono) !important; cursor: pointer; text-transform: uppercase; }
-.lab-scope-freeze:hover { border-color: var(--accent) !important; }
-.lab-scope-freeze.active { background: var(--accent) !important; color: var(--bg) !important; border-color: var(--accent) !important; }
 .lab-scope-spectrum canvas { height: 80px; } .lab-scope-waveform canvas { height: 64px; }
 /* Right side compact: every graph fits one screen without scrolling. */
 .lab-right .lab-panel { padding: 8px 10px; }
@@ -654,17 +646,10 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .sound-profile-row b { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #f1f1f1; box-shadow: 0 0 0 3px rgb(0 0 0 / 35%); }
 .overlay-personalize .sound-profile-row { font-size: 10px; grid-template-columns: 4.6em minmax(50px, 1fr) 4.6em; }
 .final-graphs { display: grid; gap: 6px; width: 100%; max-width: 420px; margin: 10px auto 0; }  /* wave and spectrogram of the final sound, after the session */
-.source-comparison-header .search-close { flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px; padding: 0; display: grid; place-items: center; }
-.overlay-personalize .search-dialog-header { display: none; }  /* the X now sits in the comparison section; the header would be an empty row */
-.source-comparison-header .search-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
 /* Header row: the count never gets squeezed; the buttons and the Now playing / Preparing text share what is left and the text is cut with … instead of overlapping the count. */
 .source-comparison-header > div:first-child { flex-shrink: 0; }
 .source-comparison-header > div:nth-child(2) { flex: 1 1 0; flex-wrap: nowrap; justify-content: flex-end; min-width: 0; }
 .source-comparison-header > div:nth-child(2) > button { flex-shrink: 0; }
-.thanks-close { position: absolute; top: 0; right: 0; }  /* the X sits in the saved section's top right */
-/* One small X everywhere: the Personalize X (comparison header or saved section) and the overlay's close X in the card's top right corner. */
-.thanks-close .search-close { width: 28px; height: 28px; padding: 0; border-radius: 6px; display: grid; place-items: center; }
-.thanks-close .search-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
 .beamng-overlay-close { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 6px; }
 .beamng-overlay-close .x-icon { width: 14px; height: 14px; stroke-width: 2.5; }
 .beamng-overlay-card:not(.personalizing) .beamng-overlay-header { padding-right: 30px; }  /* room for the corner X */
@@ -675,3 +660,9 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .overlay-title-row .overlay-modes-next:hover:not(:disabled) { background: rgb(255 255 255 / 10%); }
 .overlay-title-row .overlay-modes-next:disabled { opacity: .45; cursor: default; }
 .overlay-title-row .overlay-modes-next small { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+
+.lab-space{margin-top:12px}.lab-space summary{cursor:pointer;font-weight:600}.lab-table{border-collapse:collapse;margin:10px 0;font-size:12px}.lab-table caption{text-align:left;color:#a3a3a3;margin-bottom:4px}.lab-table th,.lab-table td{padding:3px 10px;border-bottom:1px solid #404040;text-align:left}
+
+.star-rating{display:flex;justify-content:space-between;width:100%;max-width:340px;margin:16px auto 0}.star{background:none;border:0;font-size:34px;line-height:1;color:#525252;cursor:pointer;padding:0 2px}.star.on{color:#fbbf24}.star:focus-visible{outline:2px solid #fbbf24;outline-offset:2px;border-radius:4px}.star-ends{display:flex;justify-content:space-between;width:100%;max-width:340px;margin:6px auto 0;font-size:12px;color:#a3a3a3}
+
+.last-note{display:block;width:100%;margin-top:4px;padding:6px 8px;background:#171717;color:#e5e5e5;border:1px solid #404040;border-radius:6px;font:inherit;resize:vertical}

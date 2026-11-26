@@ -544,14 +544,18 @@ class TuningDiscoveryTest(unittest.TestCase):
                 if r['base']['start']=='pure':self.assertEqual(r['base']['character'],0)
             d.feedback(choice=answer(ra,rb))
         return d
-    def test_session_follows_taste_and_ends_with_yes_no(self):
+    def test_session_follows_taste_and_ends_with_a_rating(self):
         taste=lambda r:2*(r['base']['start']=='dark')+(r['base']['pitch']>0)
         d=self.run_session(lambda a,b:'A' if taste(a)>taste(b) else 'B' if taste(b)>taste(a) else 'good',motion='evolving')
         self.assertEqual((d.stage,d.completed),('done',20))
         self.assertEqual(d.candidates[d.finalists[0]]['recipe']['base']['start'],'dark')
-        with self.assertRaises(ValueError):d.accept(True)  # no final sound yet
-        d.finish(d.finalists[0]);d.accept(False)
-        data=d.export();self.assertEqual((data['final_acceptable'],data['motion']),(False,'evolving'))
+        with self.assertRaises(ValueError):d.rate(5)  # no final sound yet
+        d.finish(d.finalists[0])
+        for bad in (0,8,True,4.5,'5'):
+            with self.assertRaises(ValueError):d.rate(bad)
+        with self.assertRaises(ValueError):d.rate(5,comment=3)
+        d.rate(5,' 低音がもう少し欲しい ')
+        data=d.export();self.assertEqual((data['final_rating'],data['final_comment'],data['motion']),(5,'低音がもう少し欲しい','evolving'))
         d.close()
     def test_first_pair_chooses_rising_or_evolving(self):
         from experiment.source_search import TuningDiscovery

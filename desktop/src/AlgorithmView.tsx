@@ -103,6 +103,27 @@ function SoundMap({ session, step }: { session: AlgorithmSession; step: number }
   </div>
 }
 
+// Thank-you page: every sound heard as a grey dot, the final sound as one big dot. Nothing else.
+export function FinalMap({ session }: { session: AlgorithmSession }) {
+  const t = useT(), heard = [...new Set(session.history.flatMap(row => row.pair))]
+  const pts = heard.flatMap(id => { const b = blocksOf(session.candidates[id]); return b ? [{ id, b }] : [] })
+  const final = pts.find(p => p.id === session.final)
+  if (!final) return null
+  const W = 360, H = 220, L = 40, R = 12, T = 10, B = 28
+  const lo = Math.min(...pts.map(p => p.b.brightness)) - .05, hi = Math.max(...pts.map(p => p.b.brightness)) + .05
+  const x = (pitch: number) => L + (pitch + .5) / 5 * (W - L - R), y = (br: number) => T + (1 - (br - lo) / (hi - lo)) * (H - T - B)
+  return <div className="algo-block"><h4>{t('Where your sound is')}</h4>
+    <svg viewBox={`0 0 ${W} ${H}`} className="algo-map" role="img" aria-label={t('Sounds heard by pitch and brightness')}>
+      {PITCH_HZ.map((hz, i) => <g key={hz}><line x1={x(i)} x2={x(i)} y1={T} y2={H - B} className="algo-grid" /><text x={x(i)} y={H - 12} className="algo-axis" textAnchor="middle">{hz}</text></g>)}
+      <text x={W / 2} y={H - 1} className="algo-axis" textAnchor="middle">{t('pitch (Hz)')}</text>
+      <text x={10} y={T + 8} className="algo-axis">{t('brighter')}</text><text x={10} y={H - B - 2} className="algo-axis">{t('softer')}</text>
+      {pts.filter(p => p.id !== final.id).map(p => <circle key={p.id} cx={x(p.b.pitch)} cy={y(p.b.brightness)} r={4} fill="#737373" opacity={.6} />)}
+      <circle cx={x(final.b.pitch)} cy={y(final.b.brightness)} r={9} fill="#fbbf24" stroke="#fff" strokeWidth={2} />
+    </svg>
+    <p className="algo-legend"><span><i style={{ background: '#fbbf24' }} />{t('Your sound')}</span><span><i style={{ background: '#737373' }} />{t('Other sounds you heard')}</span></p>
+  </div>
+}
+
 function Weights({ session }: { session: AlgorithmSession }) {
   const t = useT(), w = session.preference_model?.feature_weights, sd = session.preference_model?.feature_sd
   if (!w || !sd) return null
