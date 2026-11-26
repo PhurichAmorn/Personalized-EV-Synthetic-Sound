@@ -16,7 +16,7 @@ export type HistoryPreview = { session?: string; candidate?: string; status?: 'r
 type Row = { id: string; created: string; completed: number; final: string | null; finalists: number; done: boolean; rating?: number | null; participant?: boolean; starred?: boolean }
 type Saved = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; ratings?: number[]; audio_descriptor?: number[]; origin?: { kind?: string; move?: string; motion?: string; summary?: string } }
 type Session = {
-  id: string; created: string; final: string | null; final_rating?: number | null; participant?: boolean; final_comment?: string
+  id: string; created: string; final: string | null; final_rating?: number | null; participant?: boolean; researcher_note?: string; final_comment?: string
   policy?: string; preference_model?: { feature_weights?: Record<string, number>; feature_sd?: Record<string, number> }
   // rating_source: 'rating-1-7' (legacy and normal pairs) or 'choice' (parent check). Sessions before 2026-11-10 have no rating_source and are 1-7.
   history: { pair: string[]; ratings?: { A: number; B: number }; rating_source?: 'rating-1-7' | 'choice'; choice?: 'A' | 'B' | 'equal' | 'good' | 'neither'; winner?: string | null; origin_by_candidate?: Record<string, string> }[]
@@ -93,6 +93,13 @@ export default function TraceHistory({ command, preview }: { command: Command; p
     void traceLab.play(id, liveStems(recipe), fx, plain.rootHz, 'simulated', () => ({ input: undefined, stale: true }), simulatedDrive, mode, travel).then(started => { if (started) { setLivePlaying(true); setPlayingId(id) } })
   }
   const star = async (id: string, value: boolean) => { await command('historyStar', { id, value }); void refresh() }
+  const [note, setNote] = useState(''), [editing, setEditing] = useState(false)
+  useEffect(() => { setNote(session?.researcher_note ?? ''); setEditing(false) }, [session?.id])
+  // Researcher edits of the saved session: the Participant/Test tag and a note (saved when the box loses focus).
+  const meta = async (change: { participant?: boolean; note?: string }) => {
+    if (!session) return
+    await command('historyMeta', { id: session.id, ...change }); setSession({ ...session, ...('note' in change ? { researcher_note: change.note } : change) }); void refresh()
+  }
   const starred = !!rows.find(row => row.id === session?.id)?.starred
   const remove = async () => {
     if (!session) return
@@ -120,13 +127,21 @@ export default function TraceHistory({ command, preview }: { command: Command; p
     </section>
     <section className="panel history-trace" aria-label="Session trace">
       {!session ? <p className="text-neutral-400">{t('Select a session to inspect.')}</p> : <>
-        <div className="trace-panel-head"><div><h2 className="text-xl">{when(session.created)}</h2><p className="mt-1 text-neutral-400">{t('{n} rated pairs · {m} final-round pairs', { n: session.history.length, m: session.playoff_history.length })}{session.final_rating != null && ` · ${t('Satisfaction {n}/7', { n: session.final_rating })}`}</p>{session.final_comment && <p className="mt-1 text-sm text-neutral-300" lang="ja">{session.final_comment}</p>}</div>
+        <div className="trace-panel-head"><div><h2 className="text-xl">{when(session.created)}</h2><p className="mt-1 text-neutral-400">{t('{n} rated pairs · {m} final-round pairs', { n: session.history.length, m: session.playoff_history.length })}{session.final_rating != null && ` · ${t('Satisfaction {n}/7', { n: session.final_rating })}`}</p>{session.researcher_note && <p className="mt-1 text-sm text-neutral-300"><strong>{t('Note')}:</strong> {session.researcher_note}</p>}{session.final_comment && <p className="mt-1 text-sm text-neutral-300" lang="ja">{session.final_comment}</p>}</div>
           <div className="flex gap-2">
+            <button className="icon-button" aria-pressed={editing} title={t('Edit tag and notes')} aria-label={t('Edit tag and notes')} onClick={() => setEditing(!editing)}>⋯</button>
             <button className={'icon-button star-button' + (starred ? ' on' : '')} aria-pressed={starred} title={t(starred ? 'Starred: kept at the top. Click to unstar.' : 'Star to mark this session as one to keep')} aria-label={t('Star session')} onClick={() => void star(session.id, !starred)}>{starred ? '★' : '☆'}</button>
             {confirmDelete ? <><button className="control" onClick={() => setConfirmDelete(false)}>{t('Keep')}</button><button className="control border-red-500" onClick={() => void remove()}>{t(starred ? 'Delete starred session' : 'Delete')}</button></>
               : <button className="icon-button danger" title={t('Delete session')} aria-label={t('Delete session')} onClick={() => setConfirmDelete(true)}><img src="/icons/trash.svg" alt="" /></button>}
           </div>
         </div>
+        {editing && <div className="trace-edit" role="group" aria-label={t('Edit session')}>
+          <fieldset><legend>{t('Tag')}</legend>
+            {([[true, 'Participant'], [false, 'Test']] as const).map(([value, name]) => <label key={name}><input type="radio" name="session-tag" checked={!!session.participant === value} onChange={() => void meta({ participant: value })} /> <span className={value ? 'tag-participant' : 'tag-test'}>{t(name)}</span></label>)}
+          </fieldset>
+          <label htmlFor="session-note">{t('Note')}</label>
+          <textarea id="session-note" className="session-note" rows={1} aria-label={t('Note')} value={note} onChange={e => setNote(e.target.value)} onBlur={() => { if (note !== (session.researcher_note ?? '')) void meta({ note }) }} />
+        </div>}
         <AlgorithmView key={session.id} session={session} playingId={playingId} onPlay={id => { const c = session.candidates[id]; if (playingId === id) stopLive(); else if (c && isLive(c.recipe)) { stopLive(); playLive(id, c.recipe as LiveRecipe) } }} />
         <div className="history-steps history-tree">
           {(() => {

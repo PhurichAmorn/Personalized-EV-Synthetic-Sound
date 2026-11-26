@@ -691,3 +691,6 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .overlay-personalize .overlay-only-close { position: absolute; top: 8px; right: 8px; z-index: 2; }
 .overlay-personalize .source-comparison-header { padding-right: 34px; min-height: 28px; }
 .start-session-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+.session-note{width:100%;resize:vertical;padding:8px;border-radius:6px;border:1px solid #404040;background:#171717;color:inherit;font:inherit}
+.trace-edit{margin:8px 0;padding:10px;border:1px solid #404040;border-radius:8px;display:grid;gap:6px}.trace-edit fieldset{display:flex;gap:14px;align-items:center;border:0;padding:0}.trace-edit legend{float:left;margin-right:10px;color:#a3a3a3}

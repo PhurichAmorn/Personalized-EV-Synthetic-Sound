@@ -148,6 +148,10 @@ class DesktopBridge:
         if name == 'historyList':return self.history.listing()
         if name == 'historyGet':return self.history.get(self._text(payload,'id'))
         if name == 'historyStar':return self.history.star(self._text(payload,'id'),self._bool(payload,'value'))
+        if name == 'historyMeta':
+            flag, note = payload.get('participant'), payload.get('note')
+            if flag is not None and not isinstance(flag, bool) or note is not None and not isinstance(note, str):raise ValueError('Invalid history field')
+            return self.history.set_meta(self._text(payload,'id'),flag,note)
         if name == 'mySound':self.history.choose(self._text(payload,'id'));return self.snapshot()
         if name == 'historyDelete':return self.history.delete(self._text(payload,'id'))
         if name == 'historyPreview':self.history.render(self._text(payload,'id'),self._text(payload,'candidate'));return self.snapshot()

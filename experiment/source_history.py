@@ -9,11 +9,11 @@ ID=re.compile(r'[0-9a-f]{32}')
 
 class SourceHistory:
     def __init__(self,discovery,root=ROOT):
-        self.discovery=discovery;self.root=root;self.session=None;self.participant=False;self.vehicle=None;self.source=None;self.vehicle_changes=[];self.created=None
+        self.discovery=discovery;self.root=root;self.session=None;self.participant=False;self.note='';self.vehicle=None;self.source=None;self.vehicle_changes=[];self.created=None
         self.picked=None;self.preview={};self.keys=set();self.token=0;self.lock=threading.Lock()
         self._refresh()
     def begin(self,participant=False,vehicle=None,source=None):
-        self.vehicle=vehicle;self.source=source;self.vehicle_changes=[];self.participant=participant;self.session=uuid.uuid4().hex;self.created=datetime.now().astimezone().isoformat(timespec='seconds')  # computer's own clock and zone
+        self.vehicle=vehicle;self.source=source;self.vehicle_changes=[];self.participant=participant;self.note='';self.session=uuid.uuid4().hex;self.created=datetime.now().astimezone().isoformat(timespec='seconds')  # computer's own clock and zone
     def note_vehicle(self,vehicle):
         """The simulator car was switched during the running session: keep the change (with the number of comparisons done so far)."""
         if self.session and vehicle!=self.vehicle:
@@ -22,7 +22,7 @@ class SourceHistory:
         """Write the running session. Called after every command that changes it; sessions with no saved rating are skipped."""
         if not self.session or not self.discovery.completed:return
         self.root.mkdir(parents=True,exist_ok=True)
-        data={**self.discovery.export(),'id':self.session,'created':self.created,'participant':self.participant,'vehicle':self.vehicle,'source_mode':self.source,'vehicle_changes':self.vehicle_changes}
+        data={**self.discovery.export(),'id':self.session,'created':self.created,'participant':self.participant,'researcher_note':self.note,'vehicle':self.vehicle,'source_mode':self.source,'vehicle_changes':self.vehicle_changes}
         for candidate in data['candidates'].values():candidate.pop('urls',None);candidate.pop('traces',None)  # cache paths; previews are regenerated
         temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{self.session}.json')
         if data.get('final'):self.picked=self.session  # a final pick made in this run becomes the driver's sound
@@ -68,6 +68,14 @@ class SourceHistory:
         self.root.mkdir(parents=True,exist_ok=True)
         temp=self.root/'starred.tmp';temp.write_text(''.join(f'{i}\n' for i in sorted(ids)));temp.replace(self.root/'starred.txt')
         return on
+    def set_meta(self,ident,participant=None,note=None):
+        """Researcher edits of a saved session: the Participant/Test tag and a free-text note. A running session keeps them in memory too, so its next autosave does not undo them."""
+        data=self._read(ident)
+        if participant is not None:data['participant']=participant
+        if note is not None:data['researcher_note']=note
+        if ident==self.session:self.participant=bool(data.get('participant'));self.note=data.get('researcher_note','')
+        temp=self.root/f'{ident}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{ident}.json')
+        return True
     def get(self,ident):return self._read(ident)
     def delete(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')

@@ -25,6 +25,21 @@ class SourceHistoryTest(unittest.TestCase):
         (row,) = self.history.listing()
         self.assertTrue(row['participant'])
 
+    def test_edit_tag_and_note(self):
+        self.history.begin(True)
+        self.discovery.start()
+        while self.discovery.busy:
+            time.sleep(.02)
+        self.discovery.feedback({'A': 5, 'B': 3}, {})
+        self.history.save()
+        (row,) = self.history.listing()
+        self.history.set_meta(row['id'], participant=False, note='pilot, car B')
+        self.history.save()  # an autosave of the running session must keep the edit
+        (row,) = self.history.listing()
+        self.assertFalse(row['participant'])
+        self.assertEqual(self.history.get(row['id'])['researcher_note'], 'pilot, car B')
+        self.assertTrue(self.history.get(row['id'])['note'])  # the search's own description is untouched
+
     def test_autosave_list_preview_delete(self):
         self.history.begin()
         self.discovery.start()
