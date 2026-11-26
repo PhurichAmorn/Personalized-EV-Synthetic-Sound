@@ -15,6 +15,16 @@ class SourceHistoryTest(unittest.TestCase):
         self.history = SourceHistory(self.discovery, pathlib.Path(tempfile.mkdtemp()))
         self.addCleanup(self.discovery.close)
 
+    def test_participant_label(self):
+        self.history.begin(True)
+        self.discovery.start()
+        while self.discovery.busy:
+            time.sleep(.02)
+        self.discovery.feedback({'A': 5, 'B': 3}, {})
+        self.history.save()
+        (row,) = self.history.listing()
+        self.assertTrue(row['participant'])
+
     def test_autosave_list_preview_delete(self):
         self.history.begin()
         self.discovery.start()
@@ -27,6 +37,8 @@ class SourceHistoryTest(unittest.TestCase):
         (row,) = self.history.listing()
         self.assertEqual(row['completed'], 1)
         self.assertIsNone(row['rating'])  # not rated yet
+        self.assertFalse(row['participant'])  # begin() default: a test session
+        self.assertIs(self.history.get(row['id'])['participant'], False)
         self.assertTrue(row['created'].count(':') >= 2)
         saved = self.history.get(row['id'])
         ident = saved['history'][0]['pair'][0]

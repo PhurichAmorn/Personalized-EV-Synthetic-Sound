@@ -9,16 +9,16 @@ ID=re.compile(r'[0-9a-f]{32}')
 
 class SourceHistory:
     def __init__(self,discovery,root=ROOT):
-        self.discovery=discovery;self.root=root;self.session=None;self.created=None
+        self.discovery=discovery;self.root=root;self.session=None;self.participant=False;self.created=None
         self.picked=None;self.preview={};self.keys=set();self.token=0;self.lock=threading.Lock()
         self._refresh()
-    def begin(self):
-        self.session=uuid.uuid4().hex;self.created=datetime.now().astimezone().isoformat(timespec='seconds')  # computer's own clock and zone
+    def begin(self,participant=False):
+        self.participant=participant;self.session=uuid.uuid4().hex;self.created=datetime.now().astimezone().isoformat(timespec='seconds')  # computer's own clock and zone
     def save(self):
         """Write the running session. Called after every command that changes it; sessions with no saved rating are skipped."""
         if not self.session or not self.discovery.completed:return
         self.root.mkdir(parents=True,exist_ok=True)
-        data={**self.discovery.export(),'id':self.session,'created':self.created}
+        data={**self.discovery.export(),'id':self.session,'created':self.created,'participant':self.participant}
         for candidate in data['candidates'].values():candidate.pop('urls',None);candidate.pop('traces',None)  # cache paths; previews are regenerated
         temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{self.session}.json')
         if data.get('final'):self.picked=self.session  # a final pick made in this run becomes the driver's sound
@@ -47,7 +47,7 @@ class SourceHistory:
     def listing(self):
         rows=[]
         for path in self.root.glob('*.json'):
-            try:d=json.loads(path.read_text(encoding='utf8'));rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists']),'rating':d.get('final_rating')})
+            try:d=json.loads(path.read_text(encoding='utf8'));rows.append({'id':d['id'],'created':d['created'],'completed':len(d['history']),'final':d['final'],'finalists':len(d['finalists']),'done':bool(d['finalists']),'rating':d.get('final_rating'),'participant':bool(d.get('participant'))})
             except (OSError,ValueError,KeyError):continue
         starred=self.starred()
         for row in rows:row['starred']=row['id'] in starred

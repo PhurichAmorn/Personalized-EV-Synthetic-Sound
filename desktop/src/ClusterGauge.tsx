@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useT } from './i18n'
 type Props = {
   kind: 'power' | 'speed'
   design?: 'circle'
@@ -48,6 +49,7 @@ function bandPath(kind: Props['kind'], start: number, end: number) {
 }
 
 function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, startupProgress = 0, startupBlend = 0, design }: Props) {
+  const t = useT()
   const shownSpeed = speed + (maximum * startupProgress - speed) * startupBlend
   const shownPower = power + (startupProgress - power) * startupBlend
   const shownCharge = charge * (1 - startupBlend)
@@ -86,7 +88,7 @@ function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, s
         return <text key={value} x={x} y={y + 4} className="circle-gauge-label">{value}</text>
       })}
       <text x="130" y="55" className="circle-gauge-caption">{isPower ? 'POWER' : 'SPEED'}</text>
-      {isPower && <text x="58" y="320" className="circle-gauge-regen-title" textAnchor="start">CHARGE</text>}
+      {isPower && <text x="58" y="320" className="circle-gauge-regen-title" textAnchor="start">{t('CHARGE')}</text>}
       <g className="circle-gauge-needle" transform={`rotate(${needleAngle} 130 215)`}>
         <path d="M 130 211.5 L 267 215 L 130 218.5 Z" fill={needleColor} />
         <path d="M 139 214.4 L 255 215 L 139 215.6 Z" fill="#f8f8f8" opacity=".9" />
@@ -125,7 +127,7 @@ function ClusterGauge({ kind, power = 0, charge = 0, speed = 0, maximum = 220, s
     })}
     {kind === 'power' && <>
       <line x1={position(kind, powerZero) - 24} x2={position(kind, powerZero) + 24} y1={powerZero} y2={powerZero} stroke="#e8e8e8" strokeWidth="1" />
-      <text x="170" y={powerZero + 10} fill={shownCharge > 0 ? '#848484' : '#848484'} fontSize="9">CHARGE</text>
+      <text x="170" y={powerZero + 10} fill={shownCharge > 0 ? '#848484' : '#848484'} fontSize="9">{t('CHARGE')}</text>
       {[25, 50, 75, 100].map(value => {
         const y = powerZero + value / 100 * (bottom - powerZero)
         const x = position(kind, y) + 10

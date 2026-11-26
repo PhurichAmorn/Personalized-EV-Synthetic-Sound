@@ -257,13 +257,13 @@ export default function App({ overlay = false }: { overlay?: boolean }) {
 
   return <PersonalizeCloseContext.Provider value={() => state?.sourceDiscovery?.active ? setLeaving(true) : leaveLab()}><div className={overlay ? 'beamng-overlay-root' : 'dashboard-wrapper'}>
     <LanguageGate />
-    {closeRequested && (state?.search.active ? <Confirm title="Close active search?" text="Save progress, discard this session, or keep working.">
-      <button className="control" onClick={() => setCloseRequested(false)}>Cancel</button><button className="control" onClick={() => void closeWithSearch(false)}>Save and close</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>Discard and close</button>
+    {closeRequested && (state?.search.active ? <Confirm title={t('Close active search?')} text={t('Save progress, discard this session, or keep working.')}>
+      <button className="control" onClick={() => setCloseRequested(false)}>{t('Cancel')}</button><button className="control" onClick={() => void closeWithSearch(false)}>{t('Save and close')}</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>{t('Discard and close')}</button>
     </Confirm> : !sourceTrialPresent ? <Confirm title={t('Close EV Sound Lab?')} text={t('The overlay closes and the sound stops.')}>
       <button className="control" autoFocus onClick={() => setCloseRequested(false)}>{t('Stay')}</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>{t('Close')}</button>
-    </Confirm> : <Confirm title="End session and close?" text={`Your ${state?.sourceDiscovery?.completed ?? 0} rated pairs are already saved to Sound trace. Closing ends this session: it cannot be resumed, and the pair you are rating now is lost.`}>
+    </Confirm> : <Confirm title={t('End session and close?')} text={t('Your {n} rated pairs are already saved to Sound trace. Closing ends this session: it cannot be resumed, and the pair you are rating now is lost.', { n: state?.sourceDiscovery?.completed ?? 0 })}>
       {/* Closing ends a discovery session: it lives in memory only, so it cannot be resumed after the app restarts. */}
-      <button className="control" autoFocus onClick={() => setCloseRequested(false)}>Keep working</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>End session and close</button>
+      <button className="control" autoFocus onClick={() => setCloseRequested(false)}>{t('Keep working')}</button><button className="control border-red-500" onClick={() => void closeWithSearch(true)}>{t('End session and close')}</button>
     </Confirm>)}
     {leaving && <Confirm title={t('Leave the session?')} text={t('Pause keeps your answers so far: Resume session continues it. End stops it without picking a final sound.')}>
       <button className="control" autoFocus onClick={() => setLeaving(false)}>{t('Keep working')}</button><button className="control" onClick={() => { setLeaving(false); leaveLab() }}>{t('Pause')}</button><button className="control border-red-500" onClick={() => { setLeaving(false); leaveLab(); void command('sourceDiscoveryEnd') }}>{t('End session')}</button>

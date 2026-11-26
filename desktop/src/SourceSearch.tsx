@@ -91,6 +91,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const playFinal = (candidate: DiscoveryCandidate) => { auditionSequence.current++; if (nowPlaying?.id !== candidate.id || !playing) void onAudition(candidate, 'driving'); setNowPlaying({ id: candidate.id, kind: 'final' }) }
   // Pair 1 asks Rising vs Evolving (same sound), so the session starts with one button.
   const [menuOpen, setMenuOpen] = useState(false)
+  const [participant, setParticipant] = useState(false)  // ticked before Start: the saved session is labelled as a real participant's
   const [newSession, setNewSession] = useState(false)  // after a finished session only New session shows; clicking it brings back the search list
   const begin = async () => {
     setNewSession(false); setMenuOpen(false); setSessionStarting(true); setError('')
@@ -98,7 +99,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     try {
       const vehicle = await onCommand('vehicleStart') as { running?: boolean; starting?: boolean } | null
       if (vehicle ? (!vehicle.running && !vehicle.starting) : !running) return
-      onModeChange('rise'); await onCommand('sourceDiscoveryStart', { search })
+      onModeChange('rise'); await onCommand('sourceDiscoveryStart', { search, participant }); setParticipant(false)
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'Could not start session.')
     } finally {
@@ -150,17 +151,18 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   )
   return <div hidden={hidden} className="search-content source-search-content" aria-label="Source discovery">
     <section className="panel p-3 source-search-comparison">
-      <div className="source-comparison-header"><div className="source-session-summary">{discovery && !saved && <span>{final ? t('Final round {n} / {total} · ', { n: (discovery.playoffDone ?? 0) + 1, total: discovery.playoffTotal ?? 6 }) : ''}{t('{n} / {total} comparisons', { n: Math.min((discovery.step ?? discovery.completed) + (discovery.active ? 1 : 0), discovery.totalSteps ?? 20), total: discovery.totalSteps ?? 20 })}</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery && !discovery.active && (!discovery.completed || newSession) && <button type="button" className="control" aria-label="Search" aria-haspopup="listbox" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)} onKeyDown={event => { if (event.key === 'Escape') setMenuOpen(false) }}>{t(SEARCHES.find(([value]) => value === search)?.[1] ?? '')} <span aria-hidden="true">{menuOpen ? '▴' : '▾'}</span></button>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy || sessionStarting} onClick={() => discovery.completed && !newSession ? setNewSession(true) : void begin()}>{sessionStarting ? t('Starting…') : discovery.completed && !newSession ? t('New session') : t('Start session')}</button>}{discovery && ((nowPlaying && playing) || preparing) && <div className="ml-auto flex min-w-0 items-center gap-x-3 whitespace-nowrap">{nowPlaying && playing && <p className="min-w-0 truncate text-sm text-neutral-200" role="status">{t('▶ Now playing:')} <strong>{nowPlayingText}</strong></p>}{preparing && <span className="spinner shrink-0" role="status" aria-label={t('Preparing…')} />}</div>}</div></div>
+      <div className="source-comparison-header"><div className="source-session-summary">{discovery && !saved && <span>{final ? t('Final round {n} / {total} · ', { n: (discovery.playoffDone ?? 0) + 1, total: discovery.playoffTotal ?? 6 }) : ''}{t('{n} / {total} comparisons', { n: Math.min((discovery.step ?? discovery.completed) + (discovery.active ? 1 : 0), discovery.totalSteps ?? 20), total: discovery.totalSteps ?? 20 })}</span>}</div><div className="flex flex-wrap items-center gap-2">{discovery && !discovery.active && (!discovery.completed || newSession) && <button type="button" className="control" aria-label="Search" aria-haspopup="listbox" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)} onKeyDown={event => { if (event.key === 'Escape') setMenuOpen(false) }}>{t(SEARCHES.find(([value]) => value === search)?.[1] ?? '')} <span aria-hidden="true">{menuOpen ? '▴' : '▾'}</span></button>}{discovery && !discovery.active && (!discovery.completed || newSession) && <label className="participant-check"><input type="checkbox" checked={participant} disabled={sessionStarting} onChange={e => setParticipant(e.target.checked)} /> {t('Participant session')}</label>}{discovery && !discovery.active && <button type="button" className="control" disabled={discovery.busy || sessionStarting} onClick={() => discovery.completed && !newSession ? setNewSession(true) : void begin()}>{sessionStarting ? t('Starting…') : discovery.completed && !newSession ? t('New session') : t('Start session')}</button>}{discovery && ((nowPlaying && playing) || preparing) && <div className="ml-auto flex min-w-0 items-center gap-x-3 whitespace-nowrap">{nowPlaying && playing && <p className="min-w-0 truncate text-sm text-neutral-200" role="status">{t('▶ Now playing:')} <strong>{nowPlayingText}</strong></p>}{preparing && <span className="spinner shrink-0" role="status" aria-label={t('Preparing…')} />}</div>}</div></div>
       {discovery && !discovery.active && (!discovery.completed || newSession) && menuOpen && <ul className="search-dropdown-list" role="listbox" aria-label="Search">{SEARCHES.map(([value, label]) => <li key={value} role="option" aria-selected={search === value}><button type="button" className={search === value ? 'selected' : ''} onClick={() => { setSearch(value); setMenuOpen(false) }}>{t(label)}</button></li>)}</ul>}
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
       {discovery && !discovery.active && !saved ? <p className="mt-3 text-sm text-neutral-300" role="status">{newSession ? t('Start a session to compare sources.') : discovery.finalists?.length ? t('Session complete · {n} comparisons.', { n: discovery.step ?? discovery.completed }) + (discovery.final ? '' : t(' Choose your final sound from your shortlist below.')) : discovery.completed ? t('Session finished after {n} comparisons.', { n: discovery.completed }) : t('Start a session to compare sources.')}</p> : null}
       {saved && <div className="source-search-thanks relative" role="status" aria-label="Final sound saved">
-        <div className="thanks-check" aria-hidden="true">✓</div>
-        <h3 className="text-lg">{t('Saved · thank you!')}</h3>
+        <div className="thanks-head"><div className="thanks-check" aria-hidden="true">✓</div><h3 className="text-lg">{t('Saved · thank you!')}</h3></div>
         <p className="mt-1 text-xs text-neutral-400">{describeShort(discovery.finalists!.find(c => c.id === discovery.final)?.recipe)}</p>
-        <SoundProfile recipe={discovery.finalists!.find(c => c.id === discovery.final)?.recipe} />
-        {route && !document.documentElement.classList.contains('overlay-window') && <FinalMap session={route} />}
+        <div className="thanks-body">
+          <SoundProfile recipe={discovery.finalists!.find(c => c.id === discovery.final)?.recipe} />
+          {route && !document.documentElement.classList.contains('overlay-window') && <FinalMap session={route} />}
+        </div>
       </div>}
       {discovery?.active ? <>
         {final && <p className="mt-3 text-sm text-neutral-300" role="status">{t('Final round: your four finalists, compared head to head. Pick the one you prefer.')}</p>}

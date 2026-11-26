@@ -49,10 +49,11 @@ function InputMeter({ label, level }: { label: 'BRAKE' | 'THROTTLE'; level: numb
 
 // One bar for power and charge: zero sits 28% from the left, charge fills leftwards, power fills rightwards.
 function PowerChargeBar({ power, charge }: { power: number; charge: number }) {
+  const t = useT()
   const clamp = (value: number) => Math.max(0, Math.min(1, value))
   const charging = charge > 0
   return <div className="digital-power" role="img" aria-label={charging ? `Charging ${Math.round(clamp(charge) * 100)} percent` : `Power ${Math.round(clamp(power) * 100)} percent`}>
-    <div className="dp-head"><span className={charging ? 'on' : ''}>CHARGE</span><strong>{charging ? `${Math.round(clamp(charge) * 100)}%` : `${Math.round(clamp(power) * 100)}%`}</strong><span className={charging ? '' : 'on'}>POWER</span></div>
+    <div className="dp-head"><span className={charging ? 'on' : ''}>{t('CHARGE')}</span><strong>{charging ? `${Math.round(clamp(charge) * 100)}%` : `${Math.round(clamp(power) * 100)}%`}</strong><span className={charging ? '' : 'on'}>{t('POWER')}</span></div>
     <div className="dp-track">
       <b className="dp-charge" style={{ transform: `scaleX(${clamp(charge)})` }} />
       <b className="dp-power" style={{ transform: `scaleX(${charging ? 0 : clamp(power)})` }} />
@@ -141,11 +142,11 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
         <button className="header-sidebar" title={t('Toggle sidebar')} aria-label={t('Toggle sidebar')} onClick={() => setExpanded(!expanded)}><img src="/icons/panel-left.svg" alt="" /></button>
         <Brand sub="DRIVE SIMULATOR" />
         <div className="header-spacer" />
-        <span className="sound-caption">{state.sourceAudition ? 'GRANULAR' : t('SOUND')}</span>
+        <span className="sound-caption">{state.sourceAudition ? t('GRANULAR') : t('SOUND')}</span>
         <div className="theme-buttons" role="group" aria-label="Sound motion">
           {(['rise', 'evolving'] as const).map(mode => <div className="theme-option" key={mode}><button className={'theme-button' + (car.gs && car.mode === mode ? ' active' : '')} aria-pressed={car.gs && car.mode === mode} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onClick={() => car.select(mode)}>{t(mode === 'rise' ? 'Rising' : 'Evolving')}</button></div>)}
         </div>
-        {!!state.mySounds?.length && <select className="vehicle-selector" aria-label="GS sound: final pick of a session" title="GS sound" value={state.mySound?.session ?? ''} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('mySound', { id: event.target.value })}><option value="">Standard sound</option>{state.mySounds.map(s => <option key={s.session} value={s.session}>{s.created.slice(5, 16).replace('T', ' ')} · {s.label || 'sound'}</option>)}</select>}
+        {!!state.mySounds?.length && <select className="vehicle-selector" aria-label="GS sound: final pick of a session" title={t('GS sound')} value={state.mySound?.session ?? ''} disabled={state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('mySound', { id: event.target.value })}><option value="">{t('Standard sound')}</option>{state.mySounds.map(s => <option key={s.session} value={s.session}>{s.created.slice(5, 16).replace('T', ' ')} · {s.label || 'sound'}</option>)}</select>}
         <select className="vehicle-selector" aria-label="Vehicle" value={state.vehicle} disabled={state.running || state.search.active || state.soundSweepActive || !!state.sourceDiscovery?.active} onChange={event => onCommand('vehicle', { name: event.target.value })}>{state.vehicleNames.map(name => <option key={name}>{name}</option>)}</select>
         <button ref={customizeButton} className="display-customize-button" aria-label={t('Customize dashboard display')} aria-haspopup="dialog" aria-expanded={customizerOpen} onClick={() => setCustomizerOpen(true)}><span className="customize-light" /><span>{t('DISPLAY')}</span></button>
         <div className="info-holder">
@@ -180,7 +181,7 @@ export default function Dashboard({ state, error, onCommand, onPersonalize, onTr
           <div className="speed-reading"><span>{!state.running || state.starting ? '—' : Math.round(state.speed)}</span><small>km/h</small></div>
           {display === 'digital' && <PowerChargeBar power={state.power} charge={state.charge} />}
           {state.hasGears && <div className="gear-badge">{!state.running ? 'P' : state.starting ? '—' : state.gear}</div>}
-          <div className={'cluster-status ' + (state.running && !state.starting ? 'ready' : '')}>{status}</div>
+          <div className={'cluster-status ' + (state.running && !state.starting ? 'ready' : '')}>{t(status)}</div>
         </div>
         {display !== 'digital' && <ClusterGauge kind="speed" speed={state.speed} maximum={state.speedGaugeMaximum} startupProgress={startupProgress} startupBlend={startupBlend} design={display === 'classic' ? 'circle' : undefined} />}
       </section>}

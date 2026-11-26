@@ -666,3 +666,16 @@ select.control option { background: #1b1b1b; color: #f6f6f6; }
 .star-rating{display:flex;justify-content:space-between;width:100%;max-width:340px;margin:16px auto 0}.star{background:none;border:0;font-size:34px;line-height:1;color:#525252;cursor:pointer;padding:0 2px}.star.on{color:#fbbf24}.star:focus-visible{outline:2px solid #fbbf24;outline-offset:2px;border-radius:4px}.star-ends{display:flex;justify-content:space-between;width:100%;max-width:340px;margin:6px auto 0;font-size:12px;color:#a3a3a3}
 
 .last-note{display:block;width:100%;margin-top:4px;padding:6px 8px;background:#171717;color:#e5e5e5;border:1px solid #404040;border-radius:6px;font:inherit;resize:vertical}
+
+.participant-check{display:inline-flex;align-items:center;gap:6px;margin-right:10px;font-size:13px;color:#d4d4d4;cursor:pointer}
+.tag-participant,.tag-test{display:inline-block;margin-right:6px;padding:0 7px;border-radius:9px;font-size:11px;font-weight:600;color:#111}.tag-participant{background:#4ade80}.tag-test{background:#a3a3a3}
+.history-item .tag-participant,.history-item .tag-test{display:inline-block;margin-top:0;color:#111;font-size:11px}
+
+/* Saved screen: one compact block that fits without scrolling (title row, then profile and map side by side). */
+.source-search-thanks .thanks-head { display: flex; align-items: center; gap: 10px; }
+.source-search-thanks .thanks-head .thanks-check { margin: 0; }
+.thanks-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px 16px; width: 100%; align-items: center; margin-top: 4px; }
+.thanks-body .sound-profile { margin: 0 auto; }
+.thanks-body .algo-block { margin: 0; }
+.thanks-body .algo-block h4 { margin: 0 0 2px; font-size: 12px; }
+.thanks-body .algo-map { max-height: 150px; }

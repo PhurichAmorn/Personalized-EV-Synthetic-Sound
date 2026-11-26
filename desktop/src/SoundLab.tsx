@@ -1,3 +1,4 @@
+import { useT } from './i18n'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { State } from './App'
 import type { GranularMode } from './granularPlayer'
@@ -19,6 +20,7 @@ const logX = (hz: number) => Math.log(hz / 40) / Math.log(300)  // 40 Hz-12 kHz
 /** Sound Lab = listening bench and block builder: build a sound from the session's own blocks (or load your winner's blocks), hear it on the
  * simulated 22 s sweep (looped), in Rising or Evolving, and watch the graphs. Nothing is saved. */
 export default function SoundLab({ state, onCommand, onStart, stopToken }: { state: State; onCommand: (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void; onStart: () => void; stopToken: number }) {
+  const t = useT()
   const [player] = useState(() => new LabPlayer())
   const analyser = useRef<AnalyserNode | null>(null)
   const [mode, setMode] = useState<GranularMode>('rise')
@@ -164,11 +166,11 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
   }
   return <section className="lab" aria-label="Listening bench">
     <div className="lab-fixed">
-    <header className="lab-head"><div><small>LISTENING BENCH</small><h2>Sound Lab</h2></div>
+    <header className="lab-head"><div><small>{t('LISTENING BENCH')}</small><h2>{t('Sound Lab')}</h2></div>
       <div className="lab-transport">
-        <span className="lab-seg">{(['rise', 'evolving'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => setMode(item)}>{item === 'rise' ? 'Rising' : 'Evolving'}</button>)}</span>
-        <button type="button" disabled={!recipe} aria-pressed={playing} onClick={() => void (playing ? stop() : play())}>{playing ? 'Stop' : '▶ Sound sweep'}</button>
-        <label className="lab-volume">Vol<input type="range" min="0" max="1" step=".01" value={volume} onChange={event => setVolume(+event.target.value)} /></label>
+        <span className="lab-seg">{(['rise', 'evolving'] as const).map(item => <button key={item} type="button" className={mode === item ? 'active' : ''} aria-pressed={mode === item} onClick={() => setMode(item)}>{t(item === 'rise' ? 'Rising' : 'Evolving')}</button>)}</span>
+        <button type="button" disabled={!recipe} aria-pressed={playing} onClick={() => void (playing ? stop() : play())}>{t(playing ? 'Stop' : '▶ Sound sweep')}</button>
+        <label className="lab-volume">{t('Vol')}<input type="range" min="0" max="1" step=".01" value={volume} onChange={event => setVolume(+event.target.value)} /></label>
       </div>
     </header>
     {error && <p className="lab-error" role="alert">{error}</p>}
@@ -177,36 +179,36 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
     </div>
     </div>
     <section className="lab-builder" aria-label="Build a sound">
-      <h3>Build a sound <small>the session's own blocks, safe-area table and loudness</small></h3>
-      <p className="lab-note">Sound sweep plays the sound over the simulated drive (speed climbs, lifts, brakes), looping. Change a block and the sound updates.</p>
-      <div className="lab-chips"><button type="button" disabled={!options || !hasWinners} title={hasWinners ? 'Fill the blocks from your latest saved sound' : 'No saved building-block sound yet'} onClick={() => setModalOpen(true)}>Load from winner</button>
-        <button type="button" disabled={!options} onClick={() => setBlocks(options!.default)}>Build from scratch</button></div>
+      <h3>{t('Build a sound')} <small>{t("the session's own blocks, safe-area table and loudness")}</small></h3>
+      <p className="lab-note">{t('Sound sweep plays the sound over the simulated drive (speed climbs, lifts, brakes), looping. Change a block and the sound updates.')}</p>
+      <div className="lab-chips"><button type="button" disabled={!options || !hasWinners} title={t(hasWinners ? 'Fill the blocks from your latest saved sound' : 'No saved building-block sound yet')} onClick={() => setModalOpen(true)}>{t('Load from winner')}</button>
+        <button type="button" disabled={!options} onClick={() => setBlocks(options!.default)}>{t('Build from scratch')}</button></div>
       {options && <div className="lab-build-grid">
-        <div><p className="lab-label">Top texture</p><div className="lab-chips">{options.tops.map(top => <button key={top} type="button" aria-pressed={blocks.top === top} onClick={() => change({ top })}>{options.names[top]}</button>)}</div></div>
-        <div><p className="lab-label">Partner (on the highest layer)</p><div className="lab-chips">{[null, ...(options.partners[blocks.top as string] ?? [])].map(partner => <button key={partner ?? 'none'} type="button" aria-pressed={(blocks.partner ?? null) === partner} onClick={() => change({ partner })}>{partner ? options.names[partner] : 'None'}</button>)}</div></div>
-        <div><p className="lab-label">Body (lowest layer)</p><div className="lab-chips">{options.bodies.map(body => <button key={body} type="button" aria-pressed={blocks.body === body} onClick={() => change({ body })}>{options.names[body]}</button>)}</div></div>
-        <div><p className="lab-label">Top level</p><div className="lab-chips">{options.levels.map(level => <button key={level} type="button" aria-pressed={blocks.level === level} onClick={() => change({ level })}>{level}</button>)}</div></div>
-        <div><p className="lab-label">Pitch</p><div className="lab-chips">{options.pitches.map((hz, index) => <button key={hz} type="button" aria-pressed={blocks.pitch === index} onClick={() => change({ pitch: index })}>{hz} Hz</button>)}</div></div>
-        <div><p className="lab-label">Brightness (acum){built.recipe?.blocks && Math.abs(+built.recipe.blocks.brightness! - +(blocks.brightness ?? .5)) > .01 ? <small> → reached {(+built.recipe.blocks.brightness!).toFixed(2)}</small> : null}</p><div className="lab-chips">{options.brightness.map(level => <button key={level} type="button" aria-pressed={Math.abs(+(blocks.brightness ?? .5) - level) < .005} onClick={() => change({ brightness: level })}>{level.toFixed(2)}</button>)}</div></div>
-        {options.synthTops.includes(blocks.top as string) && <div><p className="lab-label">Synth knobs (Synth and Bell synth tops only)</p><div className="lab-chips">
-          {options.buzz.map(level => <button key={level} type="button" aria-pressed={blocks.buzz === level} onClick={() => change({ buzz: level })}>Buzz: {BUZZ_NAMES[level]}</button>)}
-          <button type="button" aria-pressed={blocks.chord === 'on'} onClick={() => change({ chord: blocks.chord === 'on' ? 'off' : 'on' })}>Chord (minor)</button>
-          <button type="button" aria-pressed={!!blocks.bell} onClick={() => change({ bell: !blocks.bell })}>Bell</button>
-          <button type="button" aria-pressed={!!blocks.vowel} onClick={() => change({ vowel: !blocks.vowel })}>Vowel</button></div></div>}
+        <div><p className="lab-label">{t('Top texture')}</p><div className="lab-chips">{options.tops.map(top => <button key={top} type="button" aria-pressed={blocks.top === top} onClick={() => change({ top })}>{t(options.names[top])}</button>)}</div></div>
+        <div><p className="lab-label">{t('Partner (on the highest layer)')}</p><div className="lab-chips">{[null, ...(options.partners[blocks.top as string] ?? [])].map(partner => <button key={partner ?? 'none'} type="button" aria-pressed={(blocks.partner ?? null) === partner} onClick={() => change({ partner })}>{partner ? t(options.names[partner]) : t('None')}</button>)}</div></div>
+        <div><p className="lab-label">{t('Body (lowest layer)')}</p><div className="lab-chips">{options.bodies.map(body => <button key={body} type="button" aria-pressed={blocks.body === body} onClick={() => change({ body })}>{t(options.names[body])}</button>)}</div></div>
+        <div><p className="lab-label">{t('Top level')}</p><div className="lab-chips">{options.levels.map(level => <button key={level} type="button" aria-pressed={blocks.level === level} onClick={() => change({ level })}>{t(level)}</button>)}</div></div>
+        <div><p className="lab-label">{t('Pitch')}</p><div className="lab-chips">{options.pitches.map((hz, index) => <button key={hz} type="button" aria-pressed={blocks.pitch === index} onClick={() => change({ pitch: index })}>{hz} Hz</button>)}</div></div>
+        <div><p className="lab-label">{t('Brightness (acum)')}{built.recipe?.blocks && Math.abs(+built.recipe.blocks.brightness! - +(blocks.brightness ?? .5)) > .01 ? <small> → {t('reached')} {(+built.recipe.blocks.brightness!).toFixed(2)}</small> : null}</p><div className="lab-chips">{options.brightness.map(level => <button key={level} type="button" aria-pressed={Math.abs(+(blocks.brightness ?? .5) - level) < .005} onClick={() => change({ brightness: level })}>{level.toFixed(2)}</button>)}</div></div>
+        {options.synthTops.includes(blocks.top as string) && <div><p className="lab-label">{t('Synth knobs (Synth and Bell synth tops only)')}</p><div className="lab-chips">
+          {options.buzz.map(level => <button key={level} type="button" aria-pressed={blocks.buzz === level} onClick={() => change({ buzz: level })}>{t('Buzz')}: {t(BUZZ_NAMES[level])}</button>)}
+          <button type="button" aria-pressed={blocks.chord === 'on'} onClick={() => change({ chord: blocks.chord === 'on' ? 'off' : 'on' })}>{t('Chord (minor)')}</button>
+          <button type="button" aria-pressed={!!blocks.bell} onClick={() => change({ bell: !blocks.bell })}>{t('Bell')}</button>
+          <button type="button" aria-pressed={!!blocks.vowel} onClick={() => change({ vowel: !blocks.vowel })}>{t('Vowel')}</button></div></div>}
       </div>}
       {options && <details className="lab-space" onToggle={event => { if ((event.target as HTMLDetailsElement).open && !summary) void Promise.resolve(onCommand('blockSummary')).then(result => setSummary(result as Summary)) }}>
-        <summary>How many sounds can a session reach?</summary>
-        {!summary ? <p className="lab-note">Counting…</p> : summary.error ? <p className="lab-error" role="alert">{summary.error}</p> : <>
-          <table className="lab-table"><caption>Parameters</caption><thead><tr><th>Parameter</th><th>Levels</th><th>Values</th></tr></thead>
-            <tbody>{summary.parameters.map(([name, n, values]) => <tr key={name}><td>{name}</td><td>{n}</td><td>{values}</td></tr>)}</tbody></table>
-          <table className="lab-table"><caption>From every combination to the sounds a session plays</caption><tbody>
-            <tr><td>All levels multiplied freely</td><td>{summary.free.toLocaleString()}</td></tr>
-            <tr><td>Combinations that exist (partners and knobs only where a top has them)</td><td>{summary.valid.toLocaleString()}</td></tr>
-            <tr><td>Pass the drive check (sharpness, roughness, fluctuation)</td><td>{summary.safe.toLocaleString()}</td></tr>
-            <tr><td>Distinct sounds (brightness steps that reach the same sound count once)</td><td><strong>{summary.distinct.toLocaleString()}</strong></td></tr></tbody></table>
-          <table className="lab-table"><caption>Per top texture</caption><thead><tr><th>Top</th><th>Partner options</th><th>Knob settings</th><th>Combinations</th><th>Pass check</th><th>Distinct</th></tr></thead>
-            <tbody>{summary.tops.map(row => <tr key={row.top}><td>{options.names[row.top]}</td><td>{row.partners}</td><td>{row.knobs}</td><td>{row.valid.toLocaleString()}</td><td>{row.safe.toLocaleString()}</td><td>{row.distinct.toLocaleString()}</td></tr>)}</tbody></table>
-          <p className="lab-note">Each row multiplies by 4 bodies, 3 top levels, 5 pitches and 5 brightness steps. The lab offers exactly these choices.</p></>}
+        <summary>{t('How many sounds can a session reach?')}</summary>
+        {!summary ? <p className="lab-note">{t('Counting…')}</p> : summary.error ? <p className="lab-error" role="alert">{summary.error}</p> : <>
+          <table className="lab-table"><caption>{t('Parameters')}</caption><thead><tr><th>{t('Parameter')}</th><th>{t('Levels')}</th><th>{t('Values')}</th></tr></thead>
+            <tbody>{summary.parameters.map(([name, n, values]) => <tr key={name}><td>{t(name)}</td><td>{n}</td><td>{t(values)}</td></tr>)}</tbody></table>
+          <table className="lab-table"><caption>{t('From every combination to the sounds a session plays')}</caption><tbody>
+            <tr><td>{t('All levels multiplied freely')}</td><td>{summary.free.toLocaleString()}</td></tr>
+            <tr><td>{t('Combinations that exist (partners and knobs only where a top has them)')}</td><td>{summary.valid.toLocaleString()}</td></tr>
+            <tr><td>{t('Pass the drive check (sharpness, roughness, fluctuation)')}</td><td>{summary.safe.toLocaleString()}</td></tr>
+            <tr><td>{t('Distinct sounds (brightness steps that reach the same sound count once)')}</td><td><strong>{summary.distinct.toLocaleString()}</strong></td></tr></tbody></table>
+          <table className="lab-table"><caption>{t('Per top texture')}</caption><thead><tr><th>{t('Top')}</th><th>{t('Partner options')}</th><th>{t('Knob settings')}</th><th>{t('Combinations')}</th><th>{t('Pass check')}</th><th>{t('Distinct')}</th></tr></thead>
+            <tbody>{summary.tops.map(row => <tr key={row.top}><td>{t(options.names[row.top])}</td><td>{row.partners}</td><td>{row.knobs}</td><td>{row.valid.toLocaleString()}</td><td>{row.safe.toLocaleString()}</td><td>{row.distinct.toLocaleString()}</td></tr>)}</tbody></table>
+          <p className="lab-note">{t('Each row multiplies by 4 bodies, 3 top levels, 5 pitches and 5 brightness steps. The lab offers exactly these choices.')}</p></>}
       </details>}
       {built.error ? <p className="lab-error" role="alert">{built.error}</p> : built.recipe && <p className="lab-note">{built.recipe.label}</p>}
     </section>
@@ -214,13 +216,13 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
       <section className="lab-modal" role="dialog" aria-modal="true" aria-labelledby="winner-modal-title">
         <header className="lab-modal-head">
           <div>
-            <h3 id="winner-modal-title">Saved Winner Sounds</h3>
-            <p>Preview and select a winner sound to load its blocks into Sound Lab.</p>
+            <h3 id="winner-modal-title">{t('Saved Winner Sounds')}</h3>
+            <p>{t('Preview and select a winner sound to load its blocks into Sound Lab.')}</p>
           </div>
-          <button type="button" className="lab-modal-close" onClick={closeModal}>Close</button>
+          <button type="button" className="lab-modal-close" onClick={closeModal}>{t('Close')}</button>
         </header>
         <div className="lab-modal-body">
-          {!winnerList.length ? <p className="lab-note">No saved winner sounds found yet. Finish a sound session to save a winner sound.</p> : winnerList.map(item => {
+          {!winnerList.length ? <p className="lab-note">{t('No saved winner sounds found yet. Finish a sound session to save a winner sound.')}</p> : winnerList.map(item => {
             const r = getItemRecipe(item)
             const b = r && isLiveRecipe(r) && r.blocks ? r.blocks : null
             const isPlayingThis = previewingId === item.session
@@ -228,15 +230,15 @@ export default function SoundLab({ state, onCommand, onStart, stopToken }: { sta
             return <div key={item.session} className={'lab-winner-card' + (isActive ? ' active' : '')}>
               <div className="lab-winner-card-head">
                 <span className="lab-winner-title">
-                  {item.label || 'Saved Sound'}
-                  {isActive && <span className="lab-winner-badge">Active</span>}
+                  {item.label || t('Saved Sound')}
+                  {isActive && <span className="lab-winner-badge">{t('Active')}</span>}
                 </span>
                 <span className="lab-winner-meta">{item.created ? new Date(item.created).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}</span>
               </div>
-              {b && <div className="lab-winner-blocks">Top: {b.top}{b.partner ? ` + ${b.partner}` : ''} · Body: {b.body} · Level: {b.level} · Pitch: {options?.pitches[b.pitch as number] ?? b.pitch} Hz</div>}
+              {b && <div className="lab-winner-blocks">{t('Top')}: {t(options?.names[b.top as string] ?? String(b.top))}{b.partner ? ` + ${t(options?.names[b.partner as string] ?? String(b.partner))}` : ''} · {t('Body')}: {t(options?.names[b.body as string] ?? String(b.body))} · {t('Level')}: {t(String(b.level))} · {t('Pitch')}: {options?.pitches[b.pitch as number] ?? b.pitch} Hz</div>}
               <div className="lab-winner-actions">
-                <button type="button" aria-pressed={isPlayingThis} onClick={() => void togglePreview(item)}>{isPlayingThis ? '■ Stop' : '▶ Preview'}</button>
-                <button type="button" disabled={!b || !options} title={b ? 'Load these blocks into Sound Lab' : 'This saved sound does not contain building blocks'} onClick={() => void loadWinner(item)}>{b ? 'Load blocks' : 'No blocks'}</button>
+                <button type="button" aria-pressed={isPlayingThis} onClick={() => void togglePreview(item)}>{t(isPlayingThis ? '■ Stop' : '▶ Preview')}</button>
+                <button type="button" disabled={!b || !options} title={t(b ? 'Load these blocks into Sound Lab' : 'This saved sound does not contain building blocks')} onClick={() => void loadWinner(item)}>{t(b ? 'Load blocks' : 'No blocks')}</button>
               </div>
             </div>
           })}

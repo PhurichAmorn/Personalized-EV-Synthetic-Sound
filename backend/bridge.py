@@ -126,7 +126,7 @@ class DesktopBridge:
                 search = payload.get('search', 'blocks')
                 if search not in self.searches:raise ValueError('Unknown search')
                 discovery = self.source_discovery = self.history.discovery = self.searches[search]
-                discovery.start(payload.get('motion'));self.history.begin()
+                discovery.start(payload.get('motion'));self.history.begin(bool(payload.get('participant')))
             elif name == 'sourceDiscoveryPlayed':discovery.played(self._text(payload,'id'))
             elif name == 'sourceDiscoveryHeard':discovery.heard(self._text(payload,'id'),payload.get('context',{}))
             elif name == 'sourceDiscoveryFeedback':discovery.feedback(payload.get('ratings'),payload.get('context',{}),payload.get('choice'))
