@@ -172,7 +172,7 @@ const JA: Record<string, string> = {
   READY: '準備完了',
   STANDBY: '待機中',
   'A few last questions…': '最後にいくつか質問です…',
-  'How does this sound make you feel? (optional)': 'このサウンドを聞いてどんな気持ちになりますか？（任意）',
+  'How does this sound make you feel? What do you like or dislike about it? Was anything in the session confusing, hard to tell apart, or unnecessary, or is there anything you would change? (optional)': 'このサウンドを聞いてどんな気持ちになりますか？好きな点・好きでない点も教えてください。また、セッション中に分かりにくかった点、違いが分かりにくかった点、不要に感じた点、変えたい点はありますか？（任意）',
   'Save answers': '回答を保存',
   'Before you start': '開始前に',
   'For each sound, accelerate from 0 to 140 km/h so you hear its whole range before you choose. You can listen to A and B as often as you like.': '各サウンドで0から140 km/hまで加速し、全体の音を聞いてから選んでください。AとBは何度でも聞き直せます。',
