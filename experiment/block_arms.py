@@ -113,7 +113,6 @@ class DuelMixin:
         return cand[a], cand[next(int(k) for k in np.argsort(-f2) if k != a and self._clear(cand[a], cand[k]))]
 
 
-GUESS_POOL = 1000  # random valid sounds drawn once per session: the space the model's best guess and challengers come from
 GUESS_MIN_GAP = .5  # octave-band gap a pair needs (another top texture or pitch always counts as different). ponytail: a guess between
 # .35 (heard in quiet listening, 2026-11-21) and pairs reported as "slight difference" while driving (.45-.49, 2026-11-27); check by ear in BeamNG
 
@@ -137,7 +136,19 @@ class GuessBlocks(BlockDiscovery):
     space), B = the sound one Thompson sample of the taste likes best, clearly different from A. The pair-2 winner is the evaluation baseline;
     the podium #1 (posterior mean over the sounds heard) is the evaluated final."""
     policy = 'source-blocks-guess-v1'
-    _random_sounds = FreeMixin._random_sounds
+    def _all_sounds(self):
+        """Every sound the safe-area table allows (body x top x partner x level x pitch x brightness step x synth knobs, each distinct sound
+        once), as the benchmark's ground truth (sb.pool / tools/benchmark_blocks.py truth()). Scored in full each pair: 2026-11-27, replaced
+        1000 random ones (a number carried over from Building blocks); a finite space this small is normally scored in full."""
+        import itertools
+        out, seen = [], set()
+        sounds = ({'body': body, 'top': top, 'level': level, 'pitch': pitch, 'brightness': br, 'partner': partner, **knobs}
+                  for body, top, level, pitch, br in itertools.product(sb.BODIES, sb.TOPS, sb.TOP_LEVELS, range(len(sb.PITCHES)), BRIGHTNESS_GRID)
+                  for partner in (None, *sb.PARTNERS.get(top, ())) for knobs in sb.knob_settings(top))
+        for s in sounds:
+            r = self._recipe(s)
+            if r and (k := sb.key(r['blocks']) + f"|{r['blocks']['brightness']}") not in seen: seen.add(k); out.append(r)
+        return out
     def start(self, motion=None):
         with self.lock: self.space = None; self.roles = None
         super().start(motion)
@@ -154,7 +165,7 @@ class GuessBlocks(BlockDiscovery):
         rows = self._choices()
         if mp and self.completed == mp: self._set_motion(rows[:mp])
         if self.space is None:
-            self.space = self._random_sounds(GUESS_POOL)
+            self.space = self._all_sounds()
             self.X = np.array([self._features(r) for r in self.space])
         self.check_parent = None
         ids = [self._id(r) for r in self.space]; ok = [i not in self.excluded for i in ids]
@@ -187,7 +198,7 @@ class GuessBlocks(BlockDiscovery):
         data['evaluation'] = {'baseline': self.baseline(), 'final': self.finalists[0] if self.finalists else None}
         data['note'] = ('Best guess vs might-be-better (2026-11-27). Pair 1 Rising vs Evolving on the Glass start (Both good or Neither keep Rising). '
             f'Then every pair: A = the best guess (highest posterior mean of a Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features, '
-            f'among {GUESS_POOL} random sounds that pass the safe-area table, drawn once per session), B = the sound one Thompson sample of the taste '
+            f'among all {len(self.space or ())} sounds that pass the safe-area table), B = the sound one Thompson sample of the taste '
             f'(half spread) likes best, clearly different from A (another top texture or pitch, or octave-band gap >= {GUESS_MIN_GAP}), never a pair already played. '
             'No starts, no champion, no phases. Both good / Neither: equal, and both beat / lose to a neutral sound. Podium: heard sounds by posterior mean, '
             'a sound that never won left out, clearly different, at most 2 per top texture. evaluation: baseline = pair-2 winner, final = podium #1. '

@@ -137,10 +137,20 @@ def load_table(path=TABLE):
     return json.loads(Path(path).read_text()) if Path(path).exists() else None
 
 
+_NEAREST = {}  # id(table) -> (table, {key: entry}): the closest-entry scan is slow and the Best guess session asks for every sound
+
+
 def nearest_entry(table, sound):
     """The measured entry for this sound, else the closest measured one (same top, then fewest differing fields)."""
     k = key(sound)
     if k in table['entries']: return table['entries'][k]
+    held = _NEAREST.get(id(table))
+    if not held or held[0] is not table: held = _NEAREST[id(table)] = (table, {})
+    if k not in held[1]: held[1][k] = _nearest_scan(table, sound, k)
+    return held[1][k]
+
+
+def _nearest_scan(table, sound, k):
     s = full(sound)
     # Rows not measured yet stand in for their closest relative: a partner mix for its main style alone, Moody for Synth with the chord
     # (the same voice; Moody adds ensemble). ponytail: estimates until the sweep adds the real rows.
