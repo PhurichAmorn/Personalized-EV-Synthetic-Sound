@@ -80,7 +80,10 @@ class Duel(GPScores, ba.DuelMixin, ba.FreeMixin, Base): pass
 class Robust(ba.RobustMixin, Base): pass
 
 
-class Guess(ba.GuessBlocks, Base): pass  # best guess vs might-be-better (2026-11-27): no starts, no champion
+class Guess(ba.GuessBlocks, Base):  # best guess vs might-be-better (2026-11-27): no starts, no champion
+    def held_out_scores(self, X):  # its own features (pitch and brightness levels as categories), not the app's
+        if 'Xg' not in _G: _G['Xg'] = np.array([ba.level_features(r['blocks']) for r in _G['truth']])
+        return _G['Xg'] @ self._weights()
 
 
 class Pairs(GPScores, ba.FreeMixin, Base):
