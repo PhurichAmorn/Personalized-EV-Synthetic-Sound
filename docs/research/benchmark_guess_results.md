@@ -40,6 +40,37 @@ showed it (9 of 15 challengers at 47 or 119 Hz). Two alternatives were tried and
 
 Categories spread the challengers evenly but lose the sharing between neighbouring levels, which 17 answers need.
 
+## Pair-choice comparison: plan (written 2026-11-28, before any result)
+
+Ten arms on the Best guess session (`tools/benchmark_blocks.py`, `GUESS_ARMS`). All share the model (Bayesian Bradley-Terry over the 31
+block features), the 15,614 sounds, and the shared rules (A and B clearly different, no pair twice). Only the pair choice differs:
+
+| Arm | Report name | Sound A | Sound B |
+| --- | --- | --- | --- |
+| `guess` | Bradley-Terry, greedy vs Thompson (the app) | Highest posterior mean | Best under one Thompson sample |
+| `grandom` | Random pairs | Random | Random |
+| `ggreedy` | Greedy | Highest mean | Second highest mean |
+| `gexplore` | Pure explore | Highest mean | Largest SD of the difference |
+| `gdts` | Double Thompson (Wu & Liu 2016), linear version | Thompson sample 1 | Thompson sample 2 |
+| `gbrochu` | Expected improvement (Brochu et al. 2007) | Best heard so far | Highest expected improvement over A |
+| `grucb` | Relative UCB (Zoghi et al. 2014), linear version | Highest mean + 1 SD | Highest (difference + 1 SD of it) |
+| `gpbo` | Dueling Thompson (Gonzalez et al. 2017), linear version | Thompson sample | Largest variance of P(B beats A) |
+| `geubo` | EUBO (Lin et al. 2022) | Pair with highest E[max(u(A), u(B))], among the top 100 by mean and top 100 by mean + 2 SD | |
+| `giga` | Interactive genetic algorithm (Fukumoto 2026 settings) | Population 8, 4 pairs per generation, tournament 2, elitism 1, 2-point crossover 90%, mutation 5%; no model; final = best of the last finished generation | |
+
+The dueling-bandit and PBO papers work on separate arms or Gaussian processes; these are their pair rules on our linear model. IGA gets
+pairwise answers (win = fitness 1) instead of 1-7 ratings.
+
+Size: 5 oracles x 40 profiles x 25 seeds; budgets 17 (the app), 20, 30, 50, 80 pairs; two listeners (no bias; NEW_BIAS = 0.3).
+50 and 80 pairs cannot be driven: they show each method's ceiling (IGA needs generations).
+
+Decision rules (top-10% retrieval, pooled over oracles, paired to `guess`, profile-level bootstrap 95% CI), at 17 pairs, both listeners:
+
+1. **Switch to another arm** if its difference to `guess` has a CI above 0 and is at least +0.05 in both listener conditions.
+2. **Double Thompson** (`gdts`, less repetition of the best guess): switch if its difference is at least -0.02 (point estimate) in both conditions.
+3. **Session length:** keep 17 unless `guess` at 20 is at least +0.03 over 17 (CI above 0); 30+ is reported only.
+4. IGA, Greedy, Pure explore and Random are reported for comparison; no decision depends on them.
+
 ## Limits
 
 - Smaller than the pre-registered size; rerun at full size (GitHub Actions) before citing the numbers in a report.
