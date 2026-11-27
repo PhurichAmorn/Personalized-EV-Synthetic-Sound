@@ -10,6 +10,7 @@ import { FinalMap, type AlgorithmSession } from './AlgorithmView'
 import { playWelcome } from './welcomeSound'
 import { PersonalizeCloseButton } from './PersonalizeClose'
 import EvaluationPanel from './EvaluationPanel'
+import { SoundGraph } from './OverlayGraphs'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; rating?: number | null; quarantined: number; checkpoint: boolean; policy?: string }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
@@ -218,6 +219,10 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       <div className="thanks-body">
         <SoundProfile recipe={finalCandidate?.recipe} />
         {route && <FinalMap session={route} />}
+      </div>
+      <div className="mt-4 w-full max-w-[420px] text-left">{/* live, from the final sound now playing: drive to see it change */}
+        <p className="overlay-caption">{t('SOUND')}</p><SoundGraph granular active={playing} view="wave" analyser={analyser} onCommand={onCommand} />
+        <p className="overlay-caption mt-2">{t('SPECTROGRAM')}</p><SoundGraph granular active={playing} view="spectrogram" analyser={analyser} onCommand={onCommand} />
       </div>
       <button type="button" className="control mt-4" onClick={() => { if (finalCandidate) playFinal(finalCandidate); setRevealed(true) }}>{t('Continue')}</button>
     </section> : discovery.final && discovery.rating == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
