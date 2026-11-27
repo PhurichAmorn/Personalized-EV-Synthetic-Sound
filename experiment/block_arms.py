@@ -10,7 +10,7 @@ Not benchmarked yet when added: treat as experimental."""
 import numpy as np
 from scipy.stats import norm
 from experiment import sound_blocks as sb
-from experiment.source_search import BLOCK_FEATURE_NAMES, BLOCK_OPENING, BLOCK_PER_TOP, SHORTLIST, BlockDiscovery, block_features
+from experiment.source_search import _ONE_HOT, BLOCK_OPENING, BLOCK_PER_TOP, SHORTLIST, BlockDiscovery, block_features
 
 CATS = ('body', 'top', 'partner', 'level', 'buzz', 'chord', 'bell', 'vowel')
 _VOC = {}
@@ -118,12 +118,26 @@ GUESS_MIN_GAP = .5  # octave-band gap a pair needs (another top texture or pitch
 # .35 (heard in quiet listening, 2026-11-21) and pairs reported as "slight difference" while driving (.45-.49, 2026-11-27); check by ear in BeamNG
 
 
+def level_features(sound):
+    """Block features with pitch and brightness as categories (one per level), not a value and its square: a random draw of the taste then
+    favours no level, so challengers spread over the whole range (2026-11-27: with the squared terms 9 of 15 challengers sat at 47 or 119 Hz
+    and 7 at brightness .82-.85). Brightness goes to the nearest grid level."""
+    s = sb.full(sound); s['mix'] = f"{s['top']}+{s['partner']}" if s['partner'] else None
+    b = min(range(len(BRIGHTNESS_GRID)), key=lambda k: abs(BRIGHTNESS_GRID[k] - s['brightness']))
+    return np.array([float(s[k] == v) for k, vs in _ONE_HOT for v in vs] + [float(s['pitch'] == k) for k in range(len(sb.PITCHES))] + [float(b == k) for k in range(len(BRIGHTNESS_GRID))])
+
+
+LEVEL_FEATURE_NAMES = [f'{k}={v}' for k, vs in _ONE_HOT for v in vs] + [f'pitch={p:g}Hz' for p in sb.PITCHES] + [f'brightness={b}' for b in BRIGHTNESS_GRID]
+
+
 class GuessBlocks(BlockDiscovery):
     """Best guess vs might-be-better (agreed 2026-11-27): no starts, no champion, no refinement, no phases.
     Pair 1 Rising vs Evolving (as Building blocks). Every later pair: A = the model's best guess (highest posterior mean over the session's sound
     space), B = the sound one Thompson sample of the taste likes best, clearly different from A. The pair-2 winner is the evaluation baseline;
     the podium #1 (posterior mean over the sounds heard) is the evaluated final."""
     policy = 'source-blocks-guess-v1'
+    feature_names = LEVEL_FEATURE_NAMES
+    def _features(self, recipe): return level_features(recipe['blocks'])
     _random_sounds = FreeMixin._random_sounds
     def start(self, motion=None):
         with self.lock: self.space = None
@@ -137,7 +151,7 @@ class GuessBlocks(BlockDiscovery):
         if mp and self.completed == mp: self._set_motion(rows[:mp])
         if self.space is None:
             self.space = self._random_sounds(GUESS_POOL)
-            self.X = np.array([block_features(r['blocks']) for r in self.space])
+            self.X = np.array([self._features(r) for r in self.space])
         self.check_parent = None
         ids = [self._id(r) for r in self.space]; ok = [i not in self.excluded for i in ids]
         mean = self.X @ self._weights(); self._sample(); sample = self.X @ self._w_sample
@@ -167,7 +181,7 @@ class GuessBlocks(BlockDiscovery):
         data = super().export()
         data['evaluation'] = {'baseline': self.baseline(), 'final': self.finalists[0] if self.finalists else None}
         data['note'] = ('Best guess vs might-be-better (2026-11-27). Pair 1 Rising vs Evolving on the Glass start (Both good or Neither keep Rising). '
-            f'Then every pair: A = the best guess (highest posterior mean of a Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features, '
+            f'Then every pair: A = the best guess (highest posterior mean of a Bayesian Bradley-Terry model over {len(LEVEL_FEATURE_NAMES)} block features (pitch and brightness levels as categories), '
             f'among {GUESS_POOL} random sounds that pass the safe-area table, drawn once per session), B = the sound one Thompson sample of the taste '
             f'(half spread) likes best, clearly different from A (another top texture or pitch, or octave-band gap >= {GUESS_MIN_GAP}), never a pair already played. '
             'No starts, no champion, no phases. Both good / Neither: equal, and both beat / lose to a neutral sound. Podium: heard sounds by posterior mean, '
