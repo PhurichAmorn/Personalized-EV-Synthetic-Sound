@@ -150,7 +150,7 @@ class GuessBlocks(BlockDiscovery):
             if r and (k := sb.key(r['blocks']) + f"|{r['blocks']['brightness']}") not in seen: seen.add(k); out.append(r)
         return out
     def start(self, motion=None):
-        with self.lock: self.space = None; self.roles = None
+        with self.lock: self.space = None; self.roles = None; self.ids = []
         super().start(motion)
     def _after_pair(self):
         """The answered pair's roles go into its history row (roles: id -> 'guess' / 'explore'): a sound keeps the origin of its first pair, so
@@ -164,21 +164,29 @@ class GuessBlocks(BlockDiscovery):
         if mp and self.completed < mp: return super()._proposals()  # the motion pair, as Building blocks
         rows = self._choices()
         if mp and self.completed == mp: self._set_motion(rows[:mp])
-        if self.space is None:
-            self.space = self._all_sounds()
-            self.X = np.array([self._features(r) for r in self.space])
+        if self.space is None: self._build_space()
         self.check_parent = None
-        ids = [self._id(r) for r in self.space]; ok = [i not in self.excluded for i in ids]
-        mean = self.X @ self._weights(); self._sample(); sample = self.X @ self._w_sample
-        tie = np.array([self.rng.random() for _ in ids]) * 1e-9  # before any answer every sound is equal: a random one
-        a = max((k for k in range(len(ids)) if ok[k]), key=lambda k: mean[k] + tie[k], default=None)
-        if a is None: return []
-        met = {frozenset(r['pair']) for r in rows}
-        b = next((k for k in np.argsort(-(sample + tie)) if k != a and ok[k] and frozenset((ids[a], ids[k])) not in met and self._clear(self.space[a], self.space[k])), None)
-        if b is None: return []
+        self.ok = np.array([i not in self.excluded for i in self.ids]); self.met = {frozenset(r['pair']) for r in rows}
+        self.tie = np.array([self.rng.random() for _ in self.ids]) * 1e-9  # before any answer every sound is equal: a random one
+        a, b = self._pick()
+        if a is None or b is None: return []
         self.rematch = [self._add(self.space[a], {'kind': 'guess', 'summary': 'Best guess'}), self._add(self.space[b], {'kind': 'explore', 'summary': 'Might be better (Thompson sample)'})]
         self.roles = {self.rematch[0]: 'guess', self.rematch[1]: 'explore'}
         return []
+    def _build_space(self):
+        self.space = self._all_sounds(); self.X = np.array([self._features(r) for r in self.space]); self.ids = [self._id(r) for r in self.space]
+    def _first(self, score):
+        """Index of the playable sound with the highest score."""
+        return max((k for k in range(len(self.ids)) if self.ok[k]), key=lambda k: score[k] + self.tie[k], default=None)
+    def _partner(self, a, score):
+        """Index of the highest-scoring sound that can be played against a: another sound, clearly different, not a pair already played."""
+        if a is None: return None
+        return next((k for k in np.argsort(-(score + self.tie)) if k != a and self.ok[k] and frozenset((self.ids[a], self.ids[k])) not in self.met
+                     and self._clear(self.space[a], self.space[k])), None)
+    def _pick(self):
+        """A = best guess (posterior mean), B = best under one Thompson sample. Benchmark arms (tools/benchmark_blocks.py) override this."""
+        a = self._first(self.X @ self._weights()); self._sample()
+        return a, self._partner(a, self.X @ self._w_sample)
     def _rank_finalists(self):
         """Podium: the heard sounds (in the chosen motion) by posterior mean, never one that lost every time, each clearly different, at most
         BLOCK_PER_TOP per top texture."""

@@ -38,6 +38,9 @@ on:
       neither_z:
         description: Neither threshold in SD (-1e9 removes Neither)
         default: '0'
+      new_bias:
+        description: SD added to a sound the listener has not heard (0 = none; 0.3 = the lab's 65% new-sound wins)
+        default: '0'
       replay:
         description: Old session (pair 14 replays pair 4, 9 challenger pairs); off = the app now (no replay, 10 challenger pairs)
         type: boolean
@@ -93,6 +96,7 @@ jobs:
           GOOD_Z: ${{ inputs.good_z }}
           NEITHER_Z: ${{ inputs.neither_z }}
           REPLAY: ${{ inputs.replay && '1' || '0' }}
+          NEW_BIAS: ${{ inputs.new_bias }}
           OUT: chunk.csv
         run: |
           echo "cores: $(nproc)"

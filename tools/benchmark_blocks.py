@@ -11,6 +11,7 @@ import csv, itertools, json, math, os, random, sys
 from multiprocessing import Pool
 from unittest import mock
 import numpy as np
+from scipy.stats import norm
 from experiment import block_arms as ba, sound_blocks as sb, source_search as ss
 from experiment.block_arms import enc
 from experiment.source_search import BlockDiscovery, block_features, block_moves
@@ -99,6 +100,138 @@ class GuessBoth(Guess):  # trial 2026-11-27: the curve AND one category per leve
         return _G['Xb'] @ self._weights()
 
 
+# ---- Pair-choice arms on the Best guess shell (2026-11-27): same model (Bayesian Bradley-Terry over block features), same 15,614 sounds,
+# same shared rules (clearly different, no pair twice); only _pick differs. Names in the report: docs/research/benchmark_guess_results.md ----
+class Shell(Guess):
+    def _build_space(self): self.space, self.X, self.ids = _G['truth'], _G['X'], _G['ids']  # built once per process (truth())
+    def _diff(self, a):
+        """Mean and SD of u(sound) - u(a) for every sound."""
+        mean, cov = self._posterior(); D = self.X - self.X[a]; return D @ mean, np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', D, cov, D), 1e-12))
+    def _draw(self): self._sample(); return self.X @ self._w_sample  # one Thompson sample (half spread, as the app)
+
+
+class GRandom(Shell):  # random pairs: the floor
+    def _pick(self):
+        r = np.array([self.rng.random() for _ in self.ids]); a = self._first(r); return a, self._partner(a, np.array([self.rng.random() for _ in self.ids]))
+
+
+class GGreedy(Shell):  # no exploration: best vs second best by posterior mean
+    def _pick(self): m = self.X @ self._weights(); a = self._first(m); return a, self._partner(a, m)
+
+
+class GExplore(Shell):  # best guess vs the most uncertain comparison (largest SD of the difference)
+    def _pick(self): a = self._first(self.X @ self._weights()); return a, self._partner(a, self._diff(a)[1])
+
+
+class GDTS(Shell):  # double Thompson sampling (Wu & Liu 2016), linear version: each sound from its own posterior draw
+    def _pick(self): a = self._first(self._draw()); return a, self._partner(a, self._draw())
+
+
+class GBrochu(Shell):  # Brochu, de Freitas & Ghosh 2007: best heard so far (incumbent) vs the sound of highest expected improvement over it
+    def _pick(self):
+        m = self.X @ self._weights(); heard = {i for r in self._choices() for i in r['pair']}
+        inc = [k for k, i in enumerate(self.ids) if i in heard and self.ok[k]]
+        a = max(inc, key=lambda k: m[k]) if inc else self._first(np.zeros(len(self.ids)))
+        d, s = self._diff(a); z = d / s; return a, self._partner(a, d * norm.cdf(z) + s * norm.pdf(z))
+
+
+class GRUCB(Shell):  # relative UCB (Zoghi et al. 2014), linear version: optimistic candidate vs its most optimistic rival
+    C = 1.
+    def _pick(self):
+        mean, cov = self._posterior(); sd = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', self.X, cov, self.X), 1e-12))
+        a = self._first(self.X @ mean + self.C * sd); d, s = self._diff(a); return a, self._partner(a, d + self.C * s)
+
+
+class GPBO(Shell):  # dueling Thompson (Gonzalez et al. 2017), linear version: A from a posterior draw, B where P(B beats A) is most uncertain
+    DRAWS = 100
+    def _pick(self):
+        a = self._first(self._draw()); mean, cov = self._posterior(); D = self.X - self.X[a]
+        W = np.random.default_rng(self.rng.randrange(2 ** 32)).multivariate_normal(mean, cov, self.DRAWS, method='cholesky')
+        return a, self._partner(a, (1 / (1 + np.exp(-(D @ W.T)))).var(1))
+
+
+class GEUBO(Shell):  # EUBO (Lin et al. 2022): the pair with the highest expected utility of its better sound, E[max(u(a), u(b))]
+    DRAWS, TOP = 200, 100  # ponytail: pairs only among the top 100 by mean and top 100 by mean + 2 SD (all 15,614^2 pairs is too many)
+    def _pick(self):
+        mean, cov = self._posterior(); m = self.X @ mean; sd = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', self.X, cov, self.X), 1e-12))
+        ok = np.flatnonzero(self.ok); cand = list(dict.fromkeys([*ok[np.argsort(-(m + self.tie)[ok])[:self.TOP]], *ok[np.argsort(-(m + 2 * sd + self.tie)[ok])[:self.TOP]]]))
+        W = np.random.default_rng(self.rng.randrange(2 ** 32)).multivariate_normal(mean, cov, self.DRAWS, method='cholesky'); U = self.X[cand] @ W.T
+        score = np.array([np.maximum(U[i][None], U).mean(1) for i in range(len(cand))]); np.fill_diagonal(score, -np.inf)
+        for flat in np.argsort(-score, axis=None):
+            i, j = divmod(int(flat), len(cand))
+            if i < j: continue
+            a, b = cand[i], cand[j]
+            if frozenset((self.ids[a], self.ids[b])) not in self.met and self._clear(self.space[a], self.space[b]): return a, b
+        return None, None
+
+
+class GIGA(Shell):
+    """Interactive genetic algorithm (Fukumoto 2026, IJAE-D-26-00011, Table 1) with pairwise answers instead of 1-7 ratings: population 8,
+    each generation = 4 pairs (fitness: win 1, loss 0, Both good 1 each, Neither 0 each), tournament selection (2), elitism (1), 2-point
+    crossover 90%, mutation 5% per gene (pitch +-2 steps, brightness +-1 step, other genes redrawn). No model: the final sound is the best of
+    the last finished generation. Genes the table rejects are redrawn; a pair that is not clearly different gets a random partner."""
+    GENES = ('body', 'top', 'level', 'partner', 'pitch', 'brightness', 'buzz', 'chord', 'bell', 'vowel')
+    def start(self, motion='rise'):
+        self.pop, self.queue, self.elite = None, [], None; super().start(motion)
+    def _random_gene(self):
+        while True:
+            r = self.space[self.rng.randrange(len(self.space))]['blocks']
+            g = {**{k: r[k] for k in self.GENES}, 'brightness': min(range(len(ba.BRIGHTNESS_GRID)), key=lambda i: abs(ba.BRIGHTNESS_GRID[i] - r['brightness']))}
+            if self._index(g) is not None: return g
+    def _index(self, g):
+        r = self._recipe({**g, 'brightness': ba.BRIGHTNESS_GRID[g['brightness']]}); return _G['index'].get(self._id(r)) if r else None
+    def _fix(self, g):
+        if g['top'] not in ('synth', 'bell'): g.update(SYNTH_OFF)
+        if g['partner'] not in (None, *sb.PARTNERS.get(g['top'], ())): g['partner'] = None
+        return g
+    def _mutate(self, g):
+        g = dict(g)
+        for k in self.GENES:
+            if self.rng.random() >= .05: continue
+            if k == 'pitch': g[k] = min(max(g[k] + self.rng.choice((-2, -1, 1, 2)), 0), len(sb.PITCHES) - 1)
+            elif k == 'brightness': g[k] = min(max(g[k] + self.rng.choice((-1, 1)), 0), len(ba.BRIGHTNESS_GRID) - 1)
+            else: g[k] = self._random_gene()[k]
+        return self._fix(g)
+    def _child(self, p1, p2):
+        for _ in range(20):
+            g = dict(p1)
+            if self.rng.random() < .9:
+                i, j = sorted(self.rng.sample(range(len(self.GENES) + 1), 2)); g.update({k: p2[k] for k in self.GENES[i:j]})
+            g = self._mutate(self._fix(g))
+            if self._index(g) is not None: return g
+        return self._random_gene()
+    def _fitness(self):
+        rows = self._choices()[-4:]; fit = {}
+        for r in rows:
+            for i in r['pair']: fit[i] = max(fit.get(i, 0.), 1. if r['winner'] == i or r['choice'] == 'good' else 0.)
+        return fit
+    def _scores(self):
+        fit = self._fitness(); return [fit.get(self.ids[self._index(g)], 0.) for g in self.pop]
+    def _best(self, f):  # ties: the previous elite, then the first
+        return self.pop[max(range(8), key=lambda n: (f[n], self.pop[n] is self.elite, -n))]
+    def _next_generation(self):
+        f = self._scores(); self.elite = self._best(f)
+        pick = lambda: max(self.rng.sample(range(8), 2), key=lambda n: (f[n], self.rng.random()))
+        self.pop = [self.elite] + [self._child(self.pop[pick()], self.pop[pick()]) for _ in range(7)]
+    def _pairing(self):
+        idx = [self._index(g) for g in self.pop]
+        for _ in range(50):
+            order = list(range(8)); self.rng.shuffle(order); pairs = [(idx[order[n]], idx[order[n + 1]]) for n in range(0, 8, 2)]
+            if all(a != b and frozenset((self.ids[a], self.ids[b])) not in self.met and self._clear(self.space[a], self.space[b]) for a, b in pairs): return pairs
+        return [(a, b if a != b and self._clear(self.space[a], self.space[b]) else self._partner(a, np.array([self.rng.random() for _ in self.ids]))) for a, b in pairs]
+    def _pick(self):
+        if not self.queue:
+            if self.pop is None: self.pop = [self._random_gene() for _ in range(8)]; self.pop = [g if self._index(g) is not None else self._random_gene() for g in self.pop]
+            else: self._next_generation()
+            self.queue = self._pairing()
+        return self.queue.pop(0)
+    def _rank_finalists(self):
+        """The paper's final: the best individual of the last finished generation (the elite chosen from it)."""
+        if self.pop is None: self.finalists = []; return
+        g = self._best(self._scores()) if not self.queue and self._choices() else self.elite or self.pop[0]  # queue empty: the generation just finished
+        self.finalists = [self._add(self.space[self._index(g)], {'kind': 'guess', 'summary': 'IGA elite'})]
+
+
 class Pairs(GPScores, ba.FreeMixin, Base):
     """Two random clearly different sounds, no champion, no model (benchmark only)."""
     def _pick(self, cand):
@@ -106,7 +239,9 @@ class Pairs(GPScores, ba.FreeMixin, Base):
 
 
 CORE = ('current', 'random', 'infogain', 'iec')
-ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust, 'guess': Guess, 'guesslevels': GuessLevels, 'guessboth': GuessBoth}
+ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust, 'guess': Guess, 'guesslevels': GuessLevels, 'guessboth': GuessBoth,
+        'grandom': GRandom, 'ggreedy': GGreedy, 'gexplore': GExplore, 'gdts': GDTS, 'gbrochu': GBrochu, 'grucb': GRUCB, 'gpbo': GPBO, 'geubo': GEUBO, 'giga': GIGA}
+GUESS_ARMS = ('guess', 'grandom', 'ggreedy', 'gexplore', 'gdts', 'gbrochu', 'grucb', 'gpbo', 'geubo', 'giga')  # the 2026-11-27 pair-choice comparison
 
 
 def truth():
@@ -120,7 +255,7 @@ def truth():
                 r = d._recipe({'body': body, 'top': top, 'level': lv, 'pitch': pi, 'brightness': br, 'partner': partner, **k})
                 if r and sb.key(r['blocks']) + f"|{r['blocks']['brightness']}" not in seen:
                     seen.add(sb.key(r['blocks']) + f"|{r['blocks']['brightness']}"); T.append(r)
-    d.close(); _G['truth'] = T; _G['X'] = np.array([block_features(r['blocks']) for r in T]); _G['enc'] = enc([r['blocks'] for r in T]); _G['table'] = d.table
+    _G['ids'] = [d._id(r) for r in T]; _G['index'] = {i: k for k, i in enumerate(_G['ids'])}; d.close(); _G['truth'] = T; _G['X'] = np.array([block_features(r['blocks']) for r in T]); _G['enc'] = enc([r['blocks'] for r in T]); _G['table'] = d.table
     return T
 
 
@@ -183,7 +318,7 @@ def answer(rng, za, zb, noise):
 def run(job):
     family, profile, seed, arm, budget, noise = job
     z, zt = oracle(family, 7919 * profile + ORACLES.index(family))
-    adaptive = (9 if budget < 30 else budget - 8) + (0 if REPLAY else 1); pairs = 12 if budget == 12 else budget - 1  # 12 = early cut; 17 = the app (adaptive 9/10); longer: adaptive stretched (30: 22/23, 40: 32/33, ...)
+    adaptive = (9 if budget < 17 else budget - 8) + (0 if REPLAY else 1); pairs = 12 if budget == 12 else budget - 1  # 12 = early cut; 17 = the app (adaptive 9/10); longer: adaptive stretched (20: 12/13, 30: 22/23, ...). Until 2026-11-27 budgets 18-29 were cut at 16 pairs
     d = ARMS[arm](seed, adaptive); d.start('rise'); rng = random.Random(seed * 31 + 5); n = 0; best = -9.
     for _ in range(pairs):
         if len(d.pair) != 2: break
@@ -258,10 +393,11 @@ def report(rows, noise, boots=2000):
     print('  tally:', dict(tally))
     print('\nHEADLINE: current minus random pooled over oracles, top-10%')
     for b in budgets:
-        r = ci([per_profile(o, b, 'current', 'random', 'top10') for o in oracles]); print(f'  budget {b:3}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]  {call(r[1], r[2], r[0])}')
+        r = ci([per_profile(o, b, 'current', 'random', 'top10') for o in oracles])
+        if r: print(f'  budget {b:3}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]  {call(r[1], r[2], r[0])}')
     arms = {a for v in cell.values() for a in v}
     all_arms = set(arms)  # the loops below rebind `arms` to one cell's dict
-    pairs = [(a, c) for a, c in (('infogain', 'current'), ('iec', 'current'), ('pbogp', 'current'), ('pbogp', 'infogain'), ('robust', 'current'), ('duel', 'current'), ('random', 'pairs'), ('current', 'pairs'), ('guess', 'current')) if a in arms and c in arms]
+    pairs = [(a, c) for a, c in (('infogain', 'current'), ('iec', 'current'), ('pbogp', 'current'), ('pbogp', 'infogain'), ('robust', 'current'), ('duel', 'current'), ('random', 'pairs'), ('current', 'pairs'), ('guess', 'current'), *((g, 'guess') for g in GUESS_ARMS[1:])) if a in arms and c in arms]
     for metric, name in (('top10', 'top-10% retrieval (higher is better)'), ('regret', 'regret in SD (lower is better)')):
         print(f'\nSECONDARY: arm A minus arm B, {name}')
         for a, c in pairs:
@@ -270,16 +406,18 @@ def report(rows, noise, boots=2000):
                 for b in budgets:
                     r = ci([per_profile(o, b, a, c, metric)]); line += f'  {b}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
                 print(f'  {a:>8} - {c:<8} {o:12}{line}')
-            r = ci([per_profile(o, 17, a, c, metric) for o in oracles])
-            if r: print(f'  {a:>8} - {c:<8} {"pooled @17":12}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' + (f'  {call(r[1], r[2], r[0])}' if metric == 'top10' else ''))
-    print('\nBUDGET EFFECT: current at the longer budget minus current at the shorter, top-10%')
+            for b in budgets:
+                r = ci([per_profile(o, b, a, c, metric) for o in oracles])
+                if r: print(f'  {a:>8} - {c:<8} {f"pooled @{b}":12}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' + (f'  {call(r[1], r[2], r[0])}' if metric == 'top10' else ''))
+    base = 'current' if 'current' in all_arms else 'guess'
+    print(f'\nBUDGET EFFECT: {base} at the longer budget minus {base} at the shorter, top-10%')
     for o in oracles:
         line = ''
-        for hi, lo in ((17, 12), (30, 17)):
+        for lo, hi in zip(budgets, budgets[1:]):
             if hi in budgets and lo in budgets:
                 d = collections.defaultdict(list)
                 for (oo, bb, p, s), arms in cell.items():
-                    if oo == o and bb == hi and 'current' in arms and 'current' in cell.get((o, lo, p, s), {}): d[p].append(arms['current']['top10'] - cell[(o, lo, p, s)]['current']['top10'])
+                    if oo == o and bb == hi and base in arms and base in cell.get((o, lo, p, s), {}): d[p].append(arms[base]['top10'] - cell[(o, lo, p, s)][base]['top10'])
                 r = ci([{p: np.mean(v) for p, v in d.items()}]); line += f'  {hi} vs {lo}: {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]' if r else ''
         print(f'  {o:12}{line}')
     print('\nOTHER OUTCOMES: current minus random (top-5% = the #1 is in the top 5%; shortlist top-5% = any of the up to 5 shortlisted sounds is)')
