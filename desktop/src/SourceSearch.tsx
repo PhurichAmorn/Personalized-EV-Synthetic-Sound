@@ -9,14 +9,15 @@ import SoundProfile from './SoundProfile'
 import { FinalMap, type AlgorithmSession } from './AlgorithmView'
 import { playWelcome } from './welcomeSound'
 import { PersonalizeCloseButton } from './PersonalizeClose'
+import EvaluationPanel from './EvaluationPanel'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
 export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; rating?: number | null; quarantined: number; checkpoint: boolean }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
 const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
 type Answer = typeof ANSWERS[number][0]
 type Command = (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
-type SearchKind = 'tuning' | 'map' | 'blocks' | 'blocks-random' | 'blocks-robust' | 'blocks-pbo' | 'blocks-duel' | 'blocks-infogain'
-const SEARCHES: [SearchKind, string][] = [['blocks', 'Building blocks'], ['tuning', 'Sound families (baseline)'], ['map', 'Sound map (generated)'], ['blocks-random', 'Building blocks: random challengers (experimental)'], ['blocks-robust', 'Building blocks: robust champion (experimental)'], ['blocks-pbo', 'Building blocks: PBO model (experimental)'], ['blocks-duel', 'Building blocks: duel, no champion (experimental)'], ['blocks-infogain', 'Building blocks: expected-best challengers (experimental)']]  // a button list, not a <select>: the native dropdown popup is unreadable in the BeamNG overlay
+type SearchKind = 'tuning' | 'map' | 'blocks' | 'blocks-random' | 'blocks-robust' | 'blocks-pbo' | 'blocks-duel' | 'blocks-infogain' | 'blocks-guess'
+const SEARCHES: [SearchKind, string][] = [['blocks', 'Building blocks'], ['tuning', 'Sound families (baseline)'], ['map', 'Sound map (generated)'], ['blocks-random', 'Building blocks: random challengers (experimental)'], ['blocks-robust', 'Building blocks: robust champion (experimental)'], ['blocks-pbo', 'Building blocks: PBO model (experimental)'], ['blocks-duel', 'Building blocks: duel, no champion (experimental)'], ['blocks-infogain', 'Building blocks: expected-best challengers (experimental)'], ['blocks-guess', 'Best guess vs might-be-better (new, experimental)']]  // a button list, not a <select>: the native dropdown popup is unreadable in the BeamNG overlay
 export default function SourceSearch({ hidden, discovery, onCommand, onContext, onAudition, onStop, playing, running, activity, mode, onModeChange, analyser }: { analyser: () => AnalyserNode | null; hidden: boolean; discovery?: SourceDiscoveryState; onCommand: Command; onContext: () => Record<string, unknown>; onAudition: (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => Promise<boolean | string>; onStop: () => void; playing: boolean; running: boolean; activity: boolean; mode: GranularMode; onModeChange: (mode: GranularMode) => void }) {
   const [audition, setAudition] = useState<string | null>(null)
   const [readyAudition, setReadyAudition] = useState<string | null>(null)
@@ -205,6 +206,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
         <p className="mt-1 text-xs text-neutral-400">{t('For each sound, accelerate from 0 to 140 km/h so you hear its whole range before you choose. You can listen to A and B as often as you like.')}</p>
       </div>}
       {discovery && !discovery.active && <div className="start-session-row"><button type="button" className="control" disabled={discovery.busy || sessionStarting} onClick={() => discovery.completed && !newSession ? setNewSession(true) : void begin()}>{sessionStarting ? t('Starting…') : discovery.completed && !newSession ? t('New session') : t('Start session')}</button></div>}
+      {discovery && !discovery.active && <EvaluationPanel onCommand={onCommand} onAudition={onAudition} onStop={onStop} running={running} />}
     </section>
     {!discovery?.active && !newSession && !!discovery?.finalists?.length && (discovery.final && discovery.rating == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
       <h3 className="text-lg">{t('A few last questions')}</h3>

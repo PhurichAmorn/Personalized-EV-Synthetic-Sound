@@ -2,9 +2,10 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.block_arms import DuelBlocks, InfoGainBlocks, PBOBlocks, RandomBlocks, RobustBlocks
+from experiment.block_arms import DuelBlocks, GuessBlocks, InfoGainBlocks, PBOBlocks, RandomBlocks, RobustBlocks
 from experiment.source_search import BlockDiscovery, HeardMapDiscovery, TuningDiscovery
 from experiment.source_history import SourceHistory
+from experiment.evaluation import Evaluation
 
 
 class DesktopBridge:
@@ -15,9 +16,10 @@ class DesktopBridge:
         # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
         self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery(),
                          # experimental pair-selection variants of 'blocks' (experiment/block_arms.py, 2026-11-23): not benchmarked yet
-                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks(), 'blocks-infogain': InfoGainBlocks()}
+                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks(), 'blocks-infogain': InfoGainBlocks(), 'blocks-guess': GuessBlocks()}
         self.source_discovery = self.searches['blocks']
         self.history = SourceHistory(self.source_discovery)
+        self.evaluation = Evaluation(self.history)  # blind baseline-vs-final rating after a session
 
     def snapshot(self):
         c = self.controller
@@ -142,6 +144,13 @@ class DesktopBridge:
             else:raise ValueError('Unknown source discovery command')
             if name in ('sourceDiscoveryFeedback','sourceDiscoveryPlayoff','sourceDiscoveryFinish','sourceDiscoveryEnd','sourceDiscoveryRate'):self.history.save()  # autosave to local history
             return self.snapshot()
+        if name.startswith('evaluation'):
+            if self.source_discovery.active:raise ValueError('Finish the session before the evaluation')
+            if name == 'evaluationSessions':return self.evaluation.sessions()
+            if name == 'evaluationStart':return self.evaluation.start(self._text(payload,'id'))
+            if name == 'evaluationRate':return self.evaluation.rate(payload.get('rating'))
+            if name == 'evaluationCancel':return self.evaluation.cancel()
+            raise ValueError('Unknown evaluation command')
         if name == 'blockOptions':return self._block_options()
         if name == 'blockBuild':return self._block_build(payload)
         if name == 'blockSummary':return self._block_summary()

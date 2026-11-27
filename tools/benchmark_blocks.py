@@ -20,6 +20,7 @@ GOOD_Z, NEITHER_Z = float(os.environ.get('GOOD_Z', 3)), float(os.environ.get('NE
 REPLAY = os.environ.get('REPLAY') == '1'  # 1 = the app until 2026-11-24 (pair 14 replays pair 4, adaptive 9/22); default: no replay, one more challenger pair (adaptive 10/23), as the app
 # (19 sessions, 311 choices: Both good 1.6%, Neither 2.3%); simulated Current at 17 pairs, 5 oracles x 4 profiles x 3 seeds: Both good 2.7%, Neither 2.5%.
 # (+-0.5 SD gave 49% Both good and 0.1% Neither: the session soon plays only good sounds, so Both good needs a high bar.)
+NEW_BIAS = float(os.environ.get('NEW_BIAS', 0))  # SD added to a sound the listener has not heard before (real block sessions: the new sound won 65% of champion pairs, 2026-11-27)
 SYNTH_OFF = {'buzz': 0, 'chord': 'off', 'bell': False, 'vowel': False}
 _G = {}  # per-process: table, truth sounds
 
@@ -79,6 +80,9 @@ class Duel(GPScores, ba.DuelMixin, ba.FreeMixin, Base): pass
 class Robust(ba.RobustMixin, Base): pass
 
 
+class Guess(ba.GuessBlocks, Base): pass  # best guess vs might-be-better (2026-11-27): no starts, no champion
+
+
 class Pairs(GPScores, ba.FreeMixin, Base):
     """Two random clearly different sounds, no champion, no model (benchmark only)."""
     def _pick(self, cand):
@@ -86,7 +90,7 @@ class Pairs(GPScores, ba.FreeMixin, Base):
 
 
 CORE = ('current', 'random', 'infogain', 'iec')
-ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust}
+ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust, 'guess': Guess}
 
 
 def truth():
@@ -167,7 +171,8 @@ def run(job):
     d = ARMS[arm](seed, adaptive); d.start('rise'); rng = random.Random(seed * 31 + 5); n = 0; best = -9.
     for _ in range(pairs):
         if len(d.pair) != 2: break
-        za, zb = (z(d.candidates[i]['recipe']) for i in d.pair); best = max(best, za, zb); d.feedback(choice=answer(rng, za, zb, noise)); n += 1
+        za, zb = (z(d.candidates[i]['recipe']) for i in d.pair); best = max(best, za, zb); heard = {i for r in d.history for i in r['pair']}
+        ba_, bb_ = (NEW_BIAS * (i not in heard) for i in d.pair); d.feedback(choice=answer(rng, za + ba_, zb + bb_, noise)); n += 1
     d._rank_finalists(); short = [z(d.candidates[i]['recipe']) for i in d.finalists] or [-9.]
     X = _G['X']; sc = d.held_out_scores(X); g = np.random.default_rng(0); i, j = g.integers(len(X), size=(2, 3000)); gap = zt[i] - zt[j]; keep = np.abs(gap) > .5
     acc = float(np.mean(np.sign(sc[i] - sc[j])[keep] == np.sign(gap)[keep])) if keep.any() else float('nan')
@@ -240,7 +245,7 @@ def report(rows, noise, boots=2000):
         r = ci([per_profile(o, b, 'current', 'random', 'top10') for o in oracles]); print(f'  budget {b:3}  {r[0]:+.3f} [{r[1]:+.3f}, {r[2]:+.3f}]  {call(r[1], r[2], r[0])}')
     arms = {a for v in cell.values() for a in v}
     all_arms = set(arms)  # the loops below rebind `arms` to one cell's dict
-    pairs = [(a, c) for a, c in (('infogain', 'current'), ('iec', 'current'), ('pbogp', 'current'), ('pbogp', 'infogain'), ('robust', 'current'), ('duel', 'current'), ('random', 'pairs'), ('current', 'pairs')) if a in arms and c in arms]
+    pairs = [(a, c) for a, c in (('infogain', 'current'), ('iec', 'current'), ('pbogp', 'current'), ('pbogp', 'infogain'), ('robust', 'current'), ('duel', 'current'), ('random', 'pairs'), ('current', 'pairs'), ('guess', 'current')) if a in arms and c in arms]
     for metric, name in (('top10', 'top-10% retrieval (higher is better)'), ('regret', 'regret in SD (lower is better)')):
         print(f'\nSECONDARY: arm A minus arm B, {name}')
         for a, c in pairs:
