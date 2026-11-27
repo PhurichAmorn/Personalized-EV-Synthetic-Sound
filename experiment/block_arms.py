@@ -10,7 +10,7 @@ Not benchmarked yet when added: treat as experimental."""
 import numpy as np
 from scipy.stats import norm
 from experiment import sound_blocks as sb
-from experiment.source_search import _ONE_HOT, BLOCK_OPENING, BLOCK_PER_TOP, SHORTLIST, BlockDiscovery, block_features
+from experiment.source_search import _ONE_HOT, BLOCK_FEATURE_NAMES, BLOCK_OPENING, BLOCK_PER_TOP, SHORTLIST, BlockDiscovery, block_features
 
 CATS = ('body', 'top', 'partner', 'level', 'buzz', 'chord', 'bell', 'vowel')
 _VOC = {}
@@ -119,9 +119,10 @@ GUESS_MIN_GAP = .5  # octave-band gap a pair needs (another top texture or pitch
 
 
 def level_features(sound):
-    """Block features with pitch and brightness as categories (one per level), not a value and its square: a random draw of the taste then
-    favours no level, so challengers spread over the whole range (2026-11-27: with the squared terms 9 of 15 challengers sat at 47 or 119 Hz
-    and 7 at brightness .82-.85). Brightness goes to the nearest grid level."""
+    """Block features with pitch and brightness as categories (one per level), not a value and its square. Tried 2026-11-27 because with
+    the squared terms 9 of 15 challengers sat at 47 or 119 Hz and 7 at brightness .82-.85: the tries spread evenly, but the simulated
+    benchmark found the best sound less often (top-10% .59 vs .69 at 17 pairs; neighbouring levels no longer share evidence), so the session
+    keeps block_features. Kept for the benchmark arms 'guesslevels' and 'guessboth' (tools/benchmark_blocks.py)."""
     s = sb.full(sound); s['mix'] = f"{s['top']}+{s['partner']}" if s['partner'] else None
     b = min(range(len(BRIGHTNESS_GRID)), key=lambda k: abs(BRIGHTNESS_GRID[k] - s['brightness']))
     return np.array([float(s[k] == v) for k, vs in _ONE_HOT for v in vs] + [float(s['pitch'] == k) for k in range(len(sb.PITCHES))] + [float(b == k) for k in range(len(BRIGHTNESS_GRID))])
@@ -136,8 +137,6 @@ class GuessBlocks(BlockDiscovery):
     space), B = the sound one Thompson sample of the taste likes best, clearly different from A. The pair-2 winner is the evaluation baseline;
     the podium #1 (posterior mean over the sounds heard) is the evaluated final."""
     policy = 'source-blocks-guess-v1'
-    feature_names = LEVEL_FEATURE_NAMES
-    def _features(self, recipe): return level_features(recipe['blocks'])
     _random_sounds = FreeMixin._random_sounds
     def start(self, motion=None):
         with self.lock: self.space = None; self.roles = None
@@ -187,7 +186,7 @@ class GuessBlocks(BlockDiscovery):
         data = super().export()
         data['evaluation'] = {'baseline': self.baseline(), 'final': self.finalists[0] if self.finalists else None}
         data['note'] = ('Best guess vs might-be-better (2026-11-27). Pair 1 Rising vs Evolving on the Glass start (Both good or Neither keep Rising). '
-            f'Then every pair: A = the best guess (highest posterior mean of a Bayesian Bradley-Terry model over {len(LEVEL_FEATURE_NAMES)} block features (pitch and brightness levels as categories), '
+            f'Then every pair: A = the best guess (highest posterior mean of a Bayesian Bradley-Terry model over {len(BLOCK_FEATURE_NAMES)} block features, '
             f'among {GUESS_POOL} random sounds that pass the safe-area table, drawn once per session), B = the sound one Thompson sample of the taste '
             f'(half spread) likes best, clearly different from A (another top texture or pitch, or octave-band gap >= {GUESS_MIN_GAP}), never a pair already played. '
             'No starts, no champion, no phases. Both good / Neither: equal, and both beat / lose to a neutral sound. Podium: heard sounds by posterior mean, '

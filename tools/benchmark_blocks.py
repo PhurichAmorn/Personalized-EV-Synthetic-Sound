@@ -80,10 +80,23 @@ class Duel(GPScores, ba.DuelMixin, ba.FreeMixin, Base): pass
 class Robust(ba.RobustMixin, Base): pass
 
 
-class Guess(ba.GuessBlocks, Base):  # best guess vs might-be-better (2026-11-27): no starts, no champion
-    def held_out_scores(self, X):  # its own features (pitch and brightness levels as categories), not the app's
+class Guess(ba.GuessBlocks, Base): pass  # best guess vs might-be-better (2026-11-27): no starts, no champion
+
+
+class GuessLevels(Guess):  # trial 2026-11-27: pitch and brightness levels as categories (lower top-10%, not adopted)
+    feature_names = ba.LEVEL_FEATURE_NAMES
+    def _features(self, recipe): return ba.level_features(recipe['blocks'])
+    def held_out_scores(self, X):
         if 'Xg' not in _G: _G['Xg'] = np.array([ba.level_features(r['blocks']) for r in _G['truth']])
         return _G['Xg'] @ self._weights()
+
+
+class GuessBoth(Guess):  # trial 2026-11-27: the curve AND one category per level (= v1 without bias, worse with NEW_BIAS; not adopted)
+    feature_names = ss.BLOCK_FEATURE_NAMES + ba.LEVEL_FEATURE_NAMES[-10:]
+    def _features(self, recipe): return np.concatenate([block_features(recipe['blocks']), ba.level_features(recipe['blocks'])[-10:]])
+    def held_out_scores(self, X):
+        if 'Xb' not in _G: _G['Xb'] = np.array([self._features(r) for r in _G['truth']])
+        return _G['Xb'] @ self._weights()
 
 
 class Pairs(GPScores, ba.FreeMixin, Base):
@@ -93,7 +106,7 @@ class Pairs(GPScores, ba.FreeMixin, Base):
 
 
 CORE = ('current', 'random', 'infogain', 'iec')
-ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust, 'guess': Guess}
+ARMS = {'current': Current, 'random': Random, 'infogain': InfoGain, 'iec': IEC, 'pbogp': PBOGP, 'duel': Duel, 'pairs': Pairs, 'robust': Robust, 'guess': Guess, 'guesslevels': GuessLevels, 'guessboth': GuessBoth}
 
 
 def truth():
