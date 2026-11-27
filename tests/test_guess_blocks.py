@@ -17,6 +17,7 @@ class GuessBlocksTest(unittest.TestCase):
         self.assertEqual(len(pairs), 17); self.assertEqual(len(set(pairs)), 17)  # no pair played twice
         data = d.export(); ev = data['evaluation']; heard = {i for r in data['history'] for i in r['pair']}
         self.assertIn(ev['baseline'], heard); self.assertEqual(ev['final'], d.finalists[0])
+        self.assertTrue(all(sorted(r['roles'].values()) == ['explore', 'guess'] and set(r['roles']) == set(r['pair']) for r in data['history'][1:]))  # every pair after the motion pair
         self.assertLessEqual(d._sound(ev['final'])['pitch'], 1)  # the model learned the taste
         d.close()
 

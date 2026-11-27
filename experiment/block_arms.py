@@ -140,8 +140,13 @@ class GuessBlocks(BlockDiscovery):
     def _features(self, recipe): return level_features(recipe['blocks'])
     _random_sounds = FreeMixin._random_sounds
     def start(self, motion=None):
-        with self.lock: self.space = None
+        with self.lock: self.space = None; self.roles = None
         super().start(motion)
+    def _after_pair(self):
+        """The answered pair's roles go into its history row (roles: id -> 'guess' / 'explore'): a sound keeps the origin of its first pair, so
+        a sound that came in as a challenger and later returned as the best guess was labelled 'explore' in the record."""
+        if self.roles and set(self.roles) == set(self.history[-1]['pair']): self.history[-1]['roles'] = dict(self.roles)
+        super()._after_pair()
     def _clear(self, a, b):
         return a['blocks']['top'] != b['blocks']['top'] or a['blocks']['pitch'] != b['blocks']['pitch'] or not self.table or self._gap(a, b) >= GUESS_MIN_GAP
     def _proposals(self):
@@ -162,6 +167,7 @@ class GuessBlocks(BlockDiscovery):
         b = next((k for k in np.argsort(-(sample + tie)) if k != a and ok[k] and frozenset((ids[a], ids[k])) not in met and self._clear(self.space[a], self.space[k])), None)
         if b is None: return []
         self.rematch = [self._add(self.space[a], {'kind': 'guess', 'summary': 'Best guess'}), self._add(self.space[b], {'kind': 'explore', 'summary': 'Might be better (Thompson sample)'})]
+        self.roles = {self.rematch[0]: 'guess', self.rematch[1]: 'explore'}
         return []
     def _rank_finalists(self):
         """Podium: the heard sounds (in the chosen motion) by posterior mean, never one that lost every time, each clearly different, at most
@@ -185,7 +191,8 @@ class GuessBlocks(BlockDiscovery):
             f'among {GUESS_POOL} random sounds that pass the safe-area table, drawn once per session), B = the sound one Thompson sample of the taste '
             f'(half spread) likes best, clearly different from A (another top texture or pitch, or octave-band gap >= {GUESS_MIN_GAP}), never a pair already played. '
             'No starts, no champion, no phases. Both good / Neither: equal, and both beat / lose to a neutral sound. Podium: heard sounds by posterior mean, '
-            'a sound that never won left out, clearly different, at most 2 per top texture. evaluation: baseline = pair-2 winner, final = podium #1.')
+            'a sound that never won left out, clearly different, at most 2 per top texture. evaluation: baseline = pair-2 winner, final = podium #1. '
+            'Each answered pair row has roles (id -> guess / explore) for that pair; a candidate\'s origin is only the role of its first pair.')
         return data
 
 
