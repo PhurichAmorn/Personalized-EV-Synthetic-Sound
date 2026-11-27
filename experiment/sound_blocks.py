@@ -137,7 +137,8 @@ def load_table(path=TABLE):
     return json.loads(Path(path).read_text()) if Path(path).exists() else None
 
 
-_NEAREST = {}  # id(table) -> (table, {key: entry}): the closest-entry scan is slow and the Best guess session asks for every sound
+_NEAREST = {}  # id(table) -> (table, {key: entry}) for the last table only: the closest-entry scan is slow and the Best guess session asks
+# for every sound. One table only: each session reloads the table, and holding them all leaked about 6 MB per session (benchmark, 2026-11-28)
 
 
 def nearest_entry(table, sound):
@@ -145,7 +146,7 @@ def nearest_entry(table, sound):
     k = key(sound)
     if k in table['entries']: return table['entries'][k]
     held = _NEAREST.get(id(table))
-    if not held or held[0] is not table: held = _NEAREST[id(table)] = (table, {})
+    if not held or held[0] is not table: _NEAREST.clear(); held = _NEAREST[id(table)] = (table, {})
     if k not in held[1]: held[1][k] = _nearest_scan(table, sound, k)
     return held[1][k]
 
