@@ -244,7 +244,7 @@ export default function SteadySource({ onPlay, driving, onPlayingChange, onError
       refreshRequested.current = refresh
       setMethod('granular')
     } else if (refresh || (!voice.current && !loading)) void play(refresh)
-  }, stop, analyser: () => analyser.current, auditionContext: () => ({ volume: controls.current.volume, candidateId: externalSourceUrls.current?.[0].split('/')[3] ?? null, input: settingsRef.current.inputMode === 'simulated' ? 'simulated' : 'live', style: settingsRef.current.granularMode, response: settingsRef.current.response, spatial: controls.current.spatial }), audition: (urls, input) => {
+  }, stop, analyser: () => analyser.current, auditionContext: () => ({ volume: controls.current.volume, candidateId: externalSourceUrls.current?.[0].split('/')[3] ?? null, input: settingsRef.current.inputMode === 'simulated' ? 'simulated' : 'live', style: settingsRef.current.granularMode, response: settingsRef.current.response, spatial: controls.current.spatial, speedKmh: Math.round(Number((settingsRef.current.inputMode === 'simulated' && context.current ? simulatedDrive(context.current.currentTime - simulationStart.current) : inputRef.current)?.speedKmh) || 0) }), audition: (urls, input) => {
     if (urls.length !== 4 || !urls.every(url => /^\/audio\/source-search-cache\/[a-f0-9]{32}\/stem-[0-2]\.wav$/.test(url) || url === '/audio/original_steady_air.wav?v=17')) return Promise.resolve(false)
     auditionPending.current?.(false)
     stop(); travel.current = 1; engineStage.current = null; externalSourceUrls.current = urls; setMethod('granular'); setInputMode(input); setEvolvingSource('transformed'); setSpatial(true); setResponse('exponential')

@@ -33,6 +33,8 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [showMore, setShowMore] = useState(false)  // shortlist #4-5
   const [search, setSearch] = useState<SearchKind>('blocks')  // which search the next session uses: Building blocks is the standard; the others are baselines and experiments
   const heard = useRef(new Set<string>())
+  // Highest speed (km/h) reached while each sound of the pair was playing; sent with every answer so the record shows whether the whole range was heard.
+  const speedPeaks = useRef<Record<string, number>>({})
   // What is sounding now, for the label: a sound of this pair, or the pick from the last pair that keeps playing while the next pair builds.
   type NowPlaying = { id: string; kind: 'final' | 'sound' | 'pick'; x?: string; previous?: boolean }
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
@@ -73,6 +75,12 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     const pair = discovery?.pair ?? [], key = revision ?? null
     void Promise.all(pair.map(c => isLiveRecipe(c.recipe) ? liveStems(c.recipe) : null)).catch(() => null).then(() => setPairReady(key))
   }, [revision])
+  useEffect(() => { speedPeaks.current = {} }, [revision])
+  useEffect(() => {
+    if (!audition || !playing || !discovery?.active) return
+    const timer = window.setInterval(() => { const speed = Number(onContext().speedKmh) || 0; speedPeaks.current[audition] = Math.max(speedPeaks.current[audition] ?? 0, speed) }, 250)
+    return () => window.clearInterval(timer)
+  }, [audition, playing, discovery?.active])
   useEffect(() => { auditionSequence.current++; heard.current.clear(); setAudition(null); setReadyAudition(null); setRatings({}); setChoice(null); setShowMore(false) }, [revision, mode])
   useEffect(() => {
     if (!audition || readyAudition !== audition || !playing || hidden || !discovery?.active || (!running || !activity) || heard.current.has(audition)) return
@@ -112,7 +120,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const feedback = async () => {
     if (!discovery || discovery.pair.length !== 2) return
     setPending(true);onStop();setAudition(null);setNowPlaying(null)
-    try { await onCommand('sourceDiscoveryFeedback', { ratings: { A: ratings[discovery.pair[0].id], B: ratings[discovery.pair[1].id] }, context: onContext() }) }
+    try { await onCommand('sourceDiscoveryFeedback', { ratings: { A: ratings[discovery.pair[0].id], B: ratings[discovery.pair[1].id] }, context: { ...onContext(), speedPeaks: { ...speedPeaks.current } } }) }
     finally { setPending(false) }
   }
   // Final round and parent-check pairs take a direct choice; other pairs use the 1-7 sliders (kept for both, see pairMode).
@@ -126,7 +134,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     if (choice === 'neither') { onStop(); setNowPlaying(null) }
     else if (pick) { if (nowPlaying?.id !== pick.id) void onAudition(pick, 'driving'); setNowPlaying({ id: pick.id, kind: 'pick', x: choice }) }
     else if (nowPlaying) setNowPlaying({ ...nowPlaying, previous: true })
-    try { await onCommand(final ? 'sourceDiscoveryPlayoff' : 'sourceDiscoveryFeedback', { choice, context: onContext() }) }
+    try { await onCommand(final ? 'sourceDiscoveryPlayoff' : 'sourceDiscoveryFeedback', { choice, context: { ...onContext(), speedPeaks: { ...speedPeaks.current } } }) }
     finally { setPending(false) }
   }
   const final = discovery?.stage === 'playoff'
@@ -170,6 +178,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       {discovery?.active ? <>
         {final && <p className="mt-3 text-sm text-neutral-300" role="status">{t('Final round: your four finalists, compared head to head. Pick the one you prefer.')}</p>}
         {!discovery.busy && <>
+        <p className="mt-2 text-xs text-neutral-400">{t('Tip: accelerate from 0 to 140 km/h on each sound before you choose.')}</p>
         <div className="source-search-candidates" role="group" aria-label="Source A and B">
           {discovery.pair.map((candidate, index) => <div key={candidate.id} className="source-search-candidate">
             <button type="button" className={'control source-search-listen' + (audition === candidate.id ? ' selected' : '')} disabled={!sessionReady} aria-pressed={audition === candidate.id} onClick={() => listen(candidate)}><strong>{t('Sound {x}', { x: index === 0 ? 'A' : 'B' })}</strong></button>
@@ -191,6 +200,10 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
         </>}
         {discovery.error && <p role="alert" className="mt-3 text-sm text-red-300">{discovery.error} <button type="button" className="control" disabled={discovery.busy} onClick={() => void onCommand('sourceDiscoveryRetry')}>{t('Retry preparation')}</button></p>}
       </> : null}
+      {discovery && !discovery.active && (!discovery.completed || newSession) && <div className="mt-3 text-sm text-neutral-300" role="note" aria-label="Before you start">
+        <p>{t('Before you start')}</p>
+        <p className="mt-1 text-xs text-neutral-400">{t('For each sound, accelerate from 0 to 140 km/h so you hear its whole range before you choose. You can listen to A and B as often as you like.')}</p>
+      </div>}
       {discovery && !discovery.active && <div className="start-session-row"><button type="button" className="control" disabled={discovery.busy || sessionStarting} onClick={() => discovery.completed && !newSession ? setNewSession(true) : void begin()}>{sessionStarting ? t('Starting…') : discovery.completed && !newSession ? t('New session') : t('Start session')}</button></div>}
     </section>
     {!discovery?.active && !newSession && !!discovery?.finalists?.length && (discovery.final && discovery.rating == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
