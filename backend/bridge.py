@@ -147,7 +147,8 @@ class DesktopBridge:
         if name.startswith('evaluation'):
             if self.source_discovery.active:raise ValueError('Finish the session before the evaluation')
             if name == 'evaluationStart':return self.evaluation.start(payload.get('id') and self._text(payload,'id'))
-            if name == 'evaluationRate':return self.evaluation.rate(payload.get('rating'))
+            if name == 'evaluationRate':return self.evaluation.rate(payload.get('ratings'))
+            if name == 'evaluationPlayed':return self.evaluation.played(payload.get('letter'))
             if name == 'evaluationCancel':return self.evaluation.cancel()
             raise ValueError('Unknown evaluation command')
         if name == 'blockOptions':return self._block_options()

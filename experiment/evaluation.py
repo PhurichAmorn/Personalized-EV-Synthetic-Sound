@@ -1,11 +1,10 @@
 """Blind evaluation after a session (agreed 2026-11-27, after Fukumoto 2026, IJAE-D-26-00011): the driver's first choice before any learning
-(baseline = pair-2 winner) and the session's final sound (podium #1), played A-B-A-B while driving, each play rated 1-7. Which sound is A is
-counterbalanced over participants. The ratings are written into the session record (evaluation.ratings, evaluation.scores)."""
+(baseline = pair-2 winner) and the session's final sound (model #1), shown as Sound A and Sound B. The driver switches between them freely
+while driving (as in the session pairs) and rates each 1-7. Which sound is A is counterbalanced over participants. The ratings, the side
+assignment and how often each sound was played are written into the session record (evaluation.ratings, evaluation.sides, evaluation.plays)."""
 import json
 import random
 from datetime import datetime, timezone
-
-PLAYS = 4  # A-B-A-B: each sound twice
 
 
 class Evaluation:
@@ -13,7 +12,7 @@ class Evaluation:
         self.history = history; self.state = None
 
     def _records(self):
-        for path in sorted(self.history.root.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True):
+        for path in self.history.root.glob('*.json'):
             try: yield json.loads(path.read_text(encoding='utf8'))
             except (OSError, ValueError): continue
 
@@ -23,37 +22,34 @@ class Evaluation:
         if not ident: raise ValueError('No finished session to evaluate')
         data = self.history.get(ident); ev = data.get('evaluation') or {}
         if not ev.get('baseline') or not ev.get('final'): raise ValueError('This session has no baseline and final sound to evaluate')
-        # Counterbalance: the sound played first is the one that went first less often in the evaluations so far (a tie: a coin).
-        firsts = [d['evaluation']['order'][0] for d in self._records() if (d.get('evaluation') or {}).get('order')]
-        n_base, n_final = firsts.count('baseline'), firsts.count('final')
-        first = 'baseline' if n_base < n_final else 'final' if n_final < n_base else random.choice(('baseline', 'final'))
-        second = 'final' if first == 'baseline' else 'baseline'
-        self.state = {'session': ident, 'order': [first, second] * (PLAYS // 2), 'ratings': [],
+        # Counterbalance: Sound A is the one that was A less often in the evaluations so far (a tie: a coin).
+        sides = [d['evaluation']['sides']['A'] for d in self._records() if (d.get('evaluation') or {}).get('sides')]
+        n_base, n_final = sides.count('baseline'), sides.count('final')
+        a = 'baseline' if n_base < n_final else 'final' if n_final < n_base else random.choice(('baseline', 'final'))
+        self.state = {'session': ident, 'sides': {'A': a, 'B': 'final' if a == 'baseline' else 'baseline'}, 'plays': {'A': 0, 'B': 0}, 'done': False,
                       'sounds': {k: data['candidates'][ev[k]]['recipe'] for k in ('baseline', 'final')}}
         return self.view()
 
     def view(self):
         s = self.state
         if not s: return None
-        step = len(s['ratings']); done = step == PLAYS
-        out = {'session': s['session'], 'step': step, 'total': PLAYS, 'done': done}
-        if not done:  # blind: a letter and the recipe only (no label, no baseline/final)
-            which = s['order'][step]; out['letter'] = 'A' if which == s['order'][0] else 'B'
-            out['candidate'] = {'id': f"eval-{s['session'][:8]}-{out['letter']}", 'label': '', 'recipe': s['sounds'][which], 'urls': [], 'traces': {}}
-        return out
+        # blind: letters and recipes only (no label, no baseline/final)
+        return {'session': s['session'], 'done': s['done'],
+                'pair': [{'id': f"eval-{s['session'][:8]}-{x}", 'letter': x, 'label': '', 'recipe': s['sounds'][s['sides'][x]], 'urls': [], 'traces': {}} for x in 'AB']}
 
-    def rate(self, rating):
+    def played(self, letter):
+        if not self.state or letter not in ('A', 'B'): raise ValueError('No evaluation running')
+        self.state['plays'][letter] += 1
+
+    def rate(self, ratings):
         s = self.state
-        if not s or len(s['ratings']) == PLAYS: raise ValueError('No evaluation running')
-        if isinstance(rating, bool) or not isinstance(rating, int) or not 1 <= rating <= 7: raise ValueError('Rate from 1 to 7')
-        step = len(s['ratings'])
-        s['ratings'].append({'play': step + 1, 'sound': s['order'][step], 'rating': rating, 'time': datetime.now(timezone.utc).isoformat()})
-        if len(s['ratings']) == PLAYS:
-            data = self.history.get(s['session'])
-            mean = lambda k: sum(r['rating'] for r in s['ratings'] if r['sound'] == k) / (PLAYS // 2)
-            data['evaluation'].update(order=s['order'], ratings=s['ratings'], scores={'baseline': mean('baseline'), 'final': mean('final')},
-                                      same_sound=data['evaluation']['baseline'] == data['evaluation']['final'], rated=s['ratings'][-1]['time'])
-            self.history.write(s['session'], data)
+        if not s or s['done']: raise ValueError('No evaluation running')
+        if not isinstance(ratings, dict) or set(ratings) != {'A', 'B'} or any(isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 7 for v in ratings.values()):
+            raise ValueError('Rate both sounds from 1 to 7')
+        data = self.history.get(s['session'])
+        data['evaluation'].update(sides=s['sides'], ratings={s['sides'][x]: ratings[x] for x in 'AB'}, plays={s['sides'][x]: s['plays'][x] for x in 'AB'},
+                                  same_sound=data['evaluation']['baseline'] == data['evaluation']['final'], rated=datetime.now(timezone.utc).isoformat())
+        self.history.write(s['session'], data); s['done'] = True
         return self.view()
 
     def cancel(self):
@@ -68,9 +64,10 @@ if __name__ == '__main__':  # self-check on a temporary history
     rec = {'id': 'a' * 32, 'created': '', 'history': [], 'final': None, 'finalists': [], 'candidates': {'b': {'recipe': {'x': 1}}, 'f': {'recipe': {'x': 2}}},
            'evaluation': {'baseline': 'b', 'final': 'f'}}
     (root / f"{'a' * 32}.json").write_text(json.dumps(rec))
-    e = Evaluation(h); v = e.start('a' * 32); first = e.state['order'][0]
-    assert v['letter'] == 'A' and v['candidate']['recipe'] == rec['candidates'][rec['evaluation'][first]]['recipe']
-    for r in (6, 3, 7, 4): v = e.rate(r)
+    e = Evaluation(h); v = e.start('a' * 32); a = e.state['sides']['A']
+    assert v['pair'][0]['recipe'] == rec['candidates'][rec['evaluation'][a]]['recipe']
+    e.played('A'); e.played('A'); e.played('B'); v = e.rate({'A': 6, 'B': 3})
     assert v['done']; saved = h.get('a' * 32)['evaluation']
-    assert saved['scores'][first] == 6.5 and saved['scores'][e.state['order'][1]] == 3.5
+    assert saved['ratings'][a] == 6 and saved['plays'][a] == 2 and saved['sides']['A'] == a
+    e.start('a' * 32); assert e.state['sides']['A'] != a  # counterbalanced against the saved one
     print('evaluation self-check OK')
