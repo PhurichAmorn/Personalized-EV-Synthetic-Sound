@@ -11,7 +11,7 @@ import { playWelcome } from './welcomeSound'
 import { PersonalizeCloseButton } from './PersonalizeClose'
 import EvaluationPanel from './EvaluationPanel'
 export type DiscoveryCandidate = { id: string; label: string; recipe: SourceRecipe | LiveRecipe; urls: string[]; traces: Partial<Record<GranularMode, string>> }
-export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; rating?: number | null; quarantined: number; checkpoint: boolean }
+export type SourceDiscoveryState = { active: boolean; busy: boolean; error: string; completed: number; maxComparisons?: number; pair: DiscoveryCandidate[]; heard: string[]; selected: string | null; finalists?: Array<DiscoveryCandidate & { strength: number; wins: number; games: number; score: number; ratingCount: number }>; stage?: 'discovery' | 'playoff' | 'done'; pairMode?: 'rating' | 'choice'; step?: number; totalSteps?: number; playoffDone?: number; playoffTotal?: number; final: string | null; rating?: number | null; quarantined: number; checkpoint: boolean; policy?: string }
 // Row 1: Prefer A | Prefer B; row 2: Neither | Both good (the grid is two columns).
 const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
 type Answer = typeof ANSWERS[number][0]
@@ -140,6 +140,9 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
     finally { setPending(false) }
   }
   const final = discovery?.stage === 'playoff'
+  // Best guess session (2026-11-27): no podium (kept in code for the other sessions). After the last pair comes the blind test, then the
+  // model's #1 becomes the final sound, then the last questions: the podium labelled the #1 and would bias the blind test.
+  const noPodium = discovery?.policy === 'source-blocks-guess-v1'
   // Session finished and answered: the comparison panel turns into the saved screen (no count, one panel, the X moves into it).
   const [route, setRoute] = useState<AlgorithmSession | null>(null)
   const saved = !!discovery && !discovery.active && !newSession && !!discovery.finalists?.length && !!discovery.final && discovery.rating != null
@@ -168,7 +171,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       {discovery && !discovery.active && (!discovery.completed || newSession) && menuOpen && <ul className="search-dropdown-list" role="listbox" aria-label="Search">{SEARCHES.map(([value, label]) => <li key={value} role="option" aria-selected={search === value}><button type="button" className={search === value ? 'selected' : ''} onClick={() => { setSearch(value); setMenuOpen(false) }}>{t(label)}</button></li>)}</ul>}
       {!discovery && <p className="mt-3 text-sm text-neutral-400">Restart the app to load source discovery.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
-      {discovery && !discovery.active && !saved && !newSession && (discovery.finalists?.length || discovery.completed) ? <p className="mt-3 text-sm text-neutral-300" role="status">{newSession ? '' : discovery.finalists?.length ? t('Session complete · {n} comparisons.', { n: discovery.step ?? discovery.completed }) + (discovery.final ? '' : t(' Choose your final sound from your shortlist below.')) : discovery.completed ? t('Session finished after {n} comparisons.', { n: discovery.completed }) : ''}</p> : null}
+      {discovery && !discovery.active && !saved && !newSession && (discovery.finalists?.length || discovery.completed) ? <p className="mt-3 text-sm text-neutral-300" role="status">{newSession ? '' : discovery.finalists?.length ? t('Session complete · {n} comparisons.', { n: discovery.step ?? discovery.completed }) + (discovery.final || noPodium ? '' : t(' Choose your final sound from your shortlist below.')) : discovery.completed ? t('Session finished after {n} comparisons.', { n: discovery.completed }) : ''}</p> : null}
       {saved && <div className="source-search-thanks relative" role="status" aria-label="Final sound saved">
         <div className="thanks-head"><div className="thanks-check" aria-hidden="true">✓</div><h3 className="text-lg">{t('Saved · thank you!')}</h3></div>
         <p className="mt-1 text-xs text-neutral-400">{describeShort(discovery.finalists!.find(c => c.id === discovery.final)?.recipe)}</p>
@@ -176,7 +179,6 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
           <SoundProfile recipe={discovery.finalists!.find(c => c.id === discovery.final)?.recipe} />
           {route && <FinalMap session={route} />}
         </div>
-        {(route as { evaluation?: { baseline?: string; final?: string } } | null)?.evaluation?.final && <EvaluationPanel onCommand={onCommand} onAudition={onAudition} onStop={onStop} running={running} />}
       </div>}
       {discovery?.active ? <>
         {final && <p className="mt-3 text-sm text-neutral-300" role="status">{t('Final round: your four finalists, compared head to head. Pick the one you prefer.')}</p>}
@@ -213,7 +215,9 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
         <textarea className="last-note" lang="ja" rows={3} maxLength={2000} value={comment} onChange={e => setComment(e.target.value)} />
       </label>
       <button type="button" className="control mt-4" disabled={!satisfaction} onClick={() => void onCommand('sourceDiscoveryRate', { rating: satisfaction, comment })}>{t('Save answers')}</button>
-    </section> : discovery.final ? null : podiumReady !== podiumKey ? <section className="panel p-6 source-search-ranking" aria-label="Ranking" role="status">
+    </section> : discovery.final ? null : noPodium ? <section className="panel p-6 source-search-thanks" aria-label="Blind test">
+      <EvaluationPanel onCommand={onCommand} onAudition={onAudition} onStop={onStop} running={running} onDone={() => { const c = discovery.finalists![0]; setAudition(null); playFinal(c); void onCommand('sourceDiscoveryFinish', { id: c.id }) }} />
+    </section> : podiumReady !== podiumKey ? <section className="panel p-6 source-search-ranking" aria-label="Ranking" role="status">
       <span className="spinner" aria-hidden="true" /><h3 className="text-lg">{t('Ranking your best sounds…')}</h3>
       <p className="mt-1 text-sm text-neutral-400">{t('Preparing your top three so each one plays at once.')}</p>
     </section> : <section className="panel p-4 source-search-favourites" aria-label="Ranked finalists">

@@ -5,16 +5,16 @@ import type { DiscoveryCandidate } from './SourceSearch'
 type Command = (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
 type View = { session: string; step: number; total: number; done: boolean; letter?: 'A' | 'B'; candidate?: DiscoveryCandidate }
 
-/** Blind evaluation right after the session (experiment/evaluation.py): the session's baseline and final sound, played A-B-A-B while driving,
+/** Blind evaluation right after the last pair, before the final sound is revealed (experiment/evaluation.py): the session's baseline and final sound, played A-B-A-B while driving,
  *  each play rated 1-7. The driver sees only "Sound A / Sound B"; which one is the final is never shown. */
-export default function EvaluationPanel({ onCommand, onAudition, onStop, running }: { onCommand: Command; onAudition: (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => Promise<boolean | string>; onStop: () => void; running: boolean }) {
+export default function EvaluationPanel({ onCommand, onAudition, onStop, running, onDone }: { onDone: () => void; onCommand: Command; onAudition: (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => Promise<boolean | string>; onStop: () => void; running: boolean }) {
   const t = useT()
   const [view, setView] = useState<View | null>(null)
   const [played, setPlayed] = useState(false)
   const [error, setError] = useState('')
   const run = async (name: string, payload?: Record<string, unknown>) => {
     setError('')
-    try { const v = await onCommand(name, payload) as View | undefined; if (v) { setView(v); setPlayed(false) } } catch (problem) { setError(problem instanceof Error ? problem.message : String(problem)) }
+    try { const v = await onCommand(name, payload) as View | undefined; if (v) { setView(v); setPlayed(false); if (v.done) onDone() } } catch (problem) { setError(problem instanceof Error ? problem.message : String(problem)) }
   }
   const play = async () => {
     if (!view?.candidate) return
@@ -26,7 +26,7 @@ export default function EvaluationPanel({ onCommand, onAudition, onStop, running
   return <div className="mt-4 border-t border-neutral-700 pt-4" aria-label="Evaluation">
     {error && <p role="alert" className="mb-2 text-sm text-red-300">{error}</p>}
     {!view && <>
-      <h3 className="text-lg">{t('One more step: a short blind test')}</h3>
+      <h3 className="text-lg">{t('Before you hear your sound: a short blind test')}</h3>
       <p className="mt-1 text-sm text-neutral-400">{t('You will hear two sounds, A and B, twice each while driving. Rate each one.')}</p>
       <button type="button" className="control mt-3" onClick={() => { onStop(); void run('evaluationStart') }}>{t('Start the test')}</button>
     </>}
@@ -39,6 +39,5 @@ export default function EvaluationPanel({ onCommand, onAudition, onStop, running
         <button key={n} type="button" className="control" disabled={!played} onClick={() => rate(n)}>{n}</button>)}</div>
       <p className="star-ends"><span>{t('1 Dislike very much')}</span><span>{t('4 Neutral')}</span><span>{t('7 Like very much')}</span></p>
     </>}
-    {view?.done && <p className="text-sm text-neutral-300" role="status">{t('Test saved · thank you!')}</p>}
   </div>
 }

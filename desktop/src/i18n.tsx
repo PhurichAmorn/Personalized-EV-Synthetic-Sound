@@ -186,7 +186,7 @@ const JA: Record<string, string> = {
   Yes: 'はい',
   No: 'いいえ',
   'Saved · thank you!': '保存しました · ありがとうございました！',
-  'One more step: a short blind test': 'もう一つだけ：短いブラインドテスト', 'You will hear two sounds, A and B, twice each while driving. Rate each one.': '運転しながら2つのサウンド（AとB）をそれぞれ2回聞き、毎回評価してください。', 'Start the test': 'テストを開始', 'Test saved · thank you!': 'テストを保存しました · ありがとうございました！',
+  'Before you hear your sound: a short blind test': 'あなたのサウンドを聞く前に：短いブラインドテスト', 'You will hear two sounds, A and B, twice each while driving. Rate each one.': '運転しながら2つのサウンド（AとB）をそれぞれ2回聞き、毎回評価してください。', 'Start the test': 'テストを開始',
   'Play {n} of {total}': '再生 {n} / {total}', '▶ Play Sound {x}': '▶ サウンド {x} を再生',
   'Start the car first: the sound is rated while driving.': '先に車を始動してください。運転しながら評価します。',
   'How much would you like this sound in your car?': 'このサウンドを自分の車で使いたいと思いますか？',
