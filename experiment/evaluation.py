@@ -17,12 +17,10 @@ class Evaluation:
             try: yield json.loads(path.read_text(encoding='utf8'))
             except (OSError, ValueError): continue
 
-    def sessions(self):
-        """Finished sessions that can be evaluated (they name a baseline and a final), newest first; rated ones say so."""
-        return [{'id': d['id'], 'created': d.get('created', ''), 'participant': bool(d.get('participant')), 'rated': bool(d['evaluation'].get('ratings'))}
-                for d in self._records() if (d.get('evaluation') or {}).get('baseline') and d['evaluation'].get('final')]
-
-    def start(self, ident):
+    def start(self, ident=None):
+        """ident None: the session just finished in this run."""
+        ident = ident or self.history.session
+        if not ident: raise ValueError('No finished session to evaluate')
         data = self.history.get(ident); ev = data.get('evaluation') or {}
         if not ev.get('baseline') or not ev.get('final'): raise ValueError('This session has no baseline and final sound to evaluate')
         # Counterbalance: the sound played first is the one that went first less often in the evaluations so far (a tie: a coin).
@@ -74,5 +72,5 @@ if __name__ == '__main__':  # self-check on a temporary history
     assert v['letter'] == 'A' and v['candidate']['recipe'] == rec['candidates'][rec['evaluation'][first]]['recipe']
     for r in (6, 3, 7, 4): v = e.rate(r)
     assert v['done']; saved = h.get('a' * 32)['evaluation']
-    assert saved['scores'][first] == 6.5 and saved['scores'][e.state['order'][1]] == 3.5 and e.sessions()[0]['rated']
+    assert saved['scores'][first] == 6.5 and saved['scores'][e.state['order'][1]] == 3.5
     print('evaluation self-check OK')
