@@ -1,27 +1,28 @@
-# Legacy search cleanup plan (not done yet)
+# Legacy search cleanup plan
 
-Note (2026-11-25): the app also offers experimental variants of Building blocks (`blocks-random`, `blocks-robust`, `blocks-pbo`, `blocks-duel`, `blocks-infogain`, `experiment/block_arms.py`) for listener tests. Steps 2 and 3 below keep them until the listener tests decide which, if any, stay; they are not legacy.
+Goal: the current session (Best guess, `GuessBlocks` in `experiment/block_arms.py`) is what people and agents see first when they read the
+search code. Older searches move to `experiment/legacy/`. Everything stays in git, so every move is reversible.
 
-Goal: Building blocks (`BlockDiscovery`) is the only search in the app. The two older searches are hidden from the listener and moved out of the main code path, so people and agents reading `experiment/source_search.py` see the current system first. Everything stays in git, so the move is reversible.
+## Done (2026-11-27)
 
-## What can move, and what cannot
+1. The app offers two searches: Best guess (default) and Building blocks (previous). Sound families (`tuning`), Sound map (`map`) and the five
+   Building blocks variants (`blocks-random`, `-robust`, `-pbo`, `-duel`, `-infogain`) left the menu (`desktop/src/SourceSearch.tsx`) and
+   `backend/bridge.py`. The variants' code stays in `experiment/block_arms.py`: the benchmark uses their mixins.
+2. The Sound map sessions (`RegionMapDiscovery`, `StyleMapDiscovery`, `HeardMapDiscovery`, `map_regions`, `map_style` and the constants only
+   they use) moved to `experiment/legacy/map_search.py`. Importers updated: `tests/test_source_search.py`, `tools/benchmark_sound_map.py`.
+   The map tests stay in `tests/test_source_search.py`: they share a test class with `SoundMapDiscovery` tests.
+3. The old benchmark docs are marked out of date; current result: `docs/research/benchmark_guess_results.md`.
 
-- **Cannot move yet: Sound families (`TuningDiscovery`).** `BlockDiscovery` inherits through `SoundMapDiscovery` -> `TuningDiscovery` -> `LevelDiscovery` -> `StyleDiscovery` -> `SourceDiscovery`. These stay in `source_search.py` until Building blocks stops inheriting from them (separate refactor, done with the tests running).
-- **Can move: the Sound map session classes** `RegionMapDiscovery`, `StyleMapDiscovery`, `HeardMapDiscovery` (about 260 lines, `source_search.py` lines 1314-1576). Nothing in Building blocks uses them.
+## Next (after the pilot, with all tests running)
 
-## Steps
+Best guess still inherits through `BlockDiscovery` -> `SoundMapDiscovery` -> `TuningDiscovery` -> `LevelDiscovery` -> `StyleDiscovery` ->
+`SourceDiscovery`. To move those to legacy:
 
-1. Move the three Sound map classes (and constants only they use) to `experiment/legacy/map_search.py`.
-2. `backend/bridge.py`: keep only `'blocks': BlockDiscovery()` in `self.searches`.
-3. `desktop/src/SourceSearch.tsx`: remove the search dropdown (`tuning` / `map` / `blocks`); the session always uses blocks.
-4. Tests: move the map tests from `tests/test_source_search.py` to a legacy test file; fix imports in `tools/benchmark_sound_map.py` and `tools/sound_map/grow.py`.
-5. Docs: mark the Sound map and Sound families sections in `docs/system/interactive_algorithm.md` as legacy.
-6. Run all Python tests and the desktop build; check one block session end to end.
+1. Make the session stand alone: copy into it the few parent methods it uses (start and motion pair, choice feedback, Bayesian
+   Bradley-Terry posterior and Thompson sample, export, history save hooks), with the tests running after each step.
+2. Decide whether Building blocks stays as a fallback. If not, move `BlockDiscovery` and its parents to `experiment/legacy/`; if it stays,
+   it keeps its chain and only the unused classes (`OpenDiscovery`, `StyleDiscovery`-only helpers) move.
+3. Move the old benchmark harness arms that only compare Building blocks variants into a legacy section of `tools/benchmark_blocks.py`
+   or keep them as they are; they are cheap to keep.
 
-## Later (separate step)
-
-Make `BlockDiscovery` stand alone (copy the few parent methods it uses), then move `SourceDiscovery`, `StyleDiscovery`, `LevelDiscovery`, `TuningDiscovery` and `SoundMapDiscovery` to legacy as well.
-
-## Open
-
-- The study baseline (menu of the 4 starts) is a question for the professor; see the study discussion.
+Do this only after the pilot: it touches the core of the session participants use.

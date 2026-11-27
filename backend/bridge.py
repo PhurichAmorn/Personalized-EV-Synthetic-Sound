@@ -2,8 +2,8 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.block_arms import DuelBlocks, GuessBlocks, InfoGainBlocks, PBOBlocks, RandomBlocks, RobustBlocks
-from experiment.source_search import BlockDiscovery, HeardMapDiscovery, TuningDiscovery
+from experiment.block_arms import GuessBlocks
+from experiment.source_search import BlockDiscovery
 from experiment.source_history import SourceHistory
 from experiment.evaluation import Evaluation
 
@@ -11,13 +11,11 @@ from experiment.evaluation import Evaluation
 class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
-        # Per session: 'blocks' = building-block sounds built on the spot (experiment/sound_blocks.py, 2026-11-21), the standard session;
-        # 'tuning' = hand-made families + tuning moves (baseline); 'map' = generated sound map (tools/sound_map).
-        # LevelDiscovery, StyleDiscovery, OpenDiscovery and SourceDiscovery stay in code as older baselines.
-        self.searches = {'tuning': TuningDiscovery(), 'map': HeardMapDiscovery(), 'blocks': BlockDiscovery(),
-                         # experimental pair-selection variants of 'blocks' (experiment/block_arms.py, 2026-11-23): not benchmarked yet
-                         'blocks-random': RandomBlocks(), 'blocks-robust': RobustBlocks(), 'blocks-pbo': PBOBlocks(), 'blocks-duel': DuelBlocks(), 'blocks-infogain': InfoGainBlocks(), 'blocks-guess': GuessBlocks()}
-        self.source_discovery = self.searches['blocks']
+        # Per session (2026-11-27): 'blocks-guess' = Best guess vs might-be-better (experiment/block_arms.py GuessBlocks), the standard
+        # session with the blind evaluation; 'blocks' = Building blocks (experiment/source_search.py), the previous session, kept as a fallback.
+        # The other searches (Sound families, Sound map, the Building blocks variants) are no longer offered; their code stays for the benchmarks.
+        self.searches = {'blocks-guess': GuessBlocks(), 'blocks': BlockDiscovery()}
+        self.source_discovery = self.searches['blocks-guess']
         self.history = SourceHistory(self.source_discovery)
         self.evaluation = Evaluation(self.history)  # blind baseline-vs-final rating after a session
 
@@ -125,7 +123,7 @@ class DesktopBridge:
             if name == 'sourceDiscoveryStart':
                 if s.active or c.soundSweepActive:raise ValueError('Stop the native experiment or debug sweep first')
                 if discovery.active:raise ValueError('Finish the current source trial before starting another')
-                search = payload.get('search', 'blocks')
+                search = payload.get('search', 'blocks-guess')
                 if search not in self.searches:raise ValueError('Unknown search')
                 discovery = self.source_discovery = self.history.discovery = self.searches[search]
                 discovery.start(payload.get('motion'));self.history.begin(bool(payload.get('participant')),c.selectedVehicle,c.source_mode)

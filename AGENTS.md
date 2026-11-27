@@ -32,7 +32,7 @@ Start from the layer the task touches. Open these only when the task needs them:
 - [Sound behavior](docs/system/sound_behavior.md): existing procedural oscillator method and state mapping; baseline method.
 - [Source-first sound approach](docs/design/source_first_sound_approach.md): separate proposed method; not integrated into driving audio.
 - [Research notes](docs/research/sound_design_research.md) and [interactive search research](docs/research/interactive_search_research.md): evidence and limits behind design choices.
-- [Block-session benchmark plan](docs/research/benchmark_blocks_plan.md) and [results](docs/research/benchmark_blocks_results.md): how the current Building blocks search compares with seven alternatives on simulated listeners (`tools/benchmark_blocks.py`; GitHub Actions workflow `benchmark.yml`).
+- [Best guess results](docs/research/benchmark_guess_results.md): the current session against Building blocks on simulated listeners (`tools/benchmark_blocks.py`; GitHub Actions workflow `benchmark.yml`). The older [block-session benchmark](docs/research/benchmark_blocks_results.md) is out of date.
 - [BeamNG integration](docs/integrations/beamng_audio_integration.md): telemetry mod, UDP receiver, and always-on-top overlay are implemented. BeamNG's own drivetrain sound is not muted. The in-game FMOD path is a proposal only.
 
 ## How to use documentation

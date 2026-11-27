@@ -9,7 +9,7 @@ class SourceSearchBridgeTest(unittest.TestCase):
         self.bridge=DesktopBridge(self.controller)
         for search in self.bridge.searches.values():search.close()
         self.discovery=Mock(active=False,busy=False);self.map=Mock(active=False,busy=False)
-        self.bridge.searches={'blocks':self.discovery,'map':self.map};self.bridge.source_discovery=self.discovery
+        self.bridge.searches={'blocks-guess':self.discovery,'blocks':self.map};self.bridge.source_discovery=self.discovery  # self.map: the other search (Building blocks)
         self.bridge.snapshot=lambda:{'sourceDiscovery':'state'}
 
     def test_commands_forward_ids_and_explicit_export(self):
@@ -20,7 +20,7 @@ class SourceSearchBridgeTest(unittest.TestCase):
         with self.assertRaises(ValueError):self.bridge.command('sourceDiscoveryBookmark',{'id':'a','enabled':True})  # favourites removed
 
     def test_start_chooses_the_search_per_session(self):
-        self.bridge.command('sourceDiscoveryStart',{'search':'map'})
+        self.bridge.command('sourceDiscoveryStart',{'search':'blocks'})
         self.map.start.assert_called_once();self.discovery.start.assert_not_called()
         self.assertIs(self.bridge.source_discovery,self.map);self.assertIs(self.bridge.history.discovery,self.map)
         with self.assertRaises(ValueError):self.bridge.command('sourceDiscoveryStart',{'search':'other'})

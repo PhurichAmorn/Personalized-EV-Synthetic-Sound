@@ -12,7 +12,8 @@ import json, math, os, random, sys, tempfile
 from multiprocessing import Pool
 import numpy as np
 from experiment import source_search
-from experiment.source_search import SoundMapDiscovery, StyleMapDiscovery, HeardMapDiscovery, MAP_POOL, map_style
+from experiment.source_search import SoundMapDiscovery, MAP_POOL
+from experiment.legacy.map_search import StyleMapDiscovery, HeardMapDiscovery, map_style
 
 NOISE = float(os.environ.get('NOISE', .15))   # temperature: utility gap at which the better sound wins 73% of the time
 STYLE_BONUS = float(os.environ.get('STYLE_BONUS', .3))  # texture listener: utility bonus of the liked style (a typical utility gap between pool sounds is ~.1-.4)

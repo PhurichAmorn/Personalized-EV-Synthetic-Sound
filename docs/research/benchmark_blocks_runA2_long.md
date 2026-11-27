@@ -1,5 +1,7 @@
 # Block-session benchmark, Run A2: 40 / 60 / 80 / 120 / 160 pairs, with and without answer noise
 
+> **Out of date (2026-11-27).** This run is for the old Building blocks session. The standard session is now Best guess; see [Best guess results](benchmark_guess_results.md).
+
 Run 2026-11-26 on GitHub Actions (runs 45762073013 noise-free, 45762077891 logistic 0.5), 25 chunks each, 5 oracle families x 40 profiles x 10 seeds,
 arms current / random / infogain (400 sessions per oracle, budget and arm). Reports: `benchmark_blocks_report_runA2_noisefree.txt`, `benchmark_blocks_report_runA2_logistic0.5.txt`.
 The noise-free report was regenerated from `all_sessions.csv` because the workflow filtered on `none` while sessions store `none:0.0` (workflow fixed).

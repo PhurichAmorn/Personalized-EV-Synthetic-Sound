@@ -17,8 +17,8 @@ export type SourceDiscoveryState = { active: boolean; busy: boolean; error: stri
 const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
 type Answer = typeof ANSWERS[number][0]
 type Command = (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
-type SearchKind = 'tuning' | 'map' | 'blocks' | 'blocks-random' | 'blocks-robust' | 'blocks-pbo' | 'blocks-duel' | 'blocks-infogain' | 'blocks-guess'
-const SEARCHES: [SearchKind, string][] = [['blocks', 'Building blocks'], ['tuning', 'Sound families (baseline)'], ['map', 'Sound map (generated)'], ['blocks-random', 'Building blocks: random challengers (experimental)'], ['blocks-robust', 'Building blocks: robust champion (experimental)'], ['blocks-pbo', 'Building blocks: PBO model (experimental)'], ['blocks-duel', 'Building blocks: duel, no champion (experimental)'], ['blocks-infogain', 'Building blocks: expected-best challengers (experimental)'], ['blocks-guess', 'Best guess vs might-be-better (new, experimental)']]  // a button list, not a <select>: the native dropdown popup is unreadable in the BeamNG overlay
+type SearchKind = 'blocks-guess' | 'blocks'
+const SEARCHES: [SearchKind, string][] = [['blocks-guess', 'Best guess'], ['blocks', 'Building blocks (previous)']]  // a button list, not a <select>: the native dropdown popup is unreadable in the BeamNG overlay
 export default function SourceSearch({ hidden, discovery, onCommand, onContext, onAudition, onStop, playing, running, activity, mode, onModeChange, analyser }: { analyser: () => AnalyserNode | null; hidden: boolean; discovery?: SourceDiscoveryState; onCommand: Command; onContext: () => Record<string, unknown>; onAudition: (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => Promise<boolean | string>; onStop: () => void; playing: boolean; running: boolean; activity: boolean; mode: GranularMode; onModeChange: (mode: GranularMode) => void }) {
   const [audition, setAudition] = useState<string | null>(null)
   const [readyAudition, setReadyAudition] = useState<string | null>(null)
@@ -33,7 +33,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const [ratings, setRatings] = useState<Record<string, number>>({})
   const [choice, setChoice] = useState<Answer | null>(null)
   const [showMore, setShowMore] = useState(false)  // shortlist #4-5
-  const [search, setSearch] = useState<SearchKind>('blocks')  // which search the next session uses: Building blocks is the standard; the others are baselines and experiments
+  const [search, setSearch] = useState<SearchKind>('blocks-guess')  // which search the next session uses: Best guess is the standard; Building blocks is the previous session
   const heard = useRef(new Set<string>())
   // Highest speed (km/h) reached while each sound of the pair was playing; sent with every answer so the record shows whether the whole range was heard.
   const speedPeaks = useRef<Record<string, number>>({})
