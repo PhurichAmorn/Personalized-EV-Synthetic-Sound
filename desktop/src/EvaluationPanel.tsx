@@ -37,8 +37,16 @@ export default function EvaluationPanel({ onCommand, onAudition, onStop, running
       <p className="mt-3 text-sm text-neutral-300">{t('How much would you like this sound in your car?')}</p>
       {view.pair.map(c => <div key={c.letter} className="mt-3">
         <button type="button" className={'control' + (playing === c.letter ? ' selected' : '')} aria-pressed={playing === c.letter} disabled={!running} onClick={() => void play(c)}><strong>{t('▶ Play Sound {x}', { x: c.letter })}</strong></button>
-        <div className="mt-2 flex justify-center gap-2" role="radiogroup" aria-label={t('Sound {x}', { x: c.letter })}>{[1, 2, 3, 4, 5, 6, 7].map(n =>
-          <button key={n} type="button" role="radio" aria-checked={ratings[c.letter] === n} className={'control' + (ratings[c.letter] === n ? ' selected' : '')} disabled={!played[c.letter]} onClick={() => setRatings(r => ({ ...r, [c.letter]: n }))}>{n}</button>)}</div>
+        {(() => {  // the session's like/dislike slider (1-7), unrated until touched; locked until the sound has been played
+          const value = ratings[c.letter], set = (n: number) => setRatings(r => ({ ...r, [c.letter]: n }))
+          return <label className={'source-rating mx-auto mt-2 w-full max-w-[340px]' + (value === undefined ? ' unset' : '')}>
+            <span aria-hidden="true">{t('Dislike')}</span>
+            <input type="range" min={1} max={7} step={1} value={value ?? 4} disabled={!played[c.letter]} aria-label={`Rate sound ${c.letter}: 1 dislike very much, 4 neutral, 7 like very much`} aria-valuetext={value === undefined ? 'Not rated' : String(value)}
+              onChange={e => set(Number(e.currentTarget.value))} onPointerUp={e => set(Number(e.currentTarget.value))} onKeyUp={e => set(Number(e.currentTarget.value))} />
+            <span aria-hidden="true">{t('Like')}</span>
+            <output>{value ?? '–'}</output>
+          </label>
+        })()}
       </div>)}
       <p className="star-ends"><span>{t('1 Dislike very much')}</span><span>{t('4 Neutral')}</span><span>{t('7 Like very much')}</span></p>
       <button type="button" className="control mt-3" disabled={!ready} onClick={() => void save()}>{t('Save answers')}</button>
