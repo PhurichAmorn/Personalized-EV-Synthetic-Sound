@@ -146,7 +146,12 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   // Session finished and answered: the comparison panel turns into the saved screen (no count, one panel, the X moves into it).
   const [route, setRoute] = useState<AlgorithmSession | null>(null)
   const saved = !!discovery && !discovery.active && !newSession && !!discovery.finalists?.length && !!discovery.final && discovery.rating != null
-  useEffect(() => { if (!saved) { setRoute(null); return } let live = true; Promise.resolve(onCommand('sourceDiscoveryExport')).then(data => { if (live && data) setRoute(data as AlgorithmSession) }).catch(() => {}); return () => { live = false } }, [saved])  // eslint-disable-line react-hooks/exhaustive-deps
+  // No-podium session: after the blind test the final sound is revealed on its own page (confetti, profile, route) before the last questions.
+  const [revealed, setRevealed] = useState(false)
+  useEffect(() => { if (discovery?.active) setRevealed(false) }, [discovery?.active])
+  const revealing = noPodium && !!discovery && !discovery.active && !newSession && !!discovery.final && discovery.rating == null && !revealed
+  const finalCandidate = discovery?.finalists?.find(c => c.id === discovery.final)
+  useEffect(() => { if (!saved && !revealing) { setRoute(null); return } let live = true; Promise.resolve(onCommand('sourceDiscoveryExport')).then(data => { if (live && data) setRoute(data as AlgorithmSession) }).catch(() => {}); return () => { live = false } }, [saved, revealing])  // eslint-disable-line react-hooks/exhaustive-deps
   const choosing = final || discovery?.pairMode === 'choice'
   const sessionReady = Boolean(
     discovery?.active &&
@@ -206,7 +211,16 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       </> : null}
       {discovery && !discovery.active && <div className="start-session-row"><button type="button" className="control" disabled={discovery.busy || sessionStarting} onClick={() => discovery.completed && !newSession ? setNewSession(true) : setTipOpen(true)}>{sessionStarting ? t('Starting…') : discovery.completed && !newSession ? t('New session') : t('Start session')}</button></div>}
     </section>
-    {!discovery?.active && !newSession && !!discovery?.finalists?.length && (discovery.final && discovery.rating == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
+    {!discovery?.active && !newSession && !!discovery?.finalists?.length && (revealing ? <section className="panel p-6 source-search-thanks relative" aria-label="Your sound">
+      <Confetti key={discovery.final} />
+      <div className="thanks-head"><h3 className="text-lg">{t('This is your sound')}</h3></div>
+      <p className="mt-1 text-xs text-neutral-400">{describeShort(finalCandidate?.recipe)}</p>
+      <div className="thanks-body">
+        <SoundProfile recipe={finalCandidate?.recipe} />
+        {route && <FinalMap session={route} />}
+      </div>
+      <button type="button" className="control mt-4" onClick={() => { if (finalCandidate) playFinal(finalCandidate); setRevealed(true) }}>{t('Continue')}</button>
+    </section> : discovery.final && discovery.rating == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
       <h3 className="text-lg">{t('A few last questions')}</h3>
       <p className="mt-4 text-sm text-neutral-300">{t('How satisfied are you with this sound?')}</p>
       <div className="star-rating" role="radiogroup" aria-label={t('How satisfied are you with this sound?')}>{[1, 2, 3, 4, 5, 6, 7].map(n => <button key={n} type="button" role="radio" aria-checked={satisfaction === n} aria-label={t('{n} of 7', { n })} className={'star' + (n <= satisfaction ? ' on' : '')} onClick={() => setSatisfaction(n)}>★</button>)}</div>
