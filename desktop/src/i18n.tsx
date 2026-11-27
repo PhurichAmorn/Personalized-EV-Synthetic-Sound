@@ -171,7 +171,7 @@ const JA: Record<string, string> = {
   STARTING: '起動中',
   READY: '準備完了',
   STANDBY: '待機中',
-  'A few last questions': '最後にいくつか質問です',
+  'A few last questions…': '最後にいくつか質問です…',
   'How would you describe this sound, and how does it make you feel? What do you like or dislike about it? Was anything in the session confusing, hard to tell apart, or unnecessary, or is there anything you would change? (optional)': 'このサウンドをどのように感じますか？どんな気持ちになりますか？好きな点・好きでない点も教えてください。また、セッション中に分かりにくかった点、違いが分かりにくかった点、不要に感じた点、変えたい点はありますか？（任意）',
   'Save answers': '回答を保存',
   'Before you start': '開始前に',

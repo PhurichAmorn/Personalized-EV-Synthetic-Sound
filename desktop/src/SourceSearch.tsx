@@ -226,7 +226,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       </div>
       <button type="button" className="control mt-4" onClick={() => { if (finalCandidate) playFinal(finalCandidate); setRevealed(true) }}>{t('Continue')}</button>
     </section> : discovery.final && discovery.rating == null ? <section className="panel p-6 source-search-thanks" aria-label="Last question">
-      <h3 className="text-lg">{t('A few last questions')}</h3>
+      <h3 className="text-lg">{t('A few last questions…')}</h3>
       <p className="mt-4 text-sm text-neutral-300">{t('How satisfied are you with this sound?')}</p>
       <div className="star-rating" role="radiogroup" aria-label={t('How satisfied are you with this sound?')}>{[1, 2, 3, 4, 5, 6, 7].map(n => <button key={n} type="button" role="radio" aria-checked={satisfaction === n} aria-label={t('{n} of 7', { n })} className={'star' + (n <= satisfaction ? ' on' : '')} onClick={() => setSatisfaction(n)}>★</button>)}</div>
       <p className="star-ends"><span>{t('Not at all')}</span><span>{t('Extremely')}</span></p>
