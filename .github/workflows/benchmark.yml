@@ -126,7 +126,8 @@ jobs:
           files=$(find chunks -name chunk.csv | sort)
           if [ -z "$files" ]; then echo "::error::No chunk results were uploaded: a chunk job failed. Open the chunk job and read the first failing step."; ls -R chunks || true; exit 1; fi
           echo "$files" | wc -l
-          python -m tools.benchmark_blocks report "noise=$NOISE" $files | tee report.txt
+          N=$NOISE; [ "$N" = none ] && N=none:0.0  # sessions store the label as none:0.0
+          python -m tools.benchmark_blocks report "noise=$N" $files | tee report.txt
           python -m tools.benchmark_blocks summarize $files > summary.txt
           { echo '```'; head -c 60000 report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           python - $files <<'EOF'

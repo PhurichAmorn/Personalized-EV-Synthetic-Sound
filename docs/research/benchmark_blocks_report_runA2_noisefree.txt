@@ -1,0 +1,138 @@
+noise none:0.0; 5 oracles; 400 sessions per oracle, budget and arm; rule: BETTER = CI above 0 and difference >= 0.05
+
+PRIMARY: current minus random, top-10% retrieval
+  matched       40  +0.075 [+0.040, +0.113]  BETTER
+  matched       60  +0.028 [+0.010, +0.053]  no detectable difference
+  matched       80  +0.020 [+0.000, +0.050]  no detectable difference
+  matched      120  +0.013 [+0.000, +0.035]  no detectable difference
+  matched      160  +0.010 [+0.000, +0.028]  no detectable difference
+  multimodal    40  +0.043 [+0.015, +0.073]  no detectable difference
+  multimodal    60  +0.030 [+0.008, +0.053]  no detectable difference
+  multimodal    80  +0.020 [+0.000, +0.045]  no detectable difference
+  multimodal   120  +0.015 [+0.000, +0.040]  no detectable difference
+  multimodal   160  +0.005 [-0.005, +0.018]  no detectable difference
+  interaction   40  +0.048 [+0.020, +0.080]  no detectable difference
+  interaction   60  +0.013 [-0.010, +0.030]  no detectable difference
+  interaction   80  +0.010 [-0.008, +0.028]  no detectable difference
+  interaction  120  -0.005 [-0.030, +0.015]  no detectable difference
+  interaction  160  -0.005 [-0.035, +0.018]  no detectable difference
+  label         40  -0.015 [-0.050, +0.018]  no detectable difference
+  label         60  -0.045 [-0.085, -0.010]  WORSE
+  label         80  -0.043 [-0.082, -0.008]  WORSE
+  label        120  -0.035 [-0.065, -0.010]  WORSE
+  label        160  -0.033 [-0.060, -0.010]  WORSE
+  psycho        40  +0.025 [-0.013, +0.062]  no detectable difference
+  psycho        60  -0.080 [-0.123, -0.037]  WORSE
+  psycho        80  -0.105 [-0.143, -0.068]  WORSE
+  psycho       120  -0.070 [-0.100, -0.040]  WORSE
+  psycho       160  -0.003 [-0.018, +0.013]  no detectable difference
+  tally: {'BETTER': 1, 'no detectable difference': 17, 'WORSE': 7}
+
+HEADLINE: current minus random pooled over oracles, top-10%
+  budget  40  +0.035 [+0.020, +0.050]  no detectable difference
+  budget  60  -0.011 [-0.025, +0.002]  no detectable difference
+  budget  80  -0.020 [-0.033, -0.005]  WORSE
+  budget 120  -0.017 [-0.028, -0.005]  WORSE
+  budget 160  -0.005 [-0.015, +0.004]  no detectable difference
+
+SECONDARY: arm A minus arm B, top-10% retrieval (higher is better)
+  infogain - current  matched       40: -0.010 [-0.028, +0.005]  60: -0.005 [-0.013, +0.000]  80: -0.007 [-0.022, +0.000]  120: +0.000 [+0.000, +0.000]  160: +0.000 [+0.000, +0.000]
+  infogain - current  multimodal    40: +0.020 [+0.000, +0.045]  60: +0.010 [-0.008, +0.028]  80: +0.008 [-0.003, +0.018]  120: +0.008 [+0.000, +0.020]  160: +0.008 [+0.000, +0.020]
+  infogain - current  interaction   40: +0.022 [+0.000, +0.050]  60: +0.032 [+0.005, +0.070]  80: +0.013 [+0.000, +0.030]  120: +0.015 [+0.000, +0.043]  160: +0.013 [+0.000, +0.037]
+  infogain - current  label         40: +0.003 [-0.042, +0.045]  60: +0.010 [-0.023, +0.048]  80: +0.002 [-0.030, +0.035]  120: +0.000 [-0.020, +0.018]  160: +0.022 [+0.008, +0.043]
+  infogain - current  psycho        40: -0.115 [-0.152, -0.075]  60: -0.098 [-0.128, -0.065]  80: -0.055 [-0.090, -0.022]  120: +0.028 [+0.008, +0.048]  160: +0.017 [+0.005, +0.030]
+
+SECONDARY: arm A minus arm B, regret in SD (lower is better)
+  infogain - current  matched       40: -0.006 [-0.055, +0.038]  60: -0.027 [-0.059, +0.002]  80: -0.016 [-0.052, +0.021]  120: -0.022 [-0.053, +0.004]  160: -0.019 [-0.049, +0.006]
+  infogain - current  multimodal    40: -0.069 [-0.124, -0.016]  60: -0.051 [-0.105, +0.001]  80: -0.032 [-0.073, +0.005]  120: -0.034 [-0.074, -0.003]  160: -0.028 [-0.064, +0.001]
+  infogain - current  interaction   40: -0.073 [-0.170, +0.023]  60: -0.032 [-0.119, +0.057]  80: -0.053 [-0.143, +0.023]  120: -0.048 [-0.121, +0.024]  160: -0.035 [-0.110, +0.035]
+  infogain - current  label         40: -0.014 [-0.079, +0.050]  60: -0.020 [-0.081, +0.044]  80: -0.005 [-0.055, +0.053]  120: -0.007 [-0.044, +0.030]  160: -0.016 [-0.050, +0.018]
+  infogain - current  psycho        40: +0.011 [-0.015, +0.037]  60: +0.058 [+0.037, +0.079]  80: +0.048 [+0.026, +0.069]  120: +0.006 [-0.017, +0.028]  160: +0.028 [+0.005, +0.049]
+
+BUDGET EFFECT: current at the longer budget minus current at the shorter, top-10%
+  matched     
+  multimodal  
+  interaction 
+  label       
+  psycho      
+
+OTHER OUTCOMES: current minus random (top-5% = the #1 is in the top 5%; shortlist top-5% = any of the up to 5 shortlisted sounds is)
+  top5   matched       40: +0.125 [+0.078, +0.177]  60: +0.102 [+0.053, +0.162]  80: +0.085 [+0.033, +0.148]  120: +0.053 [+0.013, +0.108]  160: +0.035 [+0.003, +0.077]
+  top5   multimodal    40: +0.110 [+0.062, +0.165]  60: +0.078 [+0.035, +0.130]  80: +0.063 [+0.018, +0.123]  120: +0.055 [+0.010, +0.120]  160: +0.025 [-0.005, +0.062]
+  top5   interaction   40: +0.083 [+0.027, +0.140]  60: +0.053 [-0.002, +0.110]  80: +0.020 [-0.023, +0.060]  120: -0.008 [-0.045, +0.023]  160: -0.020 [-0.053, +0.008]
+  top5   label         40: -0.005 [-0.053, +0.045]  60: -0.037 [-0.087, +0.008]  80: -0.048 [-0.100, -0.002]  120: -0.043 [-0.085, +0.000]  160: -0.028 [-0.062, +0.005]
+  top5   psycho        40: +0.125 [+0.087, +0.168]  60: -0.023 [-0.068, +0.028]  80: -0.075 [-0.118, -0.028]  120: -0.037 [-0.077, +0.000]  160: +0.062 [+0.040, +0.087]
+  top5   pooled        40: +0.087 [+0.067, +0.109]  60: +0.034 [+0.012, +0.058]  80: +0.009 [-0.013, +0.030]  120: +0.004 [-0.015, +0.024]  160: +0.015 [+0.001, +0.031]
+  short5 matched       40: +0.113 [+0.055, +0.180]  60: +0.073 [+0.028, +0.130]  80: +0.048 [+0.010, +0.098]  120: +0.028 [+0.003, +0.062]  160: +0.010 [+0.000, +0.025]
+  short5 multimodal    40: +0.065 [+0.022, +0.118]  60: +0.048 [+0.000, +0.113]  80: +0.040 [-0.003, +0.097]  120: +0.022 [-0.003, +0.053]  160: +0.013 [-0.008, +0.035]
+  short5 interaction   40: +0.057 [+0.010, +0.107]  60: +0.018 [-0.028, +0.062]  80: -0.013 [-0.040, +0.010]  120: -0.018 [-0.037, +0.000]  160: -0.018 [-0.037, -0.003]
+  short5 label         40: +0.003 [-0.048, +0.060]  60: -0.035 [-0.085, +0.010]  80: -0.025 [-0.068, +0.013]  120: +0.003 [-0.022, +0.033]  160: +0.010 [-0.010, +0.037]
+  short5 psycho        40: +0.028 [-0.020, +0.075]  60: -0.003 [-0.037, +0.032]  80: +0.010 [-0.017, +0.037]  120: +0.037 [+0.022, +0.055]  160: +0.022 [+0.008, +0.037]
+  short5 pooled        40: +0.053 [+0.030, +0.077]  60: +0.020 [-0.001, +0.041]  80: +0.012 [-0.005, +0.032]  120: +0.015 [+0.004, +0.026]  160: +0.007 [-0.000, +0.016]
+
+EQUIVALENT RANDOM PAIRS: how many pairs Random needs to match an arm (linear interpolation of Random top-10% between the budgets played; a point estimate with no CI)
+  matched      current   at 40 pairs: matches Random at 76.7 pairs (saves +36.7)
+  matched      current   at 60 pairs: top-10% 0.993, outside what Random reached (0.902 to 0.990)
+  matched      current   at 80 pairs: top-10% 1.000, outside what Random reached (0.902 to 0.990)
+  matched      current   at 120 pairs: top-10% 1.000, outside what Random reached (0.902 to 0.990)
+  matched      infogain  at 40 pairs: matches Random at 63.3 pairs (saves +23.3)
+  matched      infogain  at 60 pairs: matches Random at 120.0 pairs (saves +60.0)
+  matched      infogain  at 80 pairs: top-10% 0.993, outside what Random reached (0.902 to 0.990)
+  matched      infogain  at 120 pairs: top-10% 1.000, outside what Random reached (0.902 to 0.990)
+  multimodal   current   at 40 pairs: matches Random at 73.3 pairs (saves +33.3)
+  multimodal   current   at 60 pairs: matches Random at 104.0 pairs (saves +44.0)
+  multimodal   current   at 80 pairs: matches Random at 144.0 pairs (saves +64.0)
+  multimodal   current   at 120 pairs: top-10% 0.990, outside what Random reached (0.912 to 0.988)
+  multimodal   infogain  at 40 pairs: matches Random at 120.0 pairs (saves +80.0)
+  multimodal   infogain  at 60 pairs: matches Random at 136.0 pairs (saves +76.0)
+  multimodal   infogain  at 80 pairs: top-10% 0.990, outside what Random reached (0.912 to 0.988)
+  multimodal   infogain  at 120 pairs: top-10% 0.998, outside what Random reached (0.912 to 0.988)
+  interaction  current   at 40 pairs: matches Random at 59.0 pairs (saves +19.0)
+  interaction  current   at 60 pairs: matches Random at 71.1 pairs (saves +11.1)
+  interaction  current   at 80 pairs: matches Random at 102.9 pairs (saves +22.9)
+  interaction  current   at 120 pairs: matches Random at 108.6 pairs (saves -11.4)
+  interaction  infogain  at 40 pairs: matches Random at 77.8 pairs (saves +37.8)
+  interaction  infogain  at 60 pairs: matches Random at 146.7 pairs (saves +86.7)
+  interaction  infogain  at 80 pairs: matches Random at 146.7 pairs (saves +66.7)
+  interaction  infogain  at 120 pairs: top-10% 0.988, outside what Random reached (0.887 to 0.985)
+  label        current   at 40 pairs: top-10% 0.890, outside what Random reached (0.905 to 0.995)
+  label        current   at 60 pairs: matches Random at 43.6 pairs (saves -16.4)
+  label        current   at 80 pairs: matches Random at 50.9 pairs (saves -29.1)
+  label        current   at 120 pairs: matches Random at 60.0 pairs (saves -60.0)
+  label        infogain  at 40 pairs: top-10% 0.892, outside what Random reached (0.905 to 0.995)
+  label        infogain  at 60 pairs: matches Random at 47.3 pairs (saves -12.7)
+  label        infogain  at 80 pairs: matches Random at 51.8 pairs (saves -28.2)
+  label        infogain  at 120 pairs: matches Random at 60.0 pairs (saves -60.0)
+  psycho       current   at 40 pairs: matches Random at 43.1 pairs (saves +3.1)
+  psycho       current   at 60 pairs: matches Random at 50.2 pairs (saves -9.8)
+  psycho       current   at 80 pairs: matches Random at 52.0 pairs (saves -28.0)
+  psycho       current   at 120 pairs: matches Random at 59.1 pairs (saves -60.9)
+  psycho       infogain  at 40 pairs: top-10% 0.667, outside what Random reached (0.757 to 0.983)
+  psycho       infogain  at 60 pairs: top-10% 0.743, outside what Random reached (0.757 to 0.983)
+  psycho       infogain  at 80 pairs: matches Random at 45.2 pairs (saves -34.8)
+  psycho       infogain  at 120 pairs: matches Random at 70.0 pairs (saves -50.0)
+  pooled       current   at 40 pairs: matches Random at 49.8 pairs (saves +9.8)
+  pooled       current   at 60 pairs: matches Random at 56.9 pairs (saves -3.1)
+  pooled       current   at 80 pairs: matches Random at 63.4 pairs (saves -16.6)
+  pooled       current   at 120 pairs: matches Random at 79.1 pairs (saves -40.9)
+  pooled       infogain  at 40 pairs: matches Random at 45.3 pairs (saves +5.3)
+  pooled       infogain  at 60 pairs: matches Random at 54.1 pairs (saves -5.9)
+  pooled       infogain  at 80 pairs: matches Random at 58.9 pairs (saves -21.1)
+  pooled       infogain  at 120 pairs: matches Random at 103.2 pairs (saves -16.8)
+
+MEANS (top10, regret, held-out acc) per arm, pooled over oracles
+  budget  40 current   top10 0.908  regret 0.54  acc 0.652  best-heard top10 0.943
+  budget  40 infogain  top10 0.892  regret 0.51  acc 0.658  best-heard top10 0.942
+  budget  40 random    top10 0.873  regret 0.72  acc 0.649  best-heard top10 0.951
+  budget  60 current   top10 0.933  regret 0.44  acc 0.659  best-heard top10 0.967
+  budget  60 infogain  top10 0.923  regret 0.43  acc 0.662  best-heard top10 0.976
+  budget  60 random    top10 0.945  regret 0.57  acc 0.659  best-heard top10 0.983
+  budget  80 current   top10 0.949  regret 0.40  acc 0.663  best-heard top10 0.988
+  budget  80 infogain  top10 0.941  regret 0.39  acc 0.666  best-heard top10 0.994
+  budget  80 random    top10 0.968  regret 0.48  acc 0.665  best-heard top10 0.990
+  budget 120 current   top10 0.967  regret 0.35  acc 0.668  best-heard top10 0.994
+  budget 120 infogain  top10 0.977  regret 0.33  acc 0.671  best-heard top10 0.997
+  budget 120 random    top10 0.984  regret 0.40  acc 0.671  best-heard top10 0.996
+  budget 160 current   top10 0.983  regret 0.31  acc 0.669  best-heard top10 0.995
+  budget 160 infogain  top10 0.995  regret 0.30  acc 0.674  best-heard top10 0.999
+  budget 160 random    top10 0.988  regret 0.34  acc 0.674  best-heard top10 0.998
