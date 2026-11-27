@@ -1,5 +1,7 @@
 # Block-session benchmark: plan and contrast list
 
+> **Out of date (2026-11-27).** This plan is for the old Building blocks session; it was not re-run for Best guess. The standard session is now Best guess; see [Best guess results](benchmark_guess_results.md).
+
 Written 2026-11-23, **before the full run**. Commit this file first; the git history is the record that the plan came before the results.
 Code: `tools/benchmark_blocks.py` (harness), `experiment/source_search.py` (`BlockDiscovery`, `adaptive`, `_order_broad`).
 All results are from **synthetic preference profiles**. They show how the selection methods behave under stated assumptions, not that real

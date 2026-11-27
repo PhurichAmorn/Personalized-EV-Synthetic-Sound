@@ -24,6 +24,9 @@ class SourceHistory:
         self.root.mkdir(parents=True,exist_ok=True)
         data={**self.discovery.export(),'id':self.session,'created':self.created,'participant':self.participant,'researcher_note':self.note,'vehicle':self.vehicle,'source_mode':self.source,'vehicle_changes':self.vehicle_changes}
         for candidate in data['candidates'].values():candidate.pop('urls',None);candidate.pop('traces',None)  # cache paths; previews are regenerated
+        try:old=json.loads((self.root/f'{self.session}.json').read_text(encoding='utf8')).get('evaluation') or {}
+        except (OSError,ValueError):old={}
+        if old.get('ratings') and data.get('evaluation'):data['evaluation']={**data['evaluation'],**old}  # blind evaluation answers (experiment/evaluation.py) are never overwritten
         temp=self.root/f'{self.session}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{self.session}.json')
         if data.get('final'):self.picked=self.session  # a final pick made in this run becomes the driver's sound
         self._refresh()
@@ -74,8 +77,12 @@ class SourceHistory:
         if participant is not None:data['participant']=participant
         if note is not None:data['researcher_note']=note
         if ident==self.session:self.participant=bool(data.get('participant'));self.note=data.get('researcher_note','')
-        temp=self.root/f'{ident}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{ident}.json')
+        self.write(ident,data)
         return True
+    def write(self,ident,data):
+        """Replace a saved session record (atomic: temp file, then rename)."""
+        if not ID.fullmatch(ident):raise ValueError('Unknown history entry')
+        temp=self.root/f'{ident}.tmp';temp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');temp.replace(self.root/f'{ident}.json')
     def get(self,ident):return self._read(ident)
     def delete(self,ident):
         if not ID.fullmatch(ident):raise ValueError('Unknown history entry')

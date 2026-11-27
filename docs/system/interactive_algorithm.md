@@ -56,7 +56,48 @@ For research findings and the proposed character-first redesign, see [Interactiv
 
 ## Source discovery trial
 
-### Building-block search (`source-blocks-v1`, `BlockDiscovery`): selectable per session ("Building blocks")
+Personalize sound offers two searches (2026-11-27): **Best guess** (the default and standard session) and **Building blocks (previous)**, kept
+as a fallback. Both use the building-block sounds below. Sound families, Sound map and the Building blocks variants are no longer offered.
+
+### Best guess search (`source-blocks-guess-v1`, `GuessBlocks` in `experiment/block_arms.py`): the standard session
+
+Added 2026-11-27, after the Building blocks sessions showed the champion wandering (the challenger won 65% of champion pairs, so the last
+champion was often a recent lucky winner) and the four starts anchoring the result (the top texture left its start in 4 of 37 sessions).
+Goal: one rule for every pair, easy to explain: no starts, no champion, no phases, no refinement stage.
+
+- **Pair 1:** the Glass start, Rising vs Evolving (as Building blocks).
+- **Pairs 2-17:** A = the best guess, the sound with the highest posterior mean of the Bayesian Bradley-Terry model over block features;
+  B = the sound one Thompson sample of the taste (half spread) likes best. Both come from 1000 random sounds that pass the safe-area table,
+  drawn once per session. A and B must be clearly different (another top texture or pitch, or an octave-band gap of at least 0.5: a guess
+  between the 0.35 heard in quiet listening and pairs reported as only slightly different while driving, 0.45-0.49). A pair is never played
+  twice. Both good / Neither: equal, and both beat / lose to a neutral sound.
+- **Behaviour.** Early pairs are spread out (the model knows little); later pairs narrow by themselves. The best guess returns while it keeps
+  winning, as the elite does in an interactive genetic algorithm; that is the search settling, not a rule. Pitch and brightness enter as a
+  value and its square, so challengers lean to the extremes; one category per level spread them evenly but found the best sound less often
+  in the benchmark, so it was not adopted ([results](../research/benchmark_guess_results.md)).
+- **End.** No podium (the code stays for Building blocks): a podium labels the #1 and would bias the blind test. After pair 17 comes the
+  blind evaluation; then the model's #1 (posterior mean over the sounds heard, never one that lost every time) becomes the final sound and
+  is shown on a "This is your sound" page (profile bars, route graph, live waveform and spectrogram); then the stars and comment.
+- **Export.** `evaluation` (below); each answered pair row has `roles` (id -> guess / explore) for that pair, because a candidate's
+  `origin` is only the role of its first pair.
+
+### Blind evaluation after the session (`experiment/evaluation.py`, Best guess only)
+
+After Fukumoto (2026), *A Cross-modal Interactive Genetic Algorithm for Aroma Blending and Parametric Musical Melody Generation*, IJAE
+(doi 10.5057/ijae.IJAE-D-26-00011), which compared the best of generation 0 with the best of generation 9, blind, with a two-tailed
+Wilcoxon signed-rank test.
+
+- **Sounds:** the baseline (the pair-2 winner: the driver's first choice before any learning; Both good / Neither: the model's higher) and
+  the final sound (the model's #1). The paper's baseline was the best of 8; ours is the best of 2, so it is easier to beat.
+- **Procedure:** Sound A and Sound B, blind; which one is A is counterbalanced across sessions. The driver switches freely while driving
+  (as in the session pairs) and rates each 1-7: "How much would you like this sound in your car?" (1 dislike very much, 4 neutral, 7 like
+  very much). Both must be played before rating.
+- **Record:** `evaluation` = baseline and final ids, `ratings` by sound, `sides`, `plays` per sound, `same_sound`, `rated`. A later autosave
+  of the session never overwrites them.
+- **Limits:** the test follows the session at once (the paper used a separate day), and each sound is rated once. Analysis (Wilcoxon
+  over participants) is not built yet.
+
+### Building-block search (`source-blocks-v1`, `BlockDiscovery`): the previous standard session ("Building blocks (previous)")
 
 Added 2026-11-21. No pool: each sound is built on the spot from building blocks (`experiment/sound_blocks.py`) and played by the app's existing stack voice (`mapVoice.ts`), so the app has no new synth code.
 
@@ -76,9 +117,12 @@ Added 2026-11-21. No pool: each sound is built on the spot from building blocks 
 - **Final list.** Bradley-Terry on the answers alone, at most 2 sounds per top texture, each clearly different from the others: another top, body, top level or synth knob, or 8+ semitones. One pitch step or the space alone does not count (final-list #2 and #3 differing only in those sounded alike, 2026-11-22).
 - **Export.** `liked` (every winner, and both sounds of a Both good answer), `repeats` (the replay and whether it agreed), `table`, the shortlist and the ranking as in the sound-map search.
 
-- **Experimental variants (2026-11-23, `experiment/block_arms.py`, Search selector "Building blocks: ... (experimental)").** The same session with one change, in how pairs 5-14 are chosen: `blocks-infogain` challengers ordered by expected best of the pair (EUBO) over 200 draws from the same linear model, `blocks-random` challengers in random order (control); `blocks-robust` the champion is the Bradley-Terry best of everything heard, not the last winner; `blocks-pbo` challengers ordered by EUBO under a GP preference model (Hamming kernel on blocks, RBF on pitch and brightness); `blocks-duel` no champion, two sounds picked by two posterior draws of the same GP from 400 random table-passing sounds plus those heard. Policies `source-blocks-v1-<name>`. Benchmarked on simulated listeners 2026-11-23/24: none beat Building blocks by the bar set in advance (InfoGain is slightly better but under it); see docs/research/benchmark_blocks_results.md. Not tested with listeners.
+- **Experimental variants (2026-11-23, `experiment/block_arms.py`; no longer in the app since 2026-11-27, kept for the benchmark).** The same session with one change, in how pairs 5-14 are chosen: `blocks-infogain` challengers ordered by expected best of the pair (EUBO) over 200 draws from the same linear model, `blocks-random` challengers in random order (control); `blocks-robust` the champion is the Bradley-Terry best of everything heard, not the last winner; `blocks-pbo` challengers ordered by EUBO under a GP preference model (Hamming kernel on blocks, RBF on pitch and brightness); `blocks-duel` no champion, two sounds picked by two posterior draws of the same GP from 400 random table-passing sounds plus those heard. Policies `source-blocks-v1-<name>`. Benchmarked on simulated listeners 2026-11-23/24: none beat Building blocks by the bar set in advance (InfoGain is slightly better but under it); see docs/research/benchmark_blocks_results.md. Not tested with listeners.
 
-### Sound-map search (phase 1, `source-map-regions-1`, `RegionMapDiscovery`): selectable per session
+### Sound-map search (phase 1, `source-map-regions-1`, `RegionMapDiscovery`): legacy, not offered since 2026-11-27
+
+The Region, Style and Heard map sessions moved to `experiment/legacy/map_search.py`; their base `SoundMapDiscovery` stays in
+`experiment/source_search.py` because Building blocks inherits from it. The text below describes them as they were.
 
 Goal: test whether the same A/B session works over **generated** sounds instead of hand-made families, so the final sound is not limited to a
 fixed preset set. Personalize sound now has a search selector: *Building blocks* = `BlockDiscovery` (the default and standard session), *Sound families (baseline)* = `TuningDiscovery` (`source-tuning-v1`; hand-made families, variants and tuning moves, described in `experiment/source_search.py`), *Sound map (generated)* = this.

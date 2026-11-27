@@ -1,5 +1,7 @@
 # Block-session benchmark, Run A: longer sessions (40 / 60 / 80 pairs)
 
+> **Out of date (2026-11-27).** This run is for the old Building blocks session. The standard session is now Best guess; see [Best guess results](benchmark_guess_results.md).
+
 Run 2026-11-25 on GitHub Actions (run 45597126228, workflow `benchmark.yml`), 50 chunks, 10 seeds, 5 oracle families x 40 profiles, logistic noise 0.5.
 Full output: `benchmark_blocks_report_runA_long.txt`. Harness: `tools/benchmark_blocks.py` (adds `heard10`).
 **Synthetic listeners only.** Draft for review; not yet cleaned up.

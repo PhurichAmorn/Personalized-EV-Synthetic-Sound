@@ -1,5 +1,7 @@
 # Source-search benchmark
 
+> **Out of date (2026-11-27).** This page covers searches the app no longer offers. The standard session is now Best guess; see [Best guess results](../research/benchmark_guess_results.md).
+
 This page covers the older searches (pools and families). The current Building blocks session has its own benchmark: [plan](../research/benchmark_blocks_plan.md), [results](../research/benchmark_blocks_results.md).
 
 Measures how well a source-discovery **approach** finds a sound the listener has in mind, without a human in the loop. An approach is a **pool** (what sounds can be made) plus a **search** (how pairs are proposed and the final sound chosen). Every approach runs through the same simulated session so differences come only from the approach.

@@ -692,7 +692,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         data=d.export();self.assertEqual(data['policy'],'source-map-v6');self.assertTrue(data['pool']['created'])
         d.close()
     def test_pair_one_sets_the_motion_and_evolving_uses_only_sounds_that_pass_in_evolving(self):
-        from experiment.source_search import SoundMapDiscovery,RegionMapDiscovery,MAP_OPENING
+        from experiment.legacy.map_search import SoundMapDiscovery,RegionMapDiscovery,MAP_OPENING
         import random as stdrandom
         for cls in (SoundMapDiscovery,RegionMapDiscovery):
           with self.subTest(cls.__name__):
@@ -711,7 +711,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             self.assertTrue(all(motion(i)=='evolving' for i in d.finalists))
             d.close()
     def test_regions_same_opening_then_focus_on_the_liked_region(self):
-        from experiment.source_search import RegionMapDiscovery,MAP_OPENING,MAP_EXPLORE
+        from experiment.legacy.map_search import RegionMapDiscovery,MAP_OPENING,MAP_EXPLORE
         import random as stdrandom
         cells=lambda d,n:[d.candidates[i]['recipe']['cell'] for i in d.pair]
         openings=[]
@@ -729,7 +729,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             d.close()
         self.assertEqual(openings[0],openings[1])  # every listener hears the same six typical sounds first
     def test_styles_open_with_every_style_then_focus_on_the_liked_style(self):
-        from experiment.source_search import StyleMapDiscovery,MAP_OPENING,MAP_EXPLORE,map_style
+        from experiment.legacy.map_search import StyleMapDiscovery,MAP_OPENING,MAP_EXPLORE,map_style
         import random as stdrandom
         d=StyleMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(3)
         style=lambda i:map_style(d.by_cell[d.candidates[i]['recipe']['cell']])
@@ -749,7 +749,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         d.close()
     def test_heard_session_splits_by_heard_traits_not_style(self):
         import json,tempfile,random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_FEATURE_NAMES,MAP_REGIONS,MAP_POOL
+        from experiment.legacy.map_search import HeardMapDiscovery,MAP_FEATURE_NAMES,MAP_REGIONS,MAP_POOL
         data=json.loads(Path(MAP_POOL).read_text())
         for sound in data['sounds']:sound.pop('cell',None)  # a pool without grid cells: k-means regions
         path=Path(tempfile.mkdtemp())/'pool.json';path.write_text(json.dumps(data))
@@ -763,7 +763,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         d.close()
     def test_grid_opening_is_pitch_only(self):
         import random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_BALANCED_S
+        from experiment.legacy.map_search import HeardMapDiscovery,MAP_BALANCED_S
         for liked,motion in (('deep','rise'),('middle',None),('high','rise')):
             d=HeardMapDiscovery(renderer=lambda recipe:None);d.start(motion);d.rng=stdrandom.Random(9)
             cell=d._cell;band=lambda i:cell(i).split('-')[0];mp=d.motion_pairs
@@ -782,7 +782,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             d.close()
     def test_grid_opening_both_good_and_neither(self):
         import random as stdrandom
-        from experiment.source_search import HeardMapDiscovery
+        from experiment.legacy.map_search import HeardMapDiscovery
         for answer in ('good','neither'):
             d=HeardMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(10)
             band=lambda i:d._cell(i).split('-')[0];first=list(d.pair);d.feedback(choice=answer)
@@ -790,7 +790,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             self.assertEqual(len(set(d.pair)&set(first)),1)  # one of deep/high goes on against middle
             d.close()
     def test_end_stops_early_without_a_final_sound(self):
-        from experiment.source_search import HeardMapDiscovery
+        from experiment.legacy.map_search import HeardMapDiscovery
         d=HeardMapDiscovery(renderer=lambda recipe:None);d.start('rise')
         for _ in range(5):d.feedback(choice='A')
         d.end();data=d.export()
@@ -799,7 +799,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         d.close()
     def test_first_champion_is_the_best_by_answers(self):
         import random as stdrandom
-        from experiment.source_search import HeardMapDiscovery
+        from experiment.legacy.map_search import HeardMapDiscovery
         d=HeardMapDiscovery(renderer=lambda recipe:None);d.start('rise');d.rng=stdrandom.Random(11)
         pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
         while d.champion is None:
@@ -808,7 +808,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         self.assertEqual(d.export()['champion_starts'][0]['by'],'answers');d.close()
     def test_a_tuned_copy_that_beats_its_parent_inherits_its_record(self):
         import copy,json,tempfile,random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_POOL
+        from experiment.legacy.map_search import HeardMapDiscovery,MAP_POOL
         data=json.loads(Path(MAP_POOL).read_text())
         for sound in data['sounds']:  # fake checked copies: a little brighter
             v=copy.deepcopy(sound);v.pop('variations',None);v.update(id=f"{sound['id']}-brighter",parent=sound['id'],move='brighter')
@@ -827,7 +827,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
         d.close()
     def test_heard_session_repeats_the_middle_pitch_pair_swapped(self):
         import random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_REPEATS,MAP_REPEAT_GAP
+        from experiment.legacy.map_search import HeardMapDiscovery,MAP_REPEATS,MAP_REPEAT_GAP
         for motion in ('rise',None):  # with and without the Rising vs Evolving pair first
             d=HeardMapDiscovery(renderer=lambda recipe:None);d.start(motion);d.rng=stdrandom.Random(8)
             pitch=lambda i:d._unit(d.candidates[i]['recipe'])[0]
@@ -842,7 +842,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             d.close()
     def test_phase2_ladder_offers_the_second_step_only_after_the_first_won(self):
         import copy,json,tempfile,random as stdrandom
-        from experiment.source_search import HeardMapDiscovery,MAP_POOL,STYLE_PAIRS,MAP_FINE_PAIRS
+        from experiment.legacy.map_search import HeardMapDiscovery,MAP_POOL,STYLE_PAIRS,MAP_FINE_PAIRS
         data=json.loads(Path(MAP_POOL).read_text())
         for sound in data['sounds']:  # fake checked ladder: one and two steps brighter, one darker
             sound['variations']=[]
@@ -865,7 +865,7 @@ class SoundMapDiscoveryTest(unittest.TestCase):
             self.assertGreater(d.move_trends().get(liked,0),0);d.close()
     def test_phase2_fine_tunes_the_champion_with_its_variations(self):
         import copy,json,tempfile,random as stdrandom
-        from experiment.source_search import StyleMapDiscovery,MAP_POOL,STYLE_PAIRS,MAP_FINE_PAIRS
+        from experiment.legacy.map_search import StyleMapDiscovery,MAP_POOL,STYLE_PAIRS,MAP_FINE_PAIRS
         data=json.loads(Path(MAP_POOL).read_text())
         for sound in data['sounds']:  # fake checked variations: same sound, a little brighter / darker / deeper
             sound['variations']=[]

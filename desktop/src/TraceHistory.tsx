@@ -27,7 +27,7 @@ type Session = {
 const BANDS = ['<100', '100', '180', '300', '500', '800', '1.2k', '1.8k', '2.6k', '4k', '6.5k', '12k+']
 const when = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) // the computer's own clock and zone
 const short = (id: string) => id.slice(0, 6)
-// Texture style of a layered sound, as the search groups them (= map_style in experiment/source_search.py).
+// Texture style of a layered sound, as the search groups them (= map_style in experiment/legacy/map_search.py).
 const STYLES: Record<string, number[]> = { electric: [9, 10, 11], strings: [1, 7, 8], glass: [3, 4], choir: [6], plain: [0, 2] }
 function styleOf(recipe: SourceRecipe | LiveRecipe) {
   const voice = (recipe as { voice?: { kind: string; stack?: { layers: number; timbres: number[] } } }).voice
