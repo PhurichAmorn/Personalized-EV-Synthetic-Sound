@@ -40,6 +40,3 @@ desktop/src-tauri/gen/
 
 # Sound map generator output (rebuild with tools/sound_map/generate.py)
 tools/sound_map/out/
-# owner's licensed start-up sound (Envato): never in the public repo
-desktop/public/audio/welcome.wav
-desktop/public/audio/welcome.mp3

@@ -5,24 +5,7 @@ import { roomImpulse } from './plainSource'
  * a wide ensemble (+-20-40 cents), fully wide stereo, soft breath above 8 kHz, a 1.5 s swell and a long hall decay. Its pitch does not
  * glide; the lift comes from the swell, and here also from the notes entering low to high. Plain WebAudio, built at once. */
 export function playWelcome(volume = .11)  // .16 heard as a little too loud (2026-11-18)
- { void playRecorded().then(played => { if (!played) synthChoir(volume) }) }
-
-/** A recorded welcome (owner's licensed clip, e.g. Envato "Heaven Choir") if present at public/audio/welcome.wav or .mp3:
- * the first 2.5 s with a fade-out. Git-ignored: a licensed sound file must not go into the public repo. */
-async function playRecorded() {
-  for (const name of ['welcome.wav', 'welcome.mp3']) {
-    try {
-      const response = await fetch(`/audio/${name}`); if (!response.ok || !response.headers.get('content-type')?.startsWith('audio')) continue
-      const audio = new AudioContext(), buffer = await audio.decodeAudioData(await response.arrayBuffer())
-      const source = audio.createBufferSource(), gain = audio.createGain(), now = audio.currentTime, length = Math.min(2.5, buffer.duration)
-      source.buffer = buffer; source.connect(gain); gain.connect(audio.destination)
-      gain.gain.setValueAtTime(.8, now); gain.gain.setValueAtTime(.8, now + length - .8); gain.gain.linearRampToValueAtTime(0, now + length)
-      source.start(now); source.stop(now + length); source.onended = () => void audio.close()
-      return true
-    } catch { /* missing or unreadable: try the next, then the synth */ }
-  }
-  return false
-}
+ { synthChoir(volume) }
 
 function synthChoir(volume: number) {
   const audio = new AudioContext(), now = audio.currentTime, swell = .35, release = now + 2.2  // comes in at once (1.2 s felt late)
