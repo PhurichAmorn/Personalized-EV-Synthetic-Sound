@@ -172,7 +172,7 @@ const JA: Record<string, string> = {
   READY: '準備完了',
   STANDBY: '待機中',
   'A few last questions': '最後にいくつか質問です',
-  'How close is this sound to the sound you imagined? Is there anything you would tune or make better, or any option that felt unnecessary or hard to tell apart? (optional)': 'このサウンドは思い描いていたサウンドにどれくらい近いですか？もっと調整したい点や改善したい点、不要に感じた選択肢や違いが分かりにくかった選択肢はありますか？（任意）',
+  'How would you describe this sound, and how does it make you feel? What do you like or dislike about it? Was anything in the session confusing, hard to tell apart, or unnecessary, or is there anything you would change? (optional)': 'このサウンドをどのように感じますか？どんな気持ちになりますか？好きな点・好きでない点も教えてください。また、セッション中に分かりにくかった点、違いが分かりにくかった点、不要に感じた点、変えたい点はありますか？（任意）',
   'Save answers': '回答を保存',
   'One last question': '最後の質問',
   'How satisfied are you with this sound?': 'このサウンドにどれくらい満足していますか？',

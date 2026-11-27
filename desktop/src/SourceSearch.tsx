@@ -198,7 +198,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
       <p className="mt-4 text-sm text-neutral-300">{t('How satisfied are you with this sound?')}</p>
       <div className="star-rating" role="radiogroup" aria-label={t('How satisfied are you with this sound?')}>{[1, 2, 3, 4, 5, 6, 7].map(n => <button key={n} type="button" role="radio" aria-checked={satisfaction === n} aria-label={t('{n} of 7', { n })} className={'star' + (n <= satisfaction ? ' on' : '')} onClick={() => setSatisfaction(n)}>★</button>)}</div>
       <p className="star-ends"><span>{t('Not at all')}</span><span>{t('Extremely')}</span></p>
-      <label className="mt-4 block w-full max-w-[340px] text-left text-sm text-neutral-300">{t('How close is this sound to the sound you imagined? Is there anything you would tune or make better, or any option that felt unnecessary or hard to tell apart? (optional)')}
+      <label className="mt-4 block w-full max-w-[340px] text-left text-sm text-neutral-300">{t('How would you describe this sound, and how does it make you feel? What do you like or dislike about it? Was anything in the session confusing, hard to tell apart, or unnecessary, or is there anything you would change? (optional)')}
         <textarea className="last-note" lang="ja" rows={3} maxLength={2000} value={comment} onChange={e => setComment(e.target.value)} />
       </label>
       <button type="button" className="control mt-4" disabled={!satisfaction} onClick={() => void onCommand('sourceDiscoveryRate', { rating: satisfaction, comment })}>{t('Save answers')}</button>
