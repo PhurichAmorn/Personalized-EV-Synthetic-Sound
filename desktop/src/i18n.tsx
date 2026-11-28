@@ -42,6 +42,7 @@ const JA: Record<string, string> = {
   'End session': 'セッションを終了',
   'Broad sound discovery': 'サウンド探索',
   '{n} / {total} comparisons': '{n} / {total} 回の比較',
+  'Motion choice': '動きの選択',
   'Final round {n} / {total} · ': '決勝 {n} / {total} · ',
   'New session': '新しいセッション',
   'Start session': 'セッション開始',
