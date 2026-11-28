@@ -137,6 +137,7 @@ class GuessBlocks(BlockDiscovery):
     the podium #1 (posterior mean over the sounds heard) is the evaluated final."""
     policy = 'source-blocks-guess-v1'
     SUMMARIES = ('Best guess', 'Might be better (Thompson sample)')  # candidate origin of A and B
+    adaptive = 13  # 20 pairs in all (motion pair + 6 + 13), standard since 2026-11-28: +.035 top-10% over 17 in the pair-choice benchmark
     def _all_sounds(self):
         """Every sound the safe-area table allows (body x top x partner x level x pitch x brightness step x synth knobs, each distinct sound
         once), as the benchmark's ground truth (sb.pool / tools/benchmark_blocks.py truth()). Scored in full each pair: 2026-11-27, replaced

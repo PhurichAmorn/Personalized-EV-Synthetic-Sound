@@ -66,7 +66,8 @@ champion was often a recent lucky winner) and the four starts anchoring the resu
 Goal: one rule for every pair, easy to explain: no starts, no champion, no phases, no refinement stage.
 
 - **Pair 1:** the Glass start, Rising vs Evolving (as Building blocks).
-- **Pairs 2-17:** A = the best guess, the sound with the highest posterior mean of the Bayesian Bradley-Terry model over block features;
+- **Length:** 20 pairs (17 until 2026-11-28; the pair-choice benchmark found +0.035 top-10% for 20). Best pair (EUBO) uses the same length.
+- **Pairs 2-20:** A = the best guess, the sound with the highest posterior mean of the Bayesian Bradley-Terry model over block features;
   B = the sound one Thompson sample of the taste (half spread) likes best. Both come from every sound that passes the safe-area table
   (15,614 with the current table; the model scores all of them each pair). A and B must be clearly different (another top texture or pitch, or an octave-band gap of at least 0.5: a guess
   between the 0.35 heard in quiet listening and pairs reported as only slightly different while driving, 0.45-0.49). A pair is never played
