@@ -71,6 +71,49 @@ Decision rules (top-10% retrieval, pooled over oracles, paired to `guess`, profi
 3. **Session length:** keep 17 unless `guess` at 20 is at least +0.03 over 17 (CI above 0); 30+ is reported only.
 4. IGA, Greedy, Pure explore and Random are reported for comparison; no decision depends on them.
 
+## Pair-choice comparison: results (2026-11-28)
+
+GitHub Actions, branch `benchmark-pair-choice` (runs 46025813904 + 46074606182 for one chunk that hung and was rerun with the same seeds;
+46025830973 with NEW_BIAS = 0.3). 1,000 sessions per oracle, budget and arm. Raw reports:
+[no bias](benchmark_pairchoice_report_nobias.txt), [listener favours new sounds](benchmark_pairchoice_report_newbias.txt).
+
+Top-10% retrieval, pooled over the five oracles (no bias / favours new sounds):
+
+| Arm | 17 pairs | 20 | 30 | 50 | 80 |
+| --- | --- | --- | --- | --- | --- |
+| EUBO | **.77 / .75** | **.81 / .78** | **.86 / .85** | **.92 / .90** | .94 / .94 |
+| RUCB | .74 / .71 | .79 / .76 | .83 / .81 | .88 / .86 | .93 / .90 |
+| Brochu (EI) | .70 / .68 | .75 / .72 | .80 / .76 | .89 / .88 | .93 / .91 |
+| Best guess (app) | .69 / .63 | .73 / .66 | .80 / .74 | .87 / .84 | .91 / .90 |
+| Dueling Thompson (PBO) | .65 / .65 | .71 / .72 | .81 / .81 | .89 / .90 | .94 / .93 |
+| Double Thompson | .63 / .65 | .70 / .70 | .81 / .79 | .88 / .86 | .94 / .93 |
+| Pure explore | .58 / .57 | .62 / .62 | .68 / .69 | .76 / .77 | .82 / .84 |
+| Greedy | .53 / .50 | .59 / .54 | .65 / .58 | .73 / .68 | .81 / .78 |
+| Random pairs | .44 / .42 | .48 / .44 | .53 / .48 | .59 / .57 | .65 / .62 |
+| IGA | .38 / .37 | .38 / .37 | .45 / .45 | .52 / .52 | .56 / .57 |
+
+Difference to Best guess at 17 pairs [95% CI], no bias / favours new sounds: EUBO +.075 [+.058, +.091] / +.121 [+.106, +.136];
+RUCB +.048 [+.031, +.064] / +.082 [+.066, +.098]; Brochu +.006 / +.044; dueling Thompson -.045 / +.015; double Thompson
+-.059 [-.077, -.040] / +.015; IGA -.316 / -.266. By 50-80 pairs the model arms converge (about .90 and above); IGA stays near .57.
+
+Against the rules:
+
+1. **Met by EUBO** (CI above 0 and at least +.05 in both conditions). RUCB misses in the no-bias condition (+.048). **Switch to EUBO**
+   after a check that its sessions do not repeat sounds more than Best guess and stay fast enough for the app.
+2. **Double Thompson: not met** (-.059 in the no-bias condition, bar -.02).
+3. **Session length: met, narrowly.** Best guess at 20 over 17: +.035 [+.027, +.044] / +.032 [+.022, +.041] (bar +.03). EUBO gains
+   +.043 / +.027. Move to 20 pairs.
+
+Reading:
+- A model that remembers every answer finds a top-10% sound about twice as often as the paper's IGA at the same number of answers; IGA
+  does not catch up even at 80 pairs (pairwise answers, 4-20 generations of 8).
+- Exploration needs a balance: Greedy and Pure explore are both well below Best guess.
+- Choosing the whole pair for what its answer teaches about the best sound (EUBO) is faster than greedy-vs-Thompson; the gap closes with
+  more pairs, so it matters most for a short drive.
+- Psycho oracle: Best guess is not monotone in budget (no bias .73 at 17, .67 at 20, .70 at 30); EUBO is (.81, .90, .87 is within noise
+  at 30). Not investigated.
+- EUBO here is approximate: pairs only among about 200 top sounds (top 100 by mean, top 100 by mean + 2 SD), 200 posterior draws.
+
 ## Limits
 
 - Smaller than the pre-registered size; rerun at full size (GitHub Actions) before citing the numbers in a report.
