@@ -136,6 +136,7 @@ class GuessBlocks(BlockDiscovery):
     space), B = the sound one Thompson sample of the taste likes best, clearly different from A. The pair-2 winner is the evaluation baseline;
     the podium #1 (posterior mean over the sounds heard) is the evaluated final."""
     policy = 'source-blocks-guess-v1'
+    SUMMARIES = ('Best guess', 'Might be better (Thompson sample)')  # candidate origin of A and B
     def _all_sounds(self):
         """Every sound the safe-area table allows (body x top x partner x level x pitch x brightness step x synth knobs, each distinct sound
         once), as the benchmark's ground truth (sb.pool / tools/benchmark_blocks.py truth()). Scored in full each pair: 2026-11-27, replaced
@@ -170,7 +171,7 @@ class GuessBlocks(BlockDiscovery):
         self.tie = np.array([self.rng.random() for _ in self.ids]) * 1e-9  # before any answer every sound is equal: a random one
         a, b = self._pick()
         if a is None or b is None: return []
-        self.rematch = [self._add(self.space[a], {'kind': 'guess', 'summary': 'Best guess'}), self._add(self.space[b], {'kind': 'explore', 'summary': 'Might be better (Thompson sample)'})]
+        self.rematch = [self._add(self.space[a], {'kind': 'guess', 'summary': self.SUMMARIES[0]}), self._add(self.space[b], {'kind': 'explore', 'summary': self.SUMMARIES[1]})]
         self.roles = {self.rematch[0]: 'guess', self.rematch[1]: 'explore'}
         return []
     def _build_space(self):
@@ -211,6 +212,32 @@ class GuessBlocks(BlockDiscovery):
             'No starts, no champion, no phases. Both good / Neither: equal, and both beat / lose to a neutral sound. Podium: heard sounds by posterior mean, '
             'a sound that never won left out, clearly different, at most 2 per top texture. evaluation: baseline = pair-2 winner, final = podium #1. '
             'Each answered pair row has roles (id -> guess / explore) for that pair; a candidate\'s origin is only the role of its first pair.')
+        return data
+
+
+class EUBOBlocks(GuessBlocks):
+    """EUBO (Lin et al. 2022), adopted for testing 2026-11-28 after the pair-choice benchmark (docs/research/benchmark_guess_results.md: top-10%
+    .77 vs Best guess .69 at 17 pairs, no-bias listener). Same session, model, sounds, final and evaluation as Best guess; only the pair differs:
+    the pair whose better sound is best on average over posterior draws of the taste, E[max(u(A), u(B))]. A = the one with the higher mean."""
+    policy = 'source-blocks-eubo-v1'
+    SUMMARIES = ('EUBO pair (higher mean)', 'EUBO pair')
+    DRAWS, TOP = 200, 100  # ponytail: pairs only among the top 100 by mean and top 100 by mean + 2 SD (all 15,614^2 pairs is too many)
+    def _pick(self):
+        mean, cov = self._posterior(); m = self.X @ mean; sd = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', self.X, cov, self.X), 1e-12))
+        ok = np.flatnonzero(self.ok); cand = list(dict.fromkeys([*ok[np.argsort(-(m + self.tie)[ok])[:self.TOP]], *ok[np.argsort(-(m + 2 * sd + self.tie)[ok])[:self.TOP]]]))
+        W = np.random.default_rng(self.rng.randrange(2 ** 32)).multivariate_normal(mean, cov, self.DRAWS, method='cholesky'); U = self.X[cand] @ W.T
+        score = np.array([np.maximum(U[i][None], U).mean(1) for i in range(len(cand))]); np.fill_diagonal(score, -np.inf)
+        for flat in np.argsort(-score, axis=None):
+            i, j = divmod(int(flat), len(cand))
+            if i < j: continue
+            a, b = cand[i], cand[j]
+            if frozenset((self.ids[a], self.ids[b])) not in self.met and self._clear(self.space[a], self.space[b]): return (a, b) if m[a] >= m[b] else (b, a)
+        return None, None
+    def export(self):
+        data = super().export()
+        data['note'] = data['note'].replace('Best guess vs might-be-better (2026-11-27).', 'EUBO pairs (2026-11-28), otherwise as Best guess (2026-11-27).').replace(
+            'Then every pair: A = the best guess', 'Then every pair: the pair with the highest E[max(u(A), u(B))] over 200 posterior draws, among the top 100 sounds by '
+            'posterior mean and the top 100 by mean + 2 SD; A = its higher-mean sound. (Best guess for comparison: A = the best guess')
         return data
 
 

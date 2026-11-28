@@ -1,13 +1,15 @@
 import random
 import unittest
 
-from experiment.block_arms import GuessBlocks
+from experiment.block_arms import EUBOBlocks, GuessBlocks
 
 
 class GuessBlocksTest(unittest.TestCase):
+    session = GuessBlocks
+
     def test_full_session(self):
         """17 pairs with a simulated listener who likes low pitch: every pair is two different sounds, the podium and the evaluation are filled."""
-        d = GuessBlocks(renderer=lambda r: None); d.start(); rng = random.Random(0); pairs = []
+        d = self.session(renderer=lambda r: None); d.start(); rng = random.Random(0); pairs = []
         while d.active:
             self.assertEqual(len(d.pair), 2, d.error)
             a, b = (d.candidates[i]['recipe'] for i in d.pair); pairs.append(frozenset(d.pair))
@@ -20,6 +22,10 @@ class GuessBlocksTest(unittest.TestCase):
         self.assertTrue(all(sorted(r['roles'].values()) == ['explore', 'guess'] and set(r['roles']) == set(r['pair']) for r in data['history'][1:]))  # every pair after the motion pair
         self.assertLessEqual(d._sound(ev['final'])['pitch'], 1)  # the model learned the taste
         d.close()
+
+
+class EUBOBlocksTest(GuessBlocksTest):  # the same session with EUBO pairs passes the same checks
+    session = EUBOBlocks
 
 
 if __name__ == '__main__':

@@ -2,7 +2,7 @@
 
 import math
 from audio import SOUND_RECIPES
-from experiment.block_arms import GuessBlocks
+from experiment.block_arms import EUBOBlocks, GuessBlocks
 from experiment.source_search import BlockDiscovery
 from experiment.source_history import SourceHistory
 from experiment.evaluation import Evaluation
@@ -12,9 +12,10 @@ class DesktopBridge:
     def __init__(self, controller):
         self.controller = controller
         # Per session (2026-11-27): 'blocks-guess' = Best guess vs might-be-better (experiment/block_arms.py GuessBlocks), the standard
-        # session with the blind evaluation; 'blocks' = Building blocks (experiment/source_search.py), the previous session, kept as a fallback.
+        # session with the blind evaluation; 'blocks-eubo' = the same session with EUBO pairs (EUBOBlocks, testing since 2026-11-28, benchmark
+        # winner); 'blocks' = Building blocks (experiment/source_search.py), the previous session, kept as a fallback.
         # The other searches (Sound families, Sound map, the Building blocks variants) are no longer offered; their code stays for the benchmarks.
-        self.searches = {'blocks-guess': GuessBlocks(), 'blocks': BlockDiscovery()}
+        self.searches = {'blocks-guess': GuessBlocks(), 'blocks-eubo': EUBOBlocks(), 'blocks': BlockDiscovery()}
         self.source_discovery = self.searches['blocks-guess']
         self.history = SourceHistory(self.source_discovery)
         self.evaluation = Evaluation(self.history)  # blind baseline-vs-final rating after a session

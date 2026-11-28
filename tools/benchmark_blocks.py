@@ -150,19 +150,9 @@ class GPBO(Shell):  # dueling Thompson (Gonzalez et al. 2017), linear version: A
         return a, self._partner(a, (1 / (1 + np.exp(-(D @ W.T)))).var(1))
 
 
-class GEUBO(Shell):  # EUBO (Lin et al. 2022): the pair with the highest expected utility of its better sound, E[max(u(a), u(b))]
-    DRAWS, TOP = 200, 100  # ponytail: pairs only among the top 100 by mean and top 100 by mean + 2 SD (all 15,614^2 pairs is too many)
-    def _pick(self):
-        mean, cov = self._posterior(); m = self.X @ mean; sd = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', self.X, cov, self.X), 1e-12))
-        ok = np.flatnonzero(self.ok); cand = list(dict.fromkeys([*ok[np.argsort(-(m + self.tie)[ok])[:self.TOP]], *ok[np.argsort(-(m + 2 * sd + self.tie)[ok])[:self.TOP]]]))
-        W = np.random.default_rng(self.rng.randrange(2 ** 32)).multivariate_normal(mean, cov, self.DRAWS, method='cholesky'); U = self.X[cand] @ W.T
-        score = np.array([np.maximum(U[i][None], U).mean(1) for i in range(len(cand))]); np.fill_diagonal(score, -np.inf)
-        for flat in np.argsort(-score, axis=None):
-            i, j = divmod(int(flat), len(cand))
-            if i < j: continue
-            a, b = cand[i], cand[j]
-            if frozenset((self.ids[a], self.ids[b])) not in self.met and self._clear(self.space[a], self.space[b]): return a, b
-        return None, None
+class GEUBO(Shell):  # EUBO (Lin et al. 2022): the app's EUBOBlocks pair choice (experiment/block_arms.py) on the benchmark shell
+    DRAWS, TOP = ba.EUBOBlocks.DRAWS, ba.EUBOBlocks.TOP
+    _pick = ba.EUBOBlocks._pick
 
 
 class GIGA(Shell):

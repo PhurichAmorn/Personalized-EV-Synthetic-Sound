@@ -17,8 +17,8 @@ export type SourceDiscoveryState = { active: boolean; busy: boolean; error: stri
 const ANSWERS = [['A', 'Prefer A'], ['B', 'Prefer B'], ['neither', 'Neither'], ['good', 'Both good']] as const
 type Answer = typeof ANSWERS[number][0]
 type Command = (name: string, payload?: Record<string, unknown>) => Promise<unknown> | void
-type SearchKind = 'blocks-guess' | 'blocks'
-const SEARCHES: [SearchKind, string][] = [['blocks-guess', 'Best guess'], ['blocks', 'Building blocks (previous)']]  // a button list, not a <select>: the native dropdown popup is unreadable in the BeamNG overlay
+type SearchKind = 'blocks-guess' | 'blocks-eubo' | 'blocks'
+const SEARCHES: [SearchKind, string][] = [['blocks-guess', 'Best guess'], ['blocks-eubo', 'Best pair (EUBO, testing)'], ['blocks', 'Building blocks (previous)']]  // a button list, not a <select>: the native dropdown popup is unreadable in the BeamNG overlay
 export default function SourceSearch({ hidden, discovery, onCommand, onContext, onAudition, onStop, playing, running, activity, mode, onModeChange, analyser }: { analyser: () => AnalyserNode | null; hidden: boolean; discovery?: SourceDiscoveryState; onCommand: Command; onContext: () => Record<string, unknown>; onAudition: (candidate: DiscoveryCandidate, input: 'driving' | 'simulated') => Promise<boolean | string>; onStop: () => void; playing: boolean; running: boolean; activity: boolean; mode: GranularMode; onModeChange: (mode: GranularMode) => void }) {
   const [audition, setAudition] = useState<string | null>(null)
   const [readyAudition, setReadyAudition] = useState<string | null>(null)
@@ -143,7 +143,7 @@ export default function SourceSearch({ hidden, discovery, onCommand, onContext, 
   const final = discovery?.stage === 'playoff'
   // Best guess session (2026-11-27): no podium (kept in code for the other sessions). After the last pair comes the blind test, then the
   // model's #1 becomes the final sound, then the last questions: the podium labelled the #1 and would bias the blind test.
-  const noPodium = discovery?.policy === 'source-blocks-guess-v1'
+  const noPodium = discovery?.policy === 'source-blocks-guess-v1' || discovery?.policy === 'source-blocks-eubo-v1'
   // Session finished and answered: the comparison panel turns into the saved screen (no count, one panel, the X moves into it).
   const [route, setRoute] = useState<AlgorithmSession | null>(null)
   const saved = !!discovery && !discovery.active && !newSession && !!discovery.finalists?.length && !!discovery.final && discovery.rating != null

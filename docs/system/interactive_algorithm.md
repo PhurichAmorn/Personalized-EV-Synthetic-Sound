@@ -81,7 +81,15 @@ Goal: one rule for every pair, easy to explain: no starts, no champion, no phase
 - **Export.** `evaluation` (below); each answered pair row has `roles` (id -> guess / explore) for that pair, because a candidate's
   `origin` is only the role of its first pair.
 
-### Blind evaluation after the session (`experiment/evaluation.py`, Best guess only)
+### Best pair search (`source-blocks-eubo-v1`, `EUBOBlocks`): testing since 2026-11-28
+
+The Best guess session with one change: each pair is the pair whose better sound is best on average over 200 posterior draws of the taste,
+E[max(u(A), u(B))] (EUBO, Lin et al. 2022), searched among the top 100 sounds by posterior mean and the top 100 by mean + 2 SD. A is the
+pair's higher-mean sound. Model, sounds, shared rules, podium and evaluation are Best guess's. Chosen from the pair-choice benchmark
+([results](../research/benchmark_guess_results.md)): it found a top-10% sound more often at 17-30 pairs, and in simulation a sound from the
+previous pair returns in 42% of pairs against 66% for Best guess. Not yet tested with drivers.
+
+### Blind evaluation after the session (`experiment/evaluation.py`, Best guess and Best pair)
 
 After Fukumoto (2026), *A Cross-modal Interactive Genetic Algorithm for Aroma Blending and Parametric Musical Melody Generation*, IJAE
 (doi 10.5057/ijae.IJAE-D-26-00011), which compared the best of generation 0 with the best of generation 9, blind, with a two-tailed
